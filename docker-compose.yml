@@ -1,16 +1,5 @@
-
-version: '3.8'
-
-services:
-  app:
-    build: .
-    container_name: neoarchive
-    restart: always
-    ports:
-      - "3000:3000"
-    volumes:
-      # Самое важное: маппинг данных с сервера внутрь контейнера
-      # Файл db.json на сервере будет связан с файлом внутри приложения
-      - ./server_data:/app/data
-    environment:
-      - PORT=3000
+# Docker configuration has been removed in favor of direct Node.js execution.
+# To run the application:
+# 1. npm install
+# 2. npm run build
+# 3. npm start
