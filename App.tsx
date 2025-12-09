@@ -1481,6 +1481,7 @@ export default function App() {
          // Use local data or fetch
          const profileUser = db.getFullDatabase().users.find(u => u.username === profileUsername) || {
              username: profileUsername,
+             email: 'ghost@matrix.net',
              tagline: 'Цифровой призрак',
              avatarUrl: `https://ui-avatars.com/api/?name=${profileUsername}`,
              joinedDate: 'Unknown',
