@@ -71,6 +71,7 @@ export type UserStatus = 'ONLINE' | 'AWAY' | 'DND' | 'INVISIBLE' | 'FREE_FOR_CHA
 
 export interface UserProfile {
   username: string;
+  email: string; // Required for Auth
   tagline: string;
   status?: UserStatus;
   avatarUrl: string;
@@ -79,7 +80,6 @@ export interface UserProfile {
   achievements?: string[]; // List of Badge IDs
   // Auth simulation fields
   password?: string;
-  phone?: string;
   isAdmin?: boolean;
 }
 

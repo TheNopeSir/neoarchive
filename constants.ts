@@ -36,6 +36,7 @@ export const STATUS_OPTIONS = {
 
 export const MOCK_USER: UserProfile = {
   username: "Neo_User_01",
+  email: "neo@matrix.com",
   tagline: "Подключен к сети.",
   status: 'ONLINE',
   avatarUrl: "https://picsum.photos/100/100?grayscale",

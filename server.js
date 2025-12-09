@@ -12,6 +12,10 @@ const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
 const DIST_DIR = path.join(__dirname, 'dist');
 
+console.log(`🚀 [System] Initializing server...`);
+console.log(`📂 [System] Root Directory: ${__dirname}`);
+console.log(`📂 [System] Serving Static Files from: ${DIST_DIR}`);
+
 // MIME Types
 const MIMES = {
   '.html': 'text/html',
@@ -58,9 +62,13 @@ const INITIAL_DB_STATE = {
 try {
   if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
+    console.log(`✅ [Database] Created data directory at ${DB_DIR}`);
   }
   if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(DB_FILE, JSON.stringify(INITIAL_DB_STATE, null, 2));
+    console.log(`✅ [Database] Created initial database at ${DB_FILE}`);
+  } else {
+    console.log(`✅ [Database] Loaded existing database from ${DB_FILE}`);
   }
 } catch (err) {
   console.error("🔴 Fatal Error: Could not initialize database.", err);
@@ -90,7 +98,7 @@ const startServer = (port) => {
     if (!fs.existsSync(DIST_DIR) || !fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
         console.warn("⚠️  WARNING: 'dist' folder not found. Please run 'npm run build' to generate frontend assets.");
     } else {
-        console.log("📂  Frontend assets found in ./dist");
+        console.log("✅ [Frontend] Assets verified.");
     }
 
     const server = http.createServer(async (req, res) => {
@@ -165,6 +173,13 @@ const startServer = (port) => {
 
             // --- STATIC FILE SERVING ---
             let filePath = path.join(DIST_DIR, pathname === '/' ? 'index.html' : pathname);
+            // Security: Prevent directory traversal
+            if (!filePath.startsWith(DIST_DIR)) {
+                res.writeHead(403);
+                res.end('Forbidden');
+                return;
+            }
+
             const ext = path.extname(filePath);
 
             fs.readFile(filePath, (err, content) => {
@@ -181,6 +196,7 @@ const startServer = (port) => {
                                 res.writeHead(200, { 'Content-Type': 'text/html' });
                                 res.end(content2);
                             } else {
+                                console.error("🔴 [Server] index.html missing in dist!");
                                 res.writeHead(500, { 'Content-Type': 'text/plain' });
                                 res.end('Server Error: Frontend build missing. Run "npm run build".');
                             }

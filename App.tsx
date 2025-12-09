@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, 
@@ -397,6 +399,11 @@ export default function App() {
           try {
               const base64 = await fileToBase64(file);
               setEditAvatarUrl(base64);
+              if (user) {
+                  const updatedUser = { ...user, avatarUrl: base64 };
+                  setUser(updatedUser);
+                  db.updateUserProfile(updatedUser);
+              }
           } catch (err: any) {
               console.error("Profile image upload failed", err);
               alert("Ошибка загрузки изображения");
@@ -589,7 +596,7 @@ export default function App() {
       const updatedUser: UserProfile = {
           ...user,
           tagline: editTagline,
-          avatarUrl: editAvatarUrl,
+          avatarUrl: editAvatarUrl || user.avatarUrl,
           status: editStatus
       };
       db.updateUserProfile(updatedUser);
@@ -821,7 +828,7 @@ export default function App() {
                   </button>
                   <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
                       <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden">
-                          <img src={`https://ui-avatars.com/api/?name=${chatPartner}&background=random`} />
+                          <img src={`https://ui-avatars.com/api/?name=${chatPartner}&background=random`} alt={chatPartner} />
                       </div>
                       <div>
                           <h2 className="font-pixel text-lg">@{chatPartner}</h2>
@@ -1468,670 +1475,444 @@ export default function App() {
           );
 
       case 'USER_PROFILE':
-         // Render user profile...
+         const profileUsername = viewedProfile || user?.username;
+         if (!profileUsername) return <div>User not found</div>;
+         
+         // Use local data or fetch
+         const profileUser = db.getFullDatabase().users.find(u => u.username === profileUsername) || {
+             username: profileUsername,
+             tagline: 'Цифровой призрак',
+             avatarUrl: `https://ui-avatars.com/api/?name=${profileUsername}`,
+             joinedDate: 'Unknown',
+             following: [],
+             achievements: []
+         } as UserProfile;
+
+         const profileArtifacts = exhibits.filter(e => e.owner === profileUsername);
+         const profileCollections = collections.filter(c => c.owner === profileUsername);
+         const isCurrentUser = user?.username === profileUsername;
+         const isSubscribed = user?.following.includes(profileUsername) || false;
+
          return (
              <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32">
-                 {/* ...Profile rendering logic including achievements, follow button, guestbook... */}
-                 <button onClick={() => setView('FEED')} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs">
-                     <ArrowLeft size={16} /> НАЗАД В ЛЕНТУ
+                 <button onClick={() => setView('FEED')} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
+                     <ArrowLeft size={16} /> НАЗАД
                  </button>
+                 
+                 <div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
+                     <div className="relative">
+                         <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-gray-500">
+                             <img src={profileUser.avatarUrl} alt={profileUser.username} className="w-full h-full object-cover"/>
+                         </div>
+                         {isCurrentUser && (
+                             <label className="absolute bottom-0 right-0 bg-gray-800 p-2 rounded-full cursor-pointer hover:bg-gray-700 text-white border border-gray-600">
+                                 <Edit2 size={14} />
+                                 <input type="file" accept="image/*" className="hidden" onChange={handleProfileImageUpload} />
+                             </label>
+                         )}
+                     </div>
 
-                 <div className={`p-6 rounded-lg border-2 border-dashed flex flex-col md:flex-row items-start gap-6 relative ${
-                     theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'
-                 }`}>
-                     {isEditingProfile ? (
-                         // EDIT MODE
-                         <div className="w-100 space-y-4 w-full">
-                             <h3 className="font-pixel text-sm font-bold border-b pb-2">РЕДАКТИРОВАНИЕ ПРОФИЛЯ</h3>
-                             <div>
-                                 <label className="text-[10px] uppercase font-bold opacity-60">Ссылка на аватар</label>
-                                 <div className="flex gap-2">
-                                     <input 
-                                         value={editAvatarUrl}
-                                         onChange={(e) => setEditAvatarUrl(e.target.value)}
-                                         className="flex-1 bg-transparent border-b p-2 font-mono text-sm"
-                                     />
-                                     <label className="p-2 border rounded cursor-pointer hover:bg-white/10">
-                                         <Upload size={16} />
-                                         <input type="file" className="hidden" accept="image/*" onChange={handleProfileImageUpload} />
-                                     </label>
-                                 </div>
-                             </div>
-                             {/* ...Rest of profile edit form... */}
-                             <div>
-                                 <label className="text-[10px] uppercase font-bold opacity-60">Статус (Слоган)</label>
+                     <div className="flex-1 text-center md:text-left space-y-2">
+                         {isEditingProfile && isCurrentUser ? (
+                             <div className="space-y-2 max-w-sm">
                                  <input 
                                      value={editTagline}
-                                     onChange={(e) => setEditTagline(e.target.value)}
-                                     className="w-full bg-transparent border-b p-2 font-mono text-sm"
+                                     onChange={e => setEditTagline(e.target.value)}
+                                     placeholder="Статус..."
+                                     className="w-full bg-transparent border-b p-1 font-mono text-sm"
                                  />
-                             </div>
-                             <div>
-                                 <label className="text-[10px] uppercase font-bold opacity-60">Текущий статус</label>
-                                 <div className="flex flex-wrap gap-2 mt-2">
-                                     {Object.entries(STATUS_OPTIONS).map(([key, config]) => (
-                                         <button
-                                             key={key}
-                                             onClick={() => setEditStatus(key as UserStatus)}
-                                             className={`px-3 py-1 rounded text-xs flex items-center gap-2 border ${
-                                                 editStatus === key ? `border-current ${config.color}` : 'opacity-50 border-transparent'
-                                             }`}
+                                 <div className="flex gap-2">
+                                     {(Object.keys(STATUS_OPTIONS) as UserStatus[]).map(s => (
+                                         <button 
+                                            key={s} 
+                                            onClick={() => setEditStatus(s)}
+                                            className={`p-1 rounded border ${editStatus === s ? 'border-green-500 bg-green-500/20' : 'border-transparent'}`}
+                                            title={STATUS_OPTIONS[s].label}
                                          >
-                                             <config.icon size={12} /> {config.label}
+                                             {React.createElement(STATUS_OPTIONS[s].icon, { size: 16 })}
                                          </button>
                                      ))}
                                  </div>
-                             </div>
-                             <div className="flex gap-2 mt-4">
-                                 <button onClick={handleSaveProfile} className="bg-green-600 text-white px-4 py-2 rounded font-pixel text-xs flex items-center gap-2"><Save size={14}/> СОХРАНИТЬ</button>
-                                 <button onClick={() => setIsEditingProfile(false)} className="bg-gray-600 text-white px-4 py-2 rounded font-pixel text-xs">ОТМЕНА</button>
-                             </div>
-                         </div>
-                     ) : (
-                         // VIEW MODE
-                         <>
-                            {/* ...Profile View... */}
-                            <div className="relative">
-                                <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-current flex-shrink-0">
-                                    <img src={viewedProfile === user?.username ? user.avatarUrl : `https://ui-avatars.com/api/?name=${viewedProfile}&background=random`} alt={viewedProfile} className="w-full h-full object-cover"/>
-                                </div>
-                                {/* Status Indicator */}
-                                <div className={`absolute bottom-0 right-0 p-1 rounded-full border-2 ${theme === 'dark' ? 'bg-black border-black' : 'bg-white border-white'} ${STATUS_OPTIONS[viewedProfile === user?.username ? user.status! : 'ONLINE']?.color}`}>
-                                    {/* Simplified Icon */}
-                                    <User size={16} fill="currentColor" />
-                                </div>
-                            </div>
-
-                            <div className="flex-1 text-center md:text-left overflow-hidden w-full">
-                                <div className="flex flex-col md:flex-row items-center justify-between mb-2">
-                                    <h2 className="text-xl md:text-2xl font-pixel truncate">@{viewedProfile}</h2>
-                                    {viewedProfile === user?.username && (
-                                        <div className="flex gap-2">
-                                            <button onClick={() => {
-                                                setIsEditingProfile(true);
-                                                setEditTagline(user?.tagline || '');
-                                                setEditAvatarUrl(user?.avatarUrl || '');
-                                                setEditStatus(user?.status || 'ONLINE');
-                                            }} className="p-2 opacity-50 hover:opacity-100">
-                                                <Edit2 size={16} />
-                                            </button>
-                                            <button onClick={() => setView('SETTINGS')} className="p-2 opacity-50 hover:opacity-100">
-                                                <Settings size={16} />
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                                {/* ... Stats ... */}
-                                <p className="opacity-60 font-mono text-xs mb-4 uppercase tracking-wider">{viewedProfile === user?.username ? user?.tagline : "Цифровой Архивариус"}</p>
-                                
-                                <div className="flex gap-4 justify-center md:justify-start text-xs font-mono font-bold">
-                                    <div className="flex flex-col items-center md:items-start">
-                                        <span className="text-base font-pixel">{exhibits.filter(e => e.owner === viewedProfile).length}</span>
-                                        <span className="opacity-50 font-pixel text-[10px]">АРТЕФАКТОВ</span>
-                                    </div>
-                                    <div className="flex flex-col items-center md:items-start">
-                                        <span className="text-base font-pixel">{exhibits.filter(e => e.owner === viewedProfile).reduce((acc, curr) => acc + curr.likes, 0)}</span>
-                                        <span className="opacity-50 font-pixel text-[10px]">РЕПУТАЦИЯ</span>
-                                    </div>
-                                    <div className="flex flex-col items-center md:items-start">
-                                        <span className="text-base font-pixel">{getUserAchievements(viewedProfile || '').length}</span>
-                                        <span className="opacity-50 font-pixel text-[10px]">НАГРАДЫ</span>
-                                    </div>
-                                </div>
-                            </div>
-                         
-                            <div className="flex flex-col gap-2">
-                                {viewedProfile !== user?.username && (
-                                    <>
-                                        <button 
-                                            onClick={() => handleFollow(viewedProfile || '')}
-                                            className={`w-full px-6 py-2 rounded font-pixel text-xs font-bold uppercase tracking-widest transition-all ${
-                                                user?.following.includes(viewedProfile || '') 
-                                                ? 'bg-transparent border border-current opacity-60' 
-                                                : (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white')
-                                            }`}
-                                        >
-                                            {user?.following.includes(viewedProfile || '') ? 'ОТПИСАТЬСЯ' : 'ПОДПИСАТЬСЯ'}
-                                        </button>
-                                        <button 
-                                            onClick={() => handleOpenChat(viewedProfile || '')}
-                                            className="w-full px-6 py-2 rounded font-pixel text-xs font-bold uppercase tracking-widest border border-current hover:bg-white/10"
-                                        >
-                                            НАПИСАТЬ
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                         </>
-                     )}
-                 </div>
-
-                 {/* Achievements Section - COVER FLOW */}
-                 <div className="relative mt-8">
-                    {/* ... (Same as before) ... */}
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-pixel text-xs flex items-center gap-2 opacity-70">
-                            <Trophy size={14} /> ЗАЛ СЛАВЫ
-                        </h3>
-                        <button onClick={() => setView('HALL_OF_FAME')} className="text-[10px] font-pixel hover:underline">ВСЕ НАГРАДЫ</button>
-                    </div>
-                    
-                    {getUserAchievements(viewedProfile || '').length === 0 ? (
-                        <div className="text-center w-full py-8 opacity-40 font-mono text-xs border border-dashed rounded">НЕТ ТРОФЕЕВ</div>
-                    ) : (
-                        <div className="flex items-center justify-center gap-4 py-2 overflow-hidden h-64 relative">
-                             <button 
-                                onClick={() => setBadgeIndex((p) => (p - 1 + getUserAchievements(viewedProfile || '').length) % getUserAchievements(viewedProfile || '').length)}
-                                className="z-20 p-2 rounded-full bg-black/50 hover:bg-black text-white absolute left-0 md:relative"
-                             >
-                                 <ChevronLeft size={20} />
-                             </button>
-
-                             <div className="flex items-center justify-center relative w-64 h-full">
-                                {getUserAchievements(viewedProfile || '').map((badgeId, index) => {
-                                    const badge = BADGES[badgeId as keyof typeof BADGES] || { label: badgeId, desc: '', color: 'bg-gray-500', icon: 'Star' };
-                                    
-                                    const length = getUserAchievements(viewedProfile || '').length;
-                                    const isCurrent = index === badgeIndex;
-                                    const isPrev = index === (badgeIndex - 1 + length) % length;
-                                    const isNext = index === (badgeIndex + 1) % length;
-
-                                    let cardStyle = "absolute transition-all duration-500 ease-out flex flex-col items-center ";
-                                    
-                                    if (isCurrent) {
-                                        cardStyle += "z-20 scale-125 opacity-100 translate-x-0 top-10";
-                                    } else if (isPrev) {
-                                        cardStyle += "z-10 scale-75 opacity-40 -translate-x-24 blur-[1px] cursor-pointer hover:opacity-70 top-12";
-                                    } else if (isNext) {
-                                        cardStyle += "z-10 scale-75 opacity-40 translate-x-24 blur-[1px] cursor-pointer hover:opacity-70 top-12";
-                                    } else {
-                                        cardStyle += "z-0 scale-0 opacity-0 pointer-events-none";
-                                    }
-
-                                    return (
-                                        <div 
-                                            key={badgeId} 
-                                            className={cardStyle}
-                                            onClick={() => {
-                                                if(isPrev) setBadgeIndex((badgeIndex - 1 + length) % length);
-                                                if(isNext) setBadgeIndex((badgeIndex + 1) % length);
-                                            }}
-                                        >
-                                            <div className={`w-20 h-24 ${badge.color} rounded-t-lg shadow-2xl flex items-center justify-center relative border-b-4 border-black/20 z-10`}>
-                                                <Star size={32} className="text-white drop-shadow-md" /> 
-                                                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent opacity-50"></div>
-                                            </div>
-                                            <div className="w-24 h-4 bg-gray-800 rounded-[50%] shadow-xl translate-y-2 opacity-50 blur-sm"></div>
-                                            
-                                            <div className={`mt-6 text-center transition-all duration-300 ${isCurrent ? 'opacity-100 transform-none' : 'opacity-0 translate-y-4'}`}>
-                                                <div className={`font-pixel text-sm font-bold whitespace-nowrap ${theme === 'dark' ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : 'text-black'} drop-shadow-md`}>{badge.label}</div>
-                                                <div className={`font-mono text-[10px] mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>{badge.desc}</div>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                             </div>
-
-                             <button 
-                                onClick={() => setBadgeIndex((p) => (p + 1) % getUserAchievements(viewedProfile || '').length)}
-                                className="z-20 p-2 rounded-full bg-black/50 hover:bg-black text-white absolute right-0 md:relative"
-                             >
-                                 <ChevronRight size={20} />
-                             </button>
-                        </div>
-                    )}
-                </div>
-
-                 {/* Tabs: Artifacts vs Collections */}
-                 {/* ... (Same as before) ... */}
-                 <div className="flex gap-6 border-b border-opacity-30 border-current mb-6 mt-8">
-                      <button 
-                        onClick={() => setProfileTab('ARTIFACTS')}
-                        className={`pb-2 font-pixel text-xs md:text-sm transition-colors ${
-                             profileTab === 'ARTIFACTS' 
-                             ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent')
-                             : 'opacity-50'
-                        }`}
-                      >
-                           АРТЕФАКТЫ ({exhibits.filter(e => e.owner === viewedProfile).length})
-                      </button>
-                      <button 
-                        onClick={() => setProfileTab('COLLECTIONS')}
-                        className={`pb-2 font-pixel text-xs md:text-sm transition-colors ${
-                             profileTab === 'COLLECTIONS' 
-                             ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent')
-                             : 'opacity-50'
-                        }`}
-                      >
-                           КОЛЛЕКЦИИ ({collections.filter(c => c.owner === viewedProfile).length})
-                      </button>
-                 </div>
-
-                 {/* ... Artifacts / Collections Lists ... */}
-                 {profileTab === 'ARTIFACTS' && (
-                     exhibits.filter(e => e.owner === viewedProfile).length === 0 ? (
-                         <div className="text-center py-10 opacity-50 font-mono">АРХИВ ПУСТ</div>
-                     ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {exhibits.filter(e => e.owner === viewedProfile).map(ex => (
-                                <ExhibitCard 
-                                    key={ex.id}
-                                    item={ex}
-                                    theme={theme}
-                                    similarExhibits={[]}
-                                    onClick={handleExhibitClick}
-                                    isLiked={ex.likedBy?.includes(user?.username || '') || false}
-                                    isFavorited={false}
-                                    onLike={(e) => toggleLike(ex.id, e)}
-                                    onFavorite={(e) => toggleFavorite(ex.id, e)}
-                                    onAuthorClick={handleAuthorClick}
-                                />
-                            ))}
-                        </div>
-                     )
-                 )}
-
-                 {profileTab === 'COLLECTIONS' && (
-                     collections.filter(c => c.owner === viewedProfile).length === 0 ? (
-                         <div className="text-center py-10 opacity-50 font-mono">НЕТ КОЛЛЕКЦИЙ</div>
-                     ) : (
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             {collections.filter(c => c.owner === viewedProfile).map(renderCollectionCard)}
-                         </div>
-                     )
-                 )}
-
-                 {/* GUESTBOOK SECTION */}
-                 <div className="mt-12 border-t pt-8 border-dashed border-gray-500/30">
-                     <h3 className="font-pixel text-sm mb-6 flex items-center gap-2">
-                        <MessageCircle size={16} /> ГОСТЕВАЯ КНИГА
-                     </h3>
-
-                     {/* Input */}
-                     <div className="flex gap-2 mb-6">
-                         <input 
-                            value={guestbookInput}
-                            onChange={(e) => setGuestbookInput(e.target.value)}
-                            placeholder={viewedProfile === user?.username ? "Напишите статус..." : `Оставьте сообщение для @${viewedProfile}...`}
-                            className="flex-1 bg-transparent border-b p-2 font-mono text-sm outline-none focus:border-current"
-                         />
-                         <button onClick={handleGuestbookPost} className="p-2 border rounded hover:bg-white/10">
-                             <Send size={16} />
-                         </button>
-                     </div>
-
-                     {/* Entries */}
-                     <div className="space-y-4">
-                         {guestbook.filter(g => g.targetUser === viewedProfile).length === 0 ? (
-                             <div className="text-center text-xs opacity-40 font-mono">Здесь пока тихо...</div>
-                         ) : (
-                             guestbook.filter(g => g.targetUser === viewedProfile).map(entry => (
-                                 <div key={entry.id} className="p-3 border rounded text-sm bg-white/5">
-                                     <div className="flex justify-between items-baseline mb-1">
-                                         <span 
-                                            onClick={() => handleAuthorClick(entry.author)}
-                                            className="font-bold cursor-pointer hover:underline font-pixel text-xs text-blue-400"
-                                         >
-                                             @{entry.author}
-                                         </span>
-                                         <span className="text-[10px] opacity-40 font-mono">{entry.timestamp}</span>
-                                     </div>
-                                     <p className="font-mono opacity-80 break-words">{entry.text}</p>
+                                 <div className="flex gap-2 justify-center md:justify-start">
+                                     <button onClick={handleSaveProfile} className="bg-green-600 text-white px-3 py-1 rounded text-xs">OK</button>
+                                     <button onClick={() => setIsEditingProfile(false)} className="bg-gray-600 text-white px-3 py-1 rounded text-xs">CANCEL</button>
                                  </div>
-                             ))
+                             </div>
+                         ) : (
+                             <>
+                                 <h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2>
+                                 <p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">
+                                     {profileUser.tagline}
+                                     {isCurrentUser && (
+                                         <button onClick={() => { 
+                                             setEditTagline(user?.tagline || ''); 
+                                             setEditStatus(user?.status || 'ONLINE');
+                                             setIsEditingProfile(true); 
+                                         }} className="opacity-50 hover:opacity-100">
+                                             <Edit2 size={12} />
+                                         </button>
+                                     )}
+                                 </p>
+                                 {profileUser.status && (
+                                     <div className={`flex items-center gap-1 text-xs font-bold ${STATUS_OPTIONS[profileUser.status].color} justify-center md:justify-start`}>
+                                         {React.createElement(STATUS_OPTIONS[profileUser.status].icon, { size: 12 })}
+                                         {STATUS_OPTIONS[profileUser.status].label}
+                                     </div>
+                                 )}
+                             </>
+                         )}
+
+                         <div className="flex flex-wrap justify-center md:justify-start gap-4 text-xs font-mono pt-2">
+                             <div><span className="font-bold">{profileArtifacts.length}</span> Артефактов</div>
+                             <div><span className="font-bold">{profileUser.following.length}</span> Подписок</div>
+                         </div>
+                         
+                         {!isCurrentUser && (
+                             <div className="flex gap-2 justify-center md:justify-start pt-2">
+                                 <button 
+                                     onClick={() => handleFollow(profileUser.username)}
+                                     className={`px-4 py-2 rounded font-bold font-pixel text-xs ${
+                                         isSubscribed 
+                                         ? 'border border-gray-500 opacity-70' 
+                                         : (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white')
+                                     }`}
+                                 >
+                                     {isSubscribed ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}
+                                 </button>
+                                 <button onClick={() => handleOpenChat(profileUser.username)} className="px-4 py-2 rounded border hover:bg-white/10">
+                                     <MessageSquare size={16} />
+                                 </button>
+                             </div>
                          )}
                      </div>
+                 </div>
+                 
+                 {/* Badges */}
+                 {profileUser.achievements && profileUser.achievements.length > 0 && (
+                     <div className="flex gap-2 flex-wrap justify-center md:justify-start">
+                         {profileUser.achievements.map(badgeId => {
+                             const b = BADGES[badgeId as keyof typeof BADGES];
+                             if(!b) return null;
+                             return (
+                                 <div key={badgeId} className={`px-2 py-1 rounded text-[10px] font-bold text-white ${b.color} flex items-center gap-1`} title={b.desc}>
+                                      {b.label}
+                                 </div>
+                             )
+                         })}
+                     </div>
+                 )}
+                 
+                 {/* Tabs */}
+                 <div className="flex gap-4 border-b border-gray-500/30">
+                     <button 
+                         onClick={() => setProfileTab('ARTIFACTS')}
+                         className={`pb-2 font-pixel text-xs ${profileTab === 'ARTIFACTS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}
+                     >
+                         АРТЕФАКТЫ
+                     </button>
+                     <button 
+                         onClick={() => setProfileTab('COLLECTIONS')}
+                         className={`pb-2 font-pixel text-xs ${profileTab === 'COLLECTIONS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}
+                     >
+                         КОЛЛЕКЦИИ
+                     </button>
+                 </div>
+
+                 {/* Content */}
+                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                     {profileTab === 'ARTIFACTS' && profileArtifacts.map(item => (
+                         <ExhibitCard 
+                             key={item.id} 
+                             item={item} 
+                             theme={theme}
+                             similarExhibits={[]}
+                             onClick={handleExhibitClick}
+                             isLiked={item.likedBy?.includes(user?.username || '') || false}
+                             isFavorited={false}
+                             onLike={(e) => toggleLike(item.id, e)}
+                             onFavorite={(e) => toggleFavorite(item.id, e)}
+                             onAuthorClick={() => {}}
+                         />
+                     ))}
+                     {profileTab === 'COLLECTIONS' && profileCollections.map(renderCollectionCard)}
+                 </div>
+                 
+                 {/* Guestbook */}
+                 <div className="pt-8 border-t border-dashed border-gray-500/30">
+                     <h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
+                     <div className="space-y-4 mb-4">
+                         {guestbook.filter(g => g.targetUser === profileUser.username).map(entry => (
+                             <div key={entry.id} className="p-3 border rounded border-gray-500/30 text-xs">
+                                 <div className="flex justify-between mb-1">
+                                     <span className="font-bold font-pixel cursor-pointer" onClick={() => handleAuthorClick(entry.author)}>@{entry.author}</span>
+                                     <span className="opacity-50">{entry.timestamp}</span>
+                                 </div>
+                                 <p className="font-mono">{entry.text}</p>
+                             </div>
+                         ))}
+                     </div>
+                     {user && (
+                         <div className="flex gap-2">
+                             <input 
+                                 value={guestbookInput}
+                                 onChange={e => setGuestbookInput(e.target.value)}
+                                 placeholder={`Написать @${profileUser.username}...`}
+                                 className="flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none"
+                             />
+                             <button onClick={handleGuestbookPost} className="p-2 border rounded hover:bg-white/10">
+                                 <Send size={16} />
+                             </button>
+                         </div>
+                     )}
                  </div>
              </div>
          );
 
+      case 'EXHIBIT':
+        return selectedExhibit ? (
+            <ExhibitDetailPage 
+                exhibit={selectedExhibit}
+                theme={theme}
+                onBack={handleBack}
+                onShare={(id) => alert(`Share ${id}`)}
+                onFavorite={(id) => toggleFavorite(id)}
+                onLike={(id) => toggleLike(id)}
+                isFavorited={false}
+                isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
+                onPostComment={handlePostComment}
+                onAuthorClick={handleAuthorClick}
+                onFollow={handleFollow}
+                onMessage={handleOpenChat}
+                onDelete={user?.username === selectedExhibit.owner || user?.isAdmin ? handleDeleteExhibit : undefined}
+                onEdit={() => {/* TODO */}}
+                isFollowing={user?.following.includes(selectedExhibit.owner) || false}
+                currentUser={user?.username || ''}
+                isAdmin={user?.isAdmin || false}
+            />
+        ) : <div>Error: No exhibit selected</div>;
+
       case 'COLLECTION_DETAIL':
-        // Collection Detail Logic...
-        if (!selectedCollection) return <div onClick={handleBack}>Error: Missing Data</div>;
-        const collectionExhibits = exhibits.filter(ex => selectedCollection.exhibitIds.includes(ex.id));
-        const isCollectionOwner = selectedCollection.owner === user?.username;
-        return (
-            <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
-                 {/* ... Header and Content ... */}
-                 <button onClick={handleBack} className="flex items-center gap-2 mb-6 hover:underline opacity-70 font-pixel text-xs">
-                     <ArrowLeft size={16} /> НАЗАД
-                 </button>
-
-                 <div className={`relative aspect-[3/1] w-full rounded-xl overflow-hidden mb-8 border-2 ${
-                     theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'
-                 }`}>
-                     <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
-                     <div className="absolute inset-0 bg-black/60 flex flex-col justify-end p-8">
-                         <div className="font-pixel text-white/70 text-xs mb-2 uppercase tracking-widest flex items-center gap-2">
-                             <Layers size={14}/> КОЛЛЕКЦИЯ
-                         </div>
-                         <h1 className="text-2xl md:text-4xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
-                         <p className="text-white/80 font-mono max-w-xl text-sm">{selectedCollection.description}</p>
-                     </div>
-                 </div>
-
-                 <div className="flex items-center justify-between mb-8 border-b pb-4 border-opacity-30 border-current">
-                     <div className="flex items-center gap-3" onClick={() => handleAuthorClick(selectedCollection.owner)}>
-                          <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden">
-                             <img src={`https://ui-avatars.com/api/?name=${selectedCollection.owner}&background=random`} />
-                          </div>
-                          <div>
-                              <div className="font-pixel text-sm">@{selectedCollection.owner}</div>
-                              <div className="font-mono text-xs opacity-50">{selectedCollection.timestamp}</div>
-                          </div>
-                     </div>
-                     <div className="flex gap-2">
-                         {isCollectionOwner && (
-                             <button 
-                                onClick={() => handleEditCollection(selectedCollection)}
-                                className="px-4 py-2 border rounded font-pixel text-xs uppercase hover:bg-white/10"
-                             >
-                                 РЕДАКТИРОВАТЬ
-                             </button>
-                         )}
-                         <button className="opacity-60 hover:opacity-100"><Share2/></button>
-                     </div>
-                 </div>
-                 {/* ... Items Grid ... */}
-                 <h3 className="font-pixel text-base mb-4 opacity-80">СОДЕРЖИМОЕ ({collectionExhibits.length})</h3>
-                 {collectionExhibits.length === 0 ? (
-                     <div className="py-10 text-center font-mono opacity-50 border-2 border-dashed rounded">
-                         В ЭТОЙ КОЛЛЕКЦИИ ПОКА ПУСТО
-                     </div>
-                 ) : (
-                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {collectionExhibits.map(ex => (
-                                <ExhibitCard 
-                                    key={ex.id}
-                                    item={ex}
-                                    theme={theme}
-                                    similarExhibits={[]}
-                                    onClick={handleExhibitClick}
-                                    isLiked={ex.likedBy?.includes(user?.username || '') || false}
-                                    isFavorited={false}
-                                    onLike={(e) => toggleLike(ex.id, e)}
-                                    onFavorite={(e) => toggleFavorite(ex.id, e)}
-                                    onAuthorClick={handleAuthorClick}
-                                />
-                        ))}
-                     </div>
-                 )}
-            </div>
-        );
-
-      case 'SETTINGS':
-          // Settings Logic...
+          if (!selectedCollection) return <div>Error</div>;
+          const colExhibits = exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id));
           return (
-              <div className="max-w-2xl mx-auto p-4 animate-in fade-in pb-32">
-                  <h2 className="text-lg md:text-xl font-pixel mb-6 border-b pb-2">НАСТРОЙКИ</h2>
-                  <div className={`p-4 rounded border mb-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                      <div className="flex items-center justify-between font-pixel text-sm">
-                          <span>ТЕМА ИНТЕРФЕЙСА</span>
-                          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 border rounded">
-                              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                          </button>
-                      </div>
-                      <div className="mt-4 border-t pt-4">
-                        <button onClick={db.resetDatabase} className="text-red-500 font-bold border border-red-500 p-2 rounded w-full flex justify-center gap-2 font-pixel text-sm">
-                            <Trash2 size={16}/> СБРОС СИСТЕМЫ
-                        </button>
+              <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
+                  <button onClick={handleBack} className="flex items-center gap-2 mb-6 hover:underline opacity-70 font-pixel text-xs">
+                     <ArrowLeft size={16} /> НАЗАД
+                  </button>
+                  <div className="relative aspect-[3/1] rounded-xl overflow-hidden mb-8 group">
+                      <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
+                          <h1 className="text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
+                          <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
+                          {user?.username === selectedCollection.owner && (
+                              <button 
+                                onClick={() => handleEditCollection(selectedCollection)}
+                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
+                              >
+                                  <Edit2 size={16} />
+                              </button>
+                          )}
                       </div>
                   </div>
-                  <button onClick={handleLogout} className="w-full text-center text-red-500 font-pixel text-sm mt-8 opacity-70 hover:opacity-100">
-                       [ВЫХОД ИЗ СИСТЕМЫ]
-                  </button>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {colExhibits.map(item => (
+                          <ExhibitCard 
+                             key={item.id} 
+                             item={item} 
+                             theme={theme}
+                             similarExhibits={[]}
+                             onClick={handleExhibitClick}
+                             isLiked={item.likedBy?.includes(user?.username || '') || false}
+                             isFavorited={false}
+                             onLike={(e) => toggleLike(item.id, e)}
+                             onFavorite={(e) => toggleFavorite(item.id, e)}
+                             onAuthorClick={handleAuthorClick}
+                          />
+                      ))}
+                  </div>
               </div>
           );
 
-      case 'EXHIBIT':
-        // Exhibit Logic...
-        if (!selectedExhibit) {
-             return (
-                 <div className="p-10 text-center border-2 border-red-500">
-                     <h2 className="text-red-500 font-pixel text-xl">ERROR: EXHIBIT DATA LOST</h2>
-                     <button onClick={() => setView('FEED')} className="mt-4 bg-white text-black px-4 py-2 font-pixel">RETURN TO FEED</button>
-                 </div>
-             );
-        }
-        const isSelectedLiked = selectedExhibit.likedBy?.includes(user?.username || 'Guest') || false;
-
-        return (
-            <ExhibitDetailPage 
-              exhibit={selectedExhibit} 
-              theme={theme} 
-              onBack={handleBack}
-              onShare={(_id: string) => window.alert(`LINK COPIED`)}
-              onFavorite={toggleFavorite}
-              onLike={toggleLike}
-              isFavorited={false}
-              isLiked={isSelectedLiked}
-              onPostComment={handlePostComment}
-              onAuthorClick={handleAuthorClick}
-              onFollow={handleFollow}
-              onMessage={(username) => handleOpenChat(username)}
-              onDelete={handleDeleteExhibit}
-              onEdit={(ex: Exhibit) => {}}
-              isFollowing={user?.following?.includes(selectedExhibit.owner) || false}
-              currentUser={user?.username || ''}
-              isAdmin={user?.isAdmin || false}
-            />
-        );
-
       case 'FEED':
       default:
-        const filteredExhibits = exhibits.filter(ex => {
-            const matchesCategory = selectedCategory === 'ВСЕ' || ex.category === selectedCategory;
-            return matchesCategory;
-        });
+         return (
+             <div className="max-w-7xl mx-auto animate-in fade-in">
+                 {/* Feed Toggle */}
+                 <div className="flex items-center justify-center gap-4 mb-8">
+                     <button 
+                         onClick={() => setFeedMode('ARTIFACTS')}
+                         className={`px-4 py-2 font-pixel text-sm rounded-full transition-all ${
+                             feedMode === 'ARTIFACTS' 
+                             ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') 
+                             : 'opacity-50 hover:opacity-100'
+                         }`}
+                     >
+                         АРТЕФАКТЫ
+                     </button>
+                     <button 
+                         onClick={() => setFeedMode('COLLECTIONS')}
+                         className={`px-4 py-2 font-pixel text-sm rounded-full transition-all ${
+                             feedMode === 'COLLECTIONS' 
+                             ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') 
+                             : 'opacity-50 hover:opacity-100'
+                         }`}
+                     >
+                         КОЛЛЕКЦИИ
+                     </button>
+                 </div>
 
-        // --- Logic for Feed Ordering (Following vs Recommendations) ---
-        const followingList: string[] = user?.following || [];
-        const hasFollowing = followingList.length > 0;
-        
-        // Split logic: If user follows people, show those first, then others.
-        let displayExhibits = filteredExhibits;
-
-        // If in "Collections" mode
-        if (feedMode === 'COLLECTIONS') {
-             return (
-                <div className="space-y-6 animate-in fade-in pb-32">
-                     {/* Header */}
-                     <div className={`sticky top-0 z-40 pt-2 pb-2 backdrop-blur-md ${theme === 'dark' ? 'bg-dark-bg' : 'bg-light-bg'}`}>
-                         <div className="flex items-center gap-4 mb-4">
-                             <h2 className="text-xl font-pixel">ЛЕНТА КОЛЛЕКЦИЙ</h2>
-                             <div className="flex gap-2 ml-auto">
-                                 <button onClick={() => setFeedMode('ARTIFACTS')} className="opacity-50 hover:opacity-100 font-pixel text-xs">[АРТЕФАКТЫ]</button>
-                                 <button className="font-bold border-b-2 border-current font-pixel text-xs">[КОЛЛЕКЦИИ]</button>
-                             </div>
-                         </div>
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {collections.map(renderCollectionCard)}
-                         </div>
-                    </div>
-                </div>
-             )
-        }
-
-        // Artifacts Mode
-        return (
-          <div className="space-y-6 animate-in fade-in pb-32">
-            {/* ... Feed Header ... */}
-            <div className={`sticky top-0 z-40 pt-2 pb-2 border-b border-dashed border-gray-500/30 ${theme === 'dark' ? 'bg-dark-bg' : 'bg-light-bg'}`}>
-               
-               <div className="flex flex-col gap-2 my-1">
-                   {/* Mobile Optimized Header Layout */}
-                   <div className="flex items-center gap-2">
-                       <div className={`relative flex-1 flex items-center border-b-2 px-2 gap-2 ${
-                           theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'
-                       }`}>
-                           <Search size={14} className="opacity-50" />
-                           <input 
-                             type="text"
-                             placeholder="ПОИСК..."
-                             onClick={() => setView('SEARCH')} 
-                             readOnly
-                             className="bg-transparent w-full py-1.5 focus:outline-none font-pixel text-[10px] tracking-wide cursor-pointer"
-                           />
-                           
-                           <div className={`h-4 w-px mx-1 ${theme === 'dark' ? 'bg-dark-dim' : 'bg-light-dim'}`}></div>
-
-                           <button 
-                             onClick={() => setIsFilterOpen(!isFilterOpen)}
-                             className="flex items-center gap-1 opacity-70 hover:opacity-100 font-pixel text-[10px] uppercase"
-                           >
-                               <SlidersHorizontal size={12} /> <span className="whitespace-nowrap max-w-[100px] truncate">{selectedCategory === 'ВСЕ' ? 'ФИЛЬТР' : selectedCategory}</span>
-                           </button>
-                       </div>
-                   </div>
-
-                   {/* Toggle Feed Mode */}
-                   <div className="flex justify-between items-center text-[10px] font-pixel uppercase tracking-widest px-1">
-                        <div className="flex gap-4">
-                            <button className="font-bold border-b-2 border-current">АРТЕФАКТЫ</button>
-                            <button onClick={() => setFeedMode('COLLECTIONS')} className="opacity-50 hover:opacity-100">КОЛЛЕКЦИИ</button>
+                 {feedMode === 'ARTIFACTS' && (
+                     <>
+                        {/* Categories */}
+                        <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-hide justify-center">
+                            <button 
+                                onClick={() => setSelectedCategory('ВСЕ')}
+                                className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border ${
+                                    selectedCategory === 'ВСЕ'
+                                    ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
+                                    : 'border-transparent opacity-60 hover:opacity-100'
+                                }`}
+                            >
+                                [ ВСЕ ]
+                            </button>
+                            {Object.values(DefaultCategory).map(cat => (
+                                <button
+                                    key={cat}
+                                    onClick={() => setSelectedCategory(cat)}
+                                    className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border ${
+                                        selectedCategory === cat
+                                        ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
+                                        : 'border-transparent opacity-60 hover:opacity-100'
+                                    }`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
                         </div>
-                   </div>
-               </div>
 
-               {/* Expanded Filters */}
-               {isFilterOpen && (
-                   <div className="flex flex-wrap gap-2 py-2 animate-in slide-in-from-top-2">
-                       <button 
-                           onClick={() => setSelectedCategory('ВСЕ')}
-                           className={`px-3 py-1 text-[10px] font-pixel border rounded ${selectedCategory === 'ВСЕ' ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'opacity-50'}`}
-                       >
-                           ВСЕ
-                       </button>
-                       {Object.values(DefaultCategory).map(cat => (
-                           <button 
-                               key={cat}
-                               onClick={() => setSelectedCategory(cat)}
-                               className={`px-3 py-1 text-[10px] font-pixel border rounded ${selectedCategory === cat ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'opacity-50'}`}
-                           >
-                               {cat}
-                           </button>
-                       ))}
-                   </div>
-               )}
-            </div>
-            
-            {/* GRID */}
-            {displayExhibits.length === 0 ? (
-                <div className="text-center py-20 font-mono opacity-50 border-2 border-dashed rounded">
-                    НЕТ ДАННЫХ В ЭТОМ СЕКТОРЕ
-                </div>
-            ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {displayExhibits.slice(0, visibleCount).map(item => (
-                        <ExhibitCard 
-                            key={item.id} 
-                            item={item} 
-                            theme={theme}
-                            similarExhibits={[]}
-                            onClick={handleExhibitClick}
-                            isLiked={item.likedBy?.includes(user?.username || '') || false}
-                            isFavorited={false}
-                            onLike={(e) => toggleLike(item.id, e)}
-                            onFavorite={(e) => toggleFavorite(item.id, e)}
-                            onAuthorClick={handleAuthorClick}
-                        />
-                    ))}
-                </div>
-            )}
-            
-            {/* Load More Trigger (Conditional) */}
-            {displayExhibits.length > visibleCount && (
-                <div ref={loadMoreRef} className="py-8 flex justify-center opacity-50">
-                    <RetroLoader text="ЗАГРУЗКА ДАННЫХ..." />
-                </div>
-            )}
-          </div>
-        );
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                             {exhibits
+                                .filter(ex => selectedCategory === 'ВСЕ' || ex.category === selectedCategory)
+                                .slice(0, visibleCount)
+                                .map(item => (
+                                    <ExhibitCard 
+                                        key={item.id} 
+                                        item={item} 
+                                        theme={theme}
+                                        similarExhibits={[]}
+                                        onClick={handleExhibitClick}
+                                        isLiked={item.likedBy?.includes(user?.username || '') || false}
+                                        isFavorited={false}
+                                        onLike={(e) => toggleLike(item.id, e)}
+                                        onFavorite={(e) => toggleFavorite(item.id, e)}
+                                        onAuthorClick={handleAuthorClick}
+                                    />
+                                ))
+                             }
+                        </div>
+                        
+                        {/* Load More trigger */}
+                        <div ref={loadMoreRef} className="h-20 w-full flex items-center justify-center mt-8">
+                             {exhibits.length > visibleCount && <RetroLoader />}
+                        </div>
+                     </>
+                 )}
+
+                 {feedMode === 'COLLECTIONS' && (
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                         {collections.map(renderCollectionCard)}
+                     </div>
+                 )}
+             </div>
+         );
     }
   };
 
-  const MobileNav = () => (
-      <div className={`md:hidden fixed bottom-0 left-0 w-full border-t z-50 px-6 py-3 flex justify-between items-center ${
-          theme === 'dark' ? 'bg-black/90 border-dark-dim text-gray-400' : 'bg-white/90 border-light-dim text-gray-600'
-      }`}>
-          <button onClick={() => setView('FEED')} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}`}>
-              <Home size={20} />
-          </button>
-          <button onClick={() => setView('SEARCH')} className={`flex flex-col items-center gap-1 ${view === 'SEARCH' ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}`}>
-              <Search size={20} />
-          </button>
-          <button onClick={() => setView('CREATE_HUB')} className={`flex flex-col items-center gap-1 -translate-y-4 p-3 rounded-full border-2 shadow-lg ${
-              theme === 'dark' ? 'bg-black border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent'
-          }`}>
-              <PlusSquare size={24} />
-          </button>
-          <button onClick={() => setView('ACTIVITY')} className={`relative flex flex-col items-center gap-1 ${view === 'ACTIVITY' ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}`}>
-              <Activity size={20} />
-              {notifications.some(n => n.recipient === user?.username && !n.isRead) && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              )}
-          </button>
-          <button onClick={() => {
-              setView('USER_PROFILE');
-              setViewedProfile(user?.username || null);
-              setProfileTab('ARTIFACTS');
-          }} className={`flex flex-col items-center gap-1 ${view === 'USER_PROFILE' && viewedProfile === user?.username ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}`}>
-              <User size={20} />
-          </button>
-      </div>
-  );
-
   return (
-    <div className={`min-h-screen transition-colors duration-300 font-sans selection:bg-green-500 selection:text-black ${
-        theme === 'dark' ? 'bg-dark-bg text-gray-200' : 'bg-light-bg text-gray-800'
+    <div className={`min-h-screen transition-colors duration-500 font-sans selection:bg-green-500 selection:text-black ${
+      theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-800'
     }`}>
       <MatrixRain theme={theme} />
-      <CRTOverlay />
+      {theme === 'dark' && <CRTOverlay />}
+      
+      {/* Header / Navbar */}
+      {view !== 'AUTH' && (
+        <header className={`sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
+            <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+                <div 
+                    onClick={() => { setView('FEED'); setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); }}
+                    className="font-pixel text-lg font-bold cursor-pointer flex items-center gap-2"
+                >
+                    <Terminal size={20} className={theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'} />
+                    <span className="hidden md:inline">NEO_ARCHIVE</span>
+                </div>
 
-      {/* Main Container */}
-      <main className="container mx-auto p-4 md:p-6 pb-24 relative z-10 min-h-screen flex flex-col">
-          {/* Header for Desktop */}
-          <header className="hidden md:flex justify-between items-center mb-8 border-b border-dashed border-gray-500/30 pb-4">
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('FEED')}>
-                  <Terminal size={24} className={theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}/>
-                  <span className="font-pixel text-lg font-bold">NEO_ARCHIVE_V2</span>
-              </div>
-              
-              {user && (
-                  <div className="flex items-center gap-6">
-                      <nav className="flex gap-4 font-pixel text-xs">
-                          <button onClick={() => setView('FEED')} className={`hover:text-green-500 ${view === 'FEED' ? 'underline' : ''}`}>[ЛЕНТА]</button>
-                          <button onClick={() => setView('CREATE_HUB')} className={`hover:text-green-500 ${view.includes('CREATE') ? 'underline' : ''}`}>[ЗАГРУЗИТЬ]</button>
-                          <button onClick={() => setView('ACTIVITY')} className={`hover:text-green-500 flex items-center gap-1 ${view === 'ACTIVITY' ? 'underline' : ''}`}>
-                              [АКТИВНОСТЬ] 
-                              {notifications.some(n => n.recipient === user?.username && !n.isRead) && <span className="w-2 h-2 bg-red-500 rounded-full"></span>}
-                          </button>
-                          <button onClick={() => {
-                                setView('USER_PROFILE'); 
-                                setViewedProfile(user.username);
-                          }} className={`hover:text-green-500 ${view === 'USER_PROFILE' && viewedProfile === user.username ? 'underline' : ''}`}>[ПРОФИЛЬ]</button>
-                      </nav>
-                      <div className="flex items-center gap-3 pl-6 border-l border-gray-500/30">
-                          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="opacity-50 hover:opacity-100">
-                              {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
-                          </button>
-                          <button onClick={handleLogout} className="opacity-50 hover:opacity-100 hover:text-red-500"><LogOut size={18}/></button>
-                      </div>
-                  </div>
-              )}
-          </header>
+                <div className="flex items-center gap-4">
+                    <div className="relative">
+                        <input 
+                           value={searchQuery}
+                           onChange={(e) => { setSearchQuery(e.target.value); if(view !== 'SEARCH') setView('SEARCH'); }}
+                           placeholder="ПОИСК..."
+                           className={`w-32 md:w-64 bg-transparent border rounded-full px-3 py-1 text-xs font-pixel focus:outline-none focus:w-full transition-all ${
+                               theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
+                           }`}
+                        />
+                        <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"/>
+                    </div>
 
-          {/* Conditional Hero (Only show on Feed) */}
-          {view === 'FEED' && <HeroSection theme={theme} user={user} />}
+                    <button 
+                        onClick={() => setView('CREATE_HUB')} 
+                        className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}
+                    >
+                        <PlusSquare size={20} />
+                    </button>
+                    
+                    <button 
+                        onClick={() => setView('ACTIVITY')} 
+                        className="relative p-2 opacity-70 hover:opacity-100"
+                    >
+                        <Bell size={20} />
+                        {(notifications.some(n => n.recipient === user?.username && !n.isRead) || messages.some(m => m.receiver === user?.username && !m.isRead)) && (
+                            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                        )}
+                    </button>
 
-          {/* Dynamic Content */}
-          <div className="flex-1">
-             {renderContentArea()}
-          </div>
+                    <button 
+                         onClick={() => {
+                             if (user) {
+                                 setViewedProfile(user.username);
+                                 setView('USER_PROFILE');
+                             }
+                         }}
+                         className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden border border-transparent hover:border-current transition-all"
+                    >
+                        <img src={`https://ui-avatars.com/api/?name=${user?.username || 'Guest'}&background=random`} alt="User" />
+                    </button>
+
+                    <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="opacity-50 hover:opacity-100">
+                        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                    </button>
+                    
+                    <button onClick={handleLogout} className="opacity-50 hover:opacity-100 text-red-500">
+                        <LogOut size={20} />
+                    </button>
+                </div>
+            </div>
+        </header>
+      )}
+      
+      {/* Main Content */}
+      <main className="relative z-10 max-w-7xl mx-auto px-4 py-6">
+         {view === 'FEED' && <HeroSection theme={theme} user={user} />}
+         {renderContentArea()}
       </main>
 
-      {/* Mobile Navigation */}
-      {user && view !== 'AUTH' && <MobileNav />}
+      {/* Footer */}
+      {view !== 'AUTH' && (
+          <footer className="mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
+              <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2023</p>
+          </footer>
+      )}
     </div>
   );
 }

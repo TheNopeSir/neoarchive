@@ -10,7 +10,7 @@ interface State {
   errorInfo: ErrorInfo | null;
 }
 
-class ErrorBoundary extends React.Component<Props, State> {
+class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -34,35 +34,19 @@ class ErrorBoundary extends React.Component<Props, State> {
             SYSTEM FAILURE [FATAL ERROR]
           </h1>
           <p className="mb-4 text-sm opacity-80">
-            Произошел сбой визуализации. Данные для отладки представлены ниже.
+            Произошел сбой визуализации. Данные для отладки:
           </p>
-          
-          <div className="bg-gray-900 p-4 rounded border border-red-500/50 mb-4 shadow-lg shadow-red-900/20">
-            <h3 className="text-red-500 font-bold mb-2">ERROR MESSAGE:</h3>
-            <p className="text-white font-bold">{this.state.error?.toString()}</p>
-          </div>
-
-          <div className="mb-6">
-             <h3 className="text-gray-400 font-bold mb-2 text-xs uppercase">Stack Trace:</h3>
-             <details className="bg-gray-900/50 p-4 rounded text-xs text-gray-400 whitespace-pre-wrap overflow-x-auto border border-gray-800" open>
-                {this.state.errorInfo?.componentStack || "No stack trace available"}
-             </details>
-          </div>
-
-          <div className="flex gap-4">
-              <button 
-                onClick={() => window.location.reload()}
-                className="px-6 py-3 border border-green-500 bg-green-500/10 hover:bg-green-500 hover:text-black font-bold transition-all uppercase tracking-widest"
-              >
-                REBOOT SYSTEM (RELOAD)
-              </button>
-              <button 
-                onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
-                className="px-6 py-3 border border-gray-500 hover:bg-gray-800 text-gray-400 hover:text-white font-bold transition-all uppercase tracking-widest"
-              >
-                IGNORE & TRY RENDER
-              </button>
-          </div>
+          <pre className="text-xs bg-green-900/20 p-4 border border-green-500/50 rounded overflow-auto mb-4 whitespace-pre-wrap break-all">
+             {this.state.error && this.state.error.toString()}
+             <br/>
+             {this.state.errorInfo?.componentStack}
+          </pre>
+          <button 
+             onClick={() => window.location.reload()}
+             className="border border-green-500 px-4 py-2 hover:bg-green-500 hover:text-black transition-colors uppercase text-sm font-bold"
+          >
+             ПЕРЕЗАГРУЗКА / REBOOT
+          </button>
         </div>
       );
     }

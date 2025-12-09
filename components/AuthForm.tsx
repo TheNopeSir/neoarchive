@@ -1,6 +1,7 @@
 
+
 import React, { useState } from 'react';
-import { Terminal, Lock, User, ArrowRight, CheckSquare, Square, Github, Chrome, Gamepad2 } from 'lucide-react';
+import { Terminal, Lock, User, ArrowRight, CheckSquare, Square, Github, Chrome, Gamepad2, Mail } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -12,6 +13,7 @@ interface AuthFormProps {
 const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [tagline, setTagline] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -27,9 +29,15 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
       return;
     }
 
-    if (isRegister && !tagline) {
-       setError('УКАЖИТЕ СТАТУС');
-       return;
+    if (isRegister) {
+        if (!tagline) {
+             setError('УКАЖИТЕ СТАТУС');
+             return;
+        }
+        if (!email) {
+             setError('УКАЖИТЕ EMAIL');
+             return;
+        }
     }
 
     setIsLoading(true);
@@ -38,7 +46,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
         let user: UserProfile;
         
         if (isRegister) {
-            user = await db.registerUser(username, password, tagline);
+            user = await db.registerUser(username, password, tagline, email);
         } else {
             user = await db.loginUser(username, password);
         }
@@ -101,6 +109,21 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
           </div>
 
           {isRegister && (
+            <>
+            <div className="space-y-1 animate-in slide-in-from-top-2 fade-in">
+              <label className="text-xs font-bold ml-1 uppercase opacity-70">Email</label>
+              <div className={`flex items-center border-b-2 px-2 py-2 ${theme === 'dark' ? 'border-dark-dim focus-within:border-dark-primary' : 'border-light-dim focus-within:border-light-accent'}`}>
+                <Mail size={16} className="opacity-50 mr-2" />
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="bg-transparent w-full focus:outline-none"
+                  placeholder="EMAIL"
+                />
+              </div>
+            </div>
+
             <div className="space-y-1 animate-in slide-in-from-top-2 fade-in">
               <label className="text-xs font-bold ml-1 uppercase opacity-70">Статус / Слоган</label>
               <div className={`flex items-center border-b-2 px-2 py-2 ${theme === 'dark' ? 'border-dark-dim focus-within:border-dark-primary' : 'border-light-dim focus:border-light-accent'}`}>
@@ -114,11 +137,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
                 />
               </div>
             </div>
+            </>
           )}
 
           <div className="space-y-1">
             <label className="text-xs font-bold ml-1 uppercase opacity-70">Пароль</label>
-            <div className={`flex items-center border-b-2 px-2 py-2 ${theme === 'dark' ? 'border-dark-dim focus-within:border-dark-primary' : 'border-light-dim focus-within:border-light-accent'}`}>
+            <div className={`flex items-center border-b-2 px-2 py-2 ${theme === 'dark' ? 'border-dark-dim focus-within:border-dark-primary' : 'border-light-dim focus:border-light-accent'}`}>
               <Lock size={16} className="opacity-50 mr-2" />
               <input 
                 type="password" 

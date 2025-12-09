@@ -1,6 +1,8 @@
 
 
 
+
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
 
@@ -18,6 +20,7 @@ let cache = {
 
 const ADMIN_USER: UserProfile = {
     username: "truester",
+    email: "admin@neoarchive.net",
     tagline: "Admin Construct",
     avatarUrl: "https://ui-avatars.com/api/?name=Admin&background=000&color=fff",
     joinedDate: "01.01.1999",
@@ -25,6 +28,9 @@ const ADMIN_USER: UserProfile = {
     password: "trinityisall1",
     isAdmin: true
 };
+
+// Ensure mock user has email
+const DEFAULT_USER: UserProfile = { ...MOCK_USER, email: 'neo@matrix.com' };
 
 const syncWithServer = async (key: string, data: any) => {
     try {
@@ -77,8 +83,8 @@ const loadFromServer = async () => {
         cache.guestbook = data.guestbook || [];
         
         if (!data.users || !Array.isArray(data.users) || data.users.length === 0) {
-            cache.users = [MOCK_USER, ADMIN_USER];
-            syncWithServer('users', [MOCK_USER, ADMIN_USER]);
+            cache.users = [DEFAULT_USER, ADMIN_USER];
+            syncWithServer('users', cache.users);
         } else {
             cache.users = data.users;
             // Ensure admin exists even if loaded from Partial DB
@@ -96,7 +102,7 @@ const loadFromServer = async () => {
         cache.collections = MOCK_COLLECTIONS;
         cache.notifications = MOCK_NOTIFICATIONS;
         cache.messages = MOCK_MESSAGES;
-        cache.users = [MOCK_USER, ADMIN_USER];
+        cache.users = [DEFAULT_USER, ADMIN_USER];
         cache.isLoaded = true;
     }
 };
@@ -142,13 +148,20 @@ export const restoreDatabase = (jsonData: string) => {
 };
 
 // --- AUTHENTICATION ---
-export const registerUser = async (username: string, password: string, tagline: string): Promise<UserProfile> => {
+export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
     await initializeDatabase(); 
-    const existing = cache.users.find(u => u.username.toLowerCase() === username.toLowerCase());
-    if (existing) throw new Error("ПОЛЬЗОВАТЕЛЬ УЖЕ СУЩЕСТВУЕТ");
+    
+    // Check Email Uniqueness
+    const existingEmail = cache.users.find(u => u.email && u.email.toLowerCase() === email.toLowerCase());
+    if (existingEmail) throw new Error("EMAIL УЖЕ ЗАРЕГИСТРИРОВАН");
+
+    // Check Username Uniqueness
+    const existingUser = cache.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    if (existingUser) throw new Error("USERNAME УЖЕ ЗАНЯТ");
 
     const newUser: UserProfile = {
         username: username,
+        email: email,
         tagline: tagline || "Новый пользователь",
         avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random`,
         joinedDate: new Date().toLocaleDateString('ru-RU'),
@@ -162,20 +175,23 @@ export const registerUser = async (username: string, password: string, tagline: 
     return newUser;
 };
 
-export const loginUser = async (username: string, password: string): Promise<UserProfile> => {
+export const loginUser = async (login: string, password: string): Promise<UserProfile> => {
     await initializeDatabase();
-    const user = cache.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    // Prioritize Email Login
+    const user = cache.users.find(u => 
+        (u.email && u.email.toLowerCase() === login.toLowerCase()) ||
+        u.username.toLowerCase() === login.toLowerCase()
+    );
+    
     if (!user) throw new Error("ПОЛЬЗОВАТЕЛЬ НЕ НАЙДЕН");
     if (user.password !== password) throw new Error("НЕВЕРНЫЙ ПАРОЛЬ");
     return user;
 };
 
-// Social Login Simulation
+// Social Login Simulation (Deprecated in UI, kept for compatibility)
 export const loginViaProvider = async (provider: string): Promise<UserProfile> => {
     await initializeDatabase();
     
-    // Map providers to specific demo user handles to keep the database clean
-    // or create unique ones if preferred. Here we use singleton demo users.
     const socialUsernames: Record<string, string> = {
         'Google': 'Google_Agent',
         'Yandex': 'Yandex_Droid',
@@ -188,14 +204,14 @@ export const loginViaProvider = async (provider: string): Promise<UserProfile> =
     let user = cache.users.find(u => u.username === targetUsername);
 
     if (!user) {
-        // Create the social user if they don't exist
         user = {
             username: targetUsername,
+            email: `${targetUsername.toLowerCase()}@social.net`,
             tagline: `Сигнал верифицирован: ${provider}`,
             avatarUrl: `https://ui-avatars.com/api/?name=${provider.substring(0,2)}&background=random&length=1`,
             joinedDate: new Date().toLocaleDateString('ru-RU'),
             following: [],
-            password: Math.random().toString(36), // Random password effectively disables password login
+            password: Math.random().toString(36), 
             isAdmin: false
         };
         cache.users.push(user);

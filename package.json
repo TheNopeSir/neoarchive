@@ -1,5 +1,5 @@
 {
-  "name": "neo-archive",
+  "name": "neoarchive",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -7,11 +7,11 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "reboot": "npm install && npm run build && node server.js"
+    "deploy": "npm install && npm run build && pm2 start ecosystem.config.cjs --env production"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
