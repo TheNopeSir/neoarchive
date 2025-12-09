@@ -1,4 +1,5 @@
 
+
 export interface Comment {
   id: string;
   author: string;
@@ -16,10 +17,10 @@ export interface Exhibit {
   owner: string;
   timestamp: string;
   likes: number;
-  likedBy?: string[]; // New: List of users who liked this
+  likedBy?: string[]; // List of users who liked this
   views: number;
-  rating: number; // 1-5 scale
-  condition?: Condition; 
+  // rating removed
+  condition?: string;
   quality: string;
   specs: Record<string, string>;
   comments: Comment[];
@@ -41,6 +42,7 @@ export interface Notification {
   id: string;
   type: NotificationType;
   actor: string; // Username who triggered it
+  recipient: string; // Username who receives it
   targetId?: string; // ID of exhibit (if applicable)
   targetPreview?: string; // Text preview
   timestamp: string;
@@ -62,37 +64,25 @@ export interface GuestbookEntry {
     targetUser: string;
     text: string;
     timestamp: string;
+    isRead: boolean;
 }
 
-// Renamed to DefaultCategory to indicate these are presets, not strict enums
-export enum DefaultCategory {
-  PHONES = 'ТЕЛЕФОНЫ',
-  GAMES = 'ИГРЫ',
-  MAGAZINES = 'ЖУРНАЛЫ',
-  MUSIC = 'МУЗЫКА',
-  COMPUTERS = 'КОМПЬЮТЕРЫ',
-  CAMERAS = 'КАМЕРЫ',
-  MISC = 'ПРОЧЕЕ'
-}
-
-export enum Condition {
-  MINT = 'ИДЕАЛ',
-  GOOD = 'ХОРОШЕЕ',
-  FAIR = 'ПОТЕРТОЕ',
-  BROKEN = 'СЛОМАНО'
-}
+export type UserStatus = 'ONLINE' | 'AWAY' | 'DND' | 'INVISIBLE' | 'FREE_FOR_CHAT';
 
 export interface UserProfile {
   username: string;
   tagline: string;
+  status?: UserStatus;
   avatarUrl: string;
   joinedDate: string;
   following: string[]; // List of usernames
+  achievements?: string[]; // List of Badge IDs
   // Auth simulation fields
   password?: string;
+  phone?: string;
   isAdmin?: boolean;
 }
 
 // Consolidated Views: 
-// FEED (Global + Subs), PROFILE (My Items + Favorites), COMMS (Notifs + Messages), SETTINGS
-export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'CREATE' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'COMMS' | 'ADMIN' | 'SETTINGS';
+// FEED (Global + Subs), PROFILE (My Items + Favorites), ACTIVITY (Notifs + Messages), SEARCH, CREATE_HUB
+export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT';

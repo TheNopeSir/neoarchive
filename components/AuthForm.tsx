@@ -14,10 +14,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
   const [username, setUsername] = useState('');
   const [tagline, setTagline] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true); // Default true
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,14 +38,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
         let user: UserProfile;
         
         if (isRegister) {
-            // Register new user on server
             user = await db.registerUser(username, password, tagline);
         } else {
-            // Login existing user from server
             user = await db.loginUser(username, password);
         }
         
-        // If successful
         onLogin(user, rememberMe);
         
     } catch (err: any) {
@@ -56,17 +52,15 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
     }
   };
 
-  const handleSocialLogin = async (provider: string) => {
-      setSocialLoading(provider);
-      setError('');
-      try {
-          // Simulate network handshake
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          const user = await db.loginViaProvider(provider);
-          onLogin(user, true); // Always remember social logins
-      } catch (err) {
-          setError(`СБОЙ ПРОТОКОЛА ${provider.toUpperCase()}`);
-          setSocialLoading(null);
+  const handleSocialRedirect = (provider: string) => {
+      // Redirect to our backend auth routes
+      if (provider === 'Google') {
+          window.location.href = '/api/auth/google';
+      } else if (provider === 'Yandex') {
+          window.location.href = '/api/auth/yandex';
+      } else {
+          // Keep simulation for others not implemented yet
+          alert('Протокол еще не интегрирован в матрицу. Используйте Google или Yandex.');
       }
   };
 
@@ -136,7 +130,6 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
             </div>
           </div>
           
-          {/* Remember Me Checkbox */}
           {!isRegister && (
             <div 
                 className={`flex items-center gap-2 text-xs font-bold cursor-pointer opacity-80 hover:opacity-100 ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
@@ -154,7 +147,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
           )}
 
           <button 
-            disabled={isLoading || socialLoading !== null}
+            disabled={isLoading}
             className={`w-full py-4 mt-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
               theme === 'dark' 
                 ? 'bg-dark-primary text-black hover:shadow-[0_0_15px_rgba(74,222,128,0.5)]' 
@@ -180,46 +173,44 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
 
         <div className="grid grid-cols-2 gap-3">
             <button 
-                onClick={() => handleSocialLogin('Google')}
-                disabled={socialLoading !== null}
+                onClick={() => handleSocialRedirect('Google')}
                 className={`flex flex-col items-center justify-center p-3 border rounded transition-all hover:scale-105 active:scale-95 gap-2 ${
                    theme === 'dark' ? 'border-dark-dim hover:border-dark-primary hover:bg-white/5' : 'border-light-dim hover:border-light-accent hover:bg-gray-50'
-                } ${socialLoading && socialLoading !== 'Google' ? 'opacity-30' : ''}`}
+                }`}
             >
-                {socialLoading === 'Google' ? <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" /> : <Chrome size={20} />}
+                <Chrome size={20} />
                 <span className="text-[9px] font-bold uppercase">Google</span>
             </button>
 
             <button 
-                onClick={() => handleSocialLogin('Yandex')}
-                disabled={socialLoading !== null}
+                onClick={() => handleSocialRedirect('Yandex')}
                 className={`flex flex-col items-center justify-center p-3 border rounded transition-all hover:scale-105 active:scale-95 gap-2 ${
                    theme === 'dark' ? 'border-dark-dim hover:border-red-500 hover:text-red-500 hover:bg-white/5' : 'border-light-dim hover:border-red-500 hover:text-red-500 hover:bg-gray-50'
-                } ${socialLoading && socialLoading !== 'Yandex' ? 'opacity-30' : ''}`}
+                }`}
             >
-                 {socialLoading === 'Yandex' ? <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" /> : <span className="font-serif font-bold text-xl leading-none">Я</span>}
+                 <span className="font-serif font-bold text-xl leading-none">Я</span>
                 <span className="text-[9px] font-bold uppercase">Yandex</span>
             </button>
 
             <button 
-                onClick={() => handleSocialLogin('GitHub')}
-                disabled={socialLoading !== null}
-                className={`flex flex-col items-center justify-center p-3 border rounded transition-all hover:scale-105 active:scale-95 gap-2 ${
-                   theme === 'dark' ? 'border-dark-dim hover:border-white hover:text-white hover:bg-white/5' : 'border-light-dim hover:border-black hover:text-black hover:bg-gray-50'
-                } ${socialLoading && socialLoading !== 'GitHub' ? 'opacity-30' : ''}`}
+                onClick={() => handleSocialRedirect('GitHub')}
+                className={`flex flex-col items-center justify-center p-3 border rounded transition-all hover:scale-105 active:scale-95 gap-2 opacity-50 cursor-not-allowed ${
+                   theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'
+                }`}
+                title="В разработке"
             >
-                 {socialLoading === 'GitHub' ? <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" /> : <Github size={20} />}
+                 <Github size={20} />
                 <span className="text-[9px] font-bold uppercase">Github</span>
             </button>
             
             <button 
-                onClick={() => handleSocialLogin('Discord')}
-                disabled={socialLoading !== null}
-                className={`flex flex-col items-center justify-center p-3 border rounded transition-all hover:scale-105 active:scale-95 gap-2 ${
-                   theme === 'dark' ? 'border-dark-dim hover:border-indigo-400 hover:text-indigo-400 hover:bg-white/5' : 'border-light-dim hover:border-indigo-600 hover:text-indigo-600 hover:bg-gray-50'
-                } ${socialLoading && socialLoading !== 'Discord' ? 'opacity-30' : ''}`}
+                onClick={() => handleSocialRedirect('Discord')}
+                className={`flex flex-col items-center justify-center p-3 border rounded transition-all hover:scale-105 active:scale-95 gap-2 opacity-50 cursor-not-allowed ${
+                   theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'
+                }`}
+                title="В разработке"
             >
-                 {socialLoading === 'Discord' ? <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" /> : <Gamepad2 size={20} />}
+                 <Gamepad2 size={20} />
                 <span className="text-[9px] font-bold uppercase">Discord</span>
             </button>
         </div>

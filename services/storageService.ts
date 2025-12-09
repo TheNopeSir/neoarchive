@@ -1,4 +1,6 @@
 
+
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
 
@@ -12,6 +14,16 @@ let cache = {
     users: [] as UserProfile[],
     guestbook: [] as GuestbookEntry[],
     isLoaded: false
+};
+
+const ADMIN_USER: UserProfile = {
+    username: "truester",
+    tagline: "Admin Construct",
+    avatarUrl: "https://ui-avatars.com/api/?name=Admin&background=000&color=fff",
+    joinedDate: "01.01.1999",
+    following: [],
+    password: "trinityisall1",
+    isAdmin: true
 };
 
 const syncWithServer = async (key: string, data: any) => {
@@ -32,23 +44,59 @@ const loadFromServer = async () => {
         if (!res.ok) throw new Error("Failed to load");
         const data = await res.json();
         
-        cache.exhibits = data.exhibits || INITIAL_EXHIBITS;
-        cache.collections = data.collections || MOCK_COLLECTIONS;
-        cache.notifications = data.notifications || MOCK_NOTIFICATIONS;
-        cache.messages = data.messages || MOCK_MESSAGES;
+        // Smart Seeding: If server DB is empty, use initial mocks and sync them back
+        if (data.exhibits && data.exhibits.length > 0) {
+            cache.exhibits = data.exhibits;
+        } else {
+            console.log("⚠️ [Storage] Server exhibits empty, seeding initial data...");
+            cache.exhibits = INITIAL_EXHIBITS;
+            syncWithServer('exhibits', INITIAL_EXHIBITS);
+        }
+
+        if (data.collections && data.collections.length > 0) {
+            cache.collections = data.collections;
+        } else {
+            cache.collections = MOCK_COLLECTIONS;
+            syncWithServer('collections', MOCK_COLLECTIONS);
+        }
+
+        if (data.notifications && data.notifications.length > 0) {
+            cache.notifications = data.notifications;
+        } else {
+            cache.notifications = MOCK_NOTIFICATIONS;
+            syncWithServer('notifications', MOCK_NOTIFICATIONS);
+        }
+
+        if (data.messages && data.messages.length > 0) {
+            cache.messages = data.messages;
+        } else {
+            cache.messages = MOCK_MESSAGES;
+            syncWithServer('messages', MOCK_MESSAGES);
+        }
+
         cache.guestbook = data.guestbook || [];
         
-        if (!data.users || !Array.isArray(data.users)) {
-            cache.users = [];
+        if (!data.users || !Array.isArray(data.users) || data.users.length === 0) {
+            cache.users = [MOCK_USER, ADMIN_USER];
+            syncWithServer('users', [MOCK_USER, ADMIN_USER]);
         } else {
             cache.users = data.users;
+            // Ensure admin exists even if loaded from Partial DB
+            if (!cache.users.find(u => u.username === 'truester')) {
+                cache.users.push(ADMIN_USER);
+                syncWithServer('users', cache.users);
+            }
         }
 
         cache.isLoaded = true;
     } catch (e) {
         console.warn("Server offline or unreachable", e);
+        // Fallback for offline mode
         cache.exhibits = INITIAL_EXHIBITS;
-        cache.users = [MOCK_USER];
+        cache.collections = MOCK_COLLECTIONS;
+        cache.notifications = MOCK_NOTIFICATIONS;
+        cache.messages = MOCK_MESSAGES;
+        cache.users = [MOCK_USER, ADMIN_USER];
         cache.isLoaded = true;
     }
 };
@@ -106,7 +154,7 @@ export const registerUser = async (username: string, password: string, tagline: 
         joinedDate: new Date().toLocaleDateString('ru-RU'),
         following: [],
         password: password,
-        isAdmin: username === 'truester'
+        isAdmin: false
     };
 
     cache.users.push(newUser);
@@ -193,6 +241,24 @@ export const deleteExhibit = (id: string) => {
 // --- COLLECTIONS CRUD ---
 export const getCollections = (): Collection[] => cache.collections;
 
+export const saveCollection = (collection: Collection) => {
+    cache.collections.unshift(collection);
+    syncWithServer('collections', cache.collections);
+};
+
+export const updateCollection = (updatedCollection: Collection) => {
+    const index = cache.collections.findIndex(c => c.id === updatedCollection.id);
+    if (index !== -1) {
+        cache.collections[index] = updatedCollection;
+        syncWithServer('collections', cache.collections);
+    }
+};
+
+export const deleteCollection = (id: string) => {
+    cache.collections = cache.collections.filter(c => c.id !== id);
+    syncWithServer('collections', cache.collections);
+};
+
 // --- MESSAGES / NOTIFICATIONS ---
 export const getMessages = (): Message[] => cache.messages;
 
@@ -201,7 +267,34 @@ export const saveMessage = (msg: Message) => {
     syncWithServer('messages', cache.messages);
 };
 
+export const markMessagesRead = (sender: string, receiver: string) => {
+    let hasChanges = false;
+    cache.messages.forEach(m => {
+        if (m.sender === sender && m.receiver === receiver && !m.isRead) {
+            m.isRead = true;
+            hasChanges = true;
+        }
+    });
+    if (hasChanges) syncWithServer('messages', cache.messages);
+};
+
 export const getNotifications = (): Notification[] => cache.notifications;
+
+export const saveNotification = (notif: Notification) => {
+    cache.notifications.unshift(notif);
+    syncWithServer('notifications', cache.notifications);
+}
+
+export const markNotificationsRead = (recipient: string) => {
+    let hasChanges = false;
+    cache.notifications.forEach(n => {
+        if (n.recipient === recipient && !n.isRead) {
+            n.isRead = true;
+            hasChanges = true;
+        }
+    });
+    if (hasChanges) syncWithServer('notifications', cache.notifications);
+}
 
 // --- GUESTBOOK ---
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;

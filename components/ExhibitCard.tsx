@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Heart, ThumbsUp, Eye, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Heart, Eye } from 'lucide-react';
 import { Exhibit } from '../types';
+import { getArtifactTier, TIER_CONFIG } from '../constants';
 
 interface ExhibitCardProps {
   item: Exhibit;
@@ -17,20 +18,34 @@ interface ExhibitCardProps {
 
 const ExhibitCard: React.FC<ExhibitCardProps> = ({ 
   item, 
-  similarExhibits,
   theme, 
   onClick,
   isLiked,
-  isFavorited,
   onLike,
-  onFavorite,
   onAuthorClick
 }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isLikeAnimating, setIsLikeAnimating] = useState(false);
+
+  // Trigger animation when liked status changes to true
+  useEffect(() => {
+    if (isLiked) {
+        setIsLikeAnimating(true);
+        const timer = setTimeout(() => setIsLikeAnimating(false), 400);
+        return () => clearTimeout(timer);
+    }
+  }, [isLiked]);
 
   // Safeguard against missing array/objects
   const images = Array.isArray(item.imageUrls) ? item.imageUrls : [];
-  const specs = (item.specs && typeof item.specs === 'object') ? item.specs : {};
+  
+  // Use condition or first spec as "Price" placeholder for the look
+  const displayValue = item.condition || item.quality || "АРТЕФАКТ";
+
+  // Determine Tier using progressive formula
+  const tier = getArtifactTier(item);
+  const tierStyle = TIER_CONFIG[tier];
+  const Icon = tierStyle.icon;
 
   const handleNextImage = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -44,119 +59,130 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
     setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
 
+  const handleLikeClick = (e: React.MouseEvent) => {
+      // Trigger local animation immediately
+      setIsLikeAnimating(true);
+      onLike(e);
+      setTimeout(() => setIsLikeAnimating(false), 400);
+  };
+
+  const handleAuthorClickInternal = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onAuthorClick(item.owner);
+  };
+
   const safeImageSrc = images.length > 0 ? images[currentImageIndex] : 'https://placehold.co/400x300?text=No+Image';
 
   return (
     <article 
       onClick={() => onClick(item)}
-      className={`group relative cursor-pointer border rounded-lg p-3 transition-all duration-300 hover:-translate-y-1 flex flex-col h-full ${
+      className={`group relative cursor-pointer flex flex-col h-full rounded-xl overflow-hidden border-2 transition-all duration-300 hover:-translate-y-2 ${
         theme === 'dark' 
-        ? 'border-dark-dim bg-dark-surface hover:border-dark-primary shadow-lg' 
-        : 'border-light-dim bg-white hover:border-light-accent shadow-md'
+        ? `bg-dark-surface ${tierStyle.borderDark} hover:border-white/50` 
+        : `bg-white ${tierStyle.borderLight} hover:border-black/50`
       }`}
     >
-      {/* Changed aspect-square to aspect-[3/4] for more photo space */}
-      <div className="relative aspect-[3/4] overflow-hidden rounded bg-black mb-3 group/image">
+      {/* 1. Square Image Area with Overlays */}
+      <div className="relative aspect-square w-full bg-black/5 group/image overflow-hidden">
          <img 
            src={safeImageSrc} 
            alt={item.title} 
-           className="w-full h-full object-contain opacity-90 group-hover:opacity-100 transition-all duration-500" 
+           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
          />
          
+         {/* Top Left: Category Badge */}
+         <div className={`absolute top-2 left-2 px-2 py-1 text-[8px] md:text-[10px] font-bold rounded backdrop-blur-md border ${
+            theme === 'dark' 
+            ? 'bg-black/60 text-white border-white/10' 
+            : 'bg-white/80 text-black border-black/5'
+         }`}>
+            {item.category}
+         </div>
+
+         {/* Top Right: Tier Badge */}
+         <div className={`absolute top-2 right-2 px-1.5 py-1 rounded text-[8px] md:text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg ${tierStyle.badge}`}>
+            <Icon size={10} className={tierStyle.name === 'LEGENDARY' ? 'fill-yellow-200' : 'fill-white'} />
+            {tierStyle.name}
+         </div>
+         
+         {/* Navigation Arrows (Hover only) */}
          {images.length > 1 && (
            <>
-             <button 
-               onClick={handlePrevImage}
-               className={`absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full opacity-0 group-hover/image:opacity-100 transition-opacity z-10 ${
-                 theme === 'dark' ? 'bg-black/50 text-white hover:bg-black' : 'bg-white/50 text-black hover:bg-white'
-               }`}
-             >
-               <ChevronLeft size={16} />
-             </button>
-             <button 
-               onClick={handleNextImage}
-               className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full opacity-0 group-hover/image:opacity-100 transition-opacity z-10 ${
-                 theme === 'dark' ? 'bg-black/50 text-white hover:bg-black' : 'bg-white/50 text-black hover:bg-white'
-               }`}
-             >
-               <ChevronRight size={16} />
-             </button>
-             
-             <div className="absolute bottom-2 right-2 px-1.5 py-0.5 text-[9px] font-bold rounded bg-black/60 text-white backdrop-blur-sm">
-               {currentImageIndex + 1}/{images.length}
-             </div>
+              <button onClick={handlePrevImage} className="absolute left-1 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 text-white rounded-full opacity-0 group-hover/image:opacity-100 transition-all backdrop-blur-sm">
+                <ChevronLeft size={16} />
+              </button>
+              <button onClick={handleNextImage} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 text-white rounded-full opacity-0 group-hover/image:opacity-100 transition-all backdrop-blur-sm">
+                <ChevronRight size={16} />
+              </button>
            </>
          )}
-
-         <div className={`absolute top-2 left-2 px-1.5 py-0.5 text-[9px] font-bold rounded tracking-widest uppercase ${
-            theme === 'dark' ? 'bg-black/60 text-white' : 'bg-white/80 text-black'
-         }`}>
-           {item.category}
-         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        <h3 className={`text-sm font-bold truncate mb-2 leading-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-            {item.title}
-        </h3>
+      {/* 2. Compact Info Area */}
+      <div className="p-2 md:p-3 flex flex-col flex-1 relative">
+         <div className="flex justify-between items-start gap-3 mb-1">
+             {/* Title - clamped to 2 lines */}
+             <h3 className={`text-xs md:text-sm font-bold leading-tight line-clamp-2 ${theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}`}>
+                {item.title}
+             </h3>
+         </div>
 
-        <div className={`grid grid-cols-2 gap-1 mb-3 text-[10px] font-mono ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-           {Object.entries(specs).slice(0, 4).map(([key, val]) => (
-             <div key={key} className="flex flex-col">
-                <span className="opacity-50 text-[9px] uppercase">{key}</span>
-                <span className={`font-bold truncate ${theme === 'dark' ? 'text-dark-primary' : 'text-light-primary'}`}>{val}</span>
+         {/* Price / Condition */}
+         <div className={`mt-1 font-mono text-[10px] md:text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>
+             <span className="truncate">{displayValue}</span>
+         </div>
+
+         {/* Footer: Owner & Actions */}
+         <div className="mt-auto pt-3 flex justify-between items-center border-t border-dashed border-opacity-20 border-gray-500">
+             {/* Hidden on mobile, shown on md+ screens */}
+             <div 
+               onClick={handleAuthorClickInternal}
+               className={`hidden md:flex text-[10px] truncate max-w-[50%] opacity-60 items-center gap-1 cursor-pointer hover:underline hover:opacity-100 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
+             >
+                <div className="w-4 h-4 rounded-full bg-gray-500 overflow-hidden flex-shrink-0">
+                     <img src={`https://ui-avatars.com/api/?name=${item.owner}&background=random`} alt={item.owner} />
+                </div>
+                @{item.owner}
              </div>
-           ))}
-        </div>
-        
-        <div className="flex-1"></div>
+             
+             {/* Use full width on mobile if author is hidden, otherwise auto */}
+             <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+                 {/* View Counter */}
+                 <div className={`flex items-center gap-1 text-[10px] opacity-60 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <Eye size={12} />
+                    <span>{item.views}</span>
+                 </div>
 
-        <div className={`mt-2 pt-2 border-t border-dashed ${theme === 'dark' ? 'border-dark-dim/30' : 'border-light-dim/50'}`}>
-            
-            <div 
-                className={`flex items-center gap-2 mb-2 text-xs cursor-pointer group/author ${theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'}`}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onAuthorClick(item.owner);
-                }}
-            >
-                <div className={`w-5 h-5 rounded-full overflow-hidden border group-hover/author:border-current transition-colors ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                    <img src={`https://ui-avatars.com/api/?name=${item.owner}&background=random`} alt={item.owner} />
-                </div>
-                <span className={`font-bold group-hover/author:underline ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>@{item.owner}</span>
-            </div>
-            
-            <div className="flex items-center justify-end gap-3">
-               <button 
-                  onClick={onLike}
-                  className={`flex items-center gap-1 text-[10px] font-bold transition-all hover:scale-110 ${
-                    isLiked 
-                      ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') 
-                      : (theme === 'dark' ? 'text-dark-dim hover:text-white' : 'text-light-dim hover:text-black')
-                  }`}
-               >
-                   <ThumbsUp size={12} fill={isLiked ? "currentColor" : "none"} />
-                   <span>{item.likes}</span>
-               </button>
-               
-               <button 
-                  onClick={onFavorite}
-                  className={`flex items-center gap-1 text-[10px] font-bold transition-all hover:scale-110 ${
-                    isFavorited 
-                      ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') 
-                      : (theme === 'dark' ? 'text-dark-dim hover:text-white' : 'text-light-dim hover:text-black')
-                  }`}
-               >
-                   <Heart size={12} fill={isFavorited ? "currentColor" : "none"} />
-               </button>
+                 {/* Like Button */}
+                 <button 
+                    onClick={handleLikeClick}
+                    className={`flex items-center gap-1 px-2 py-1 rounded transition-all active:scale-95 group/like relative overflow-hidden ${
+                        isLiked 
+                        ? (theme === 'dark' ? 'text-red-400 bg-red-400/10' : 'text-red-500 bg-red-50') 
+                        : (theme === 'dark' ? 'text-gray-500 hover:text-white hover:bg-white/10' : 'text-gray-400 hover:text-black hover:bg-black/5')
+                    }`}
+                 >
+                     <Heart 
+                        size={14} 
+                        className={`transition-all duration-300 ${isLiked ? 'fill-current' : 'group-hover/like:scale-110'} ${isLikeAnimating ? 'scale-150 rotate-[-15deg]' : ''}`} 
+                     />
+                     
+                     {/* Animated Number */}
+                     <span 
+                        key={item.likes}
+                        className={`text-[10px] font-bold transition-all duration-300 ${isLikeAnimating ? 'text-red-500 scale-110' : ''} animate-[spin_0.1s_ease-out_reverse]`}
+                        style={{ animation: isLikeAnimating ? 'none' : undefined }}
+                     >
+                         {item.likes}
+                     </span>
 
-                <div className={`flex items-center gap-1 text-[10px] opacity-70 ${
-                    theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
-                }`}>
-                    <Eye size={12} /> {item.views}
-                </div>
-            </div>
-        </div>
+                     {/* Particle Burst Effect */}
+                     {isLikeAnimating && (
+                         <span className="absolute inset-0 rounded-full border-2 border-red-500 opacity-0 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_1]" />
+                     )}
+                  </button>
+             </div>
+         </div>
       </div>
     </article>
   );

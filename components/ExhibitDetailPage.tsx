@@ -1,10 +1,23 @@
-import React, { useState, useRef } from 'react';
+
+import React, { useState } from 'react';
 import { 
-  ChevronLeft, ChevronRight, Heart, Share2, 
-  MessageSquare, Send, Video, ThumbsUp, UserPlus, UserCheck,
-  Mail, Trash, Edit // Standard icons
+  ChevronLeft, 
+  ChevronRight, 
+  Heart, 
+  Share2, 
+  MessageSquare, 
+  ShieldAlert, 
+  Trash2, 
+  Edit,
+  User,
+  Send,
+  ArrowLeft,
+  Eye,
+  Check,
+  Video
 } from 'lucide-react';
-import { Exhibit } from '../types';
+import { Exhibit, Comment } from '../types';
+import { getArtifactTier, TIER_CONFIG } from '../constants';
 
 interface ExhibitDetailPageProps {
   exhibit: Exhibit;
@@ -16,17 +29,17 @@ interface ExhibitDetailPageProps {
   isFavorited: boolean;
   isLiked: boolean;
   onPostComment: (id: string, text: string) => void;
-  onAuthorClick: (username: string) => void;
+  onAuthorClick: (author: string) => void;
   onFollow: (username: string) => void;
   onMessage: (username: string) => void;
-  onDelete: (id: string) => void;
-  onEdit: (exhibit: Exhibit) => void;
+  onDelete?: (id: string) => void;
+  onEdit?: (exhibit: Exhibit) => void;
   isFollowing: boolean;
   currentUser: string;
   isAdmin: boolean;
 }
 
-const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
+export default function ExhibitDetailPage({
   exhibit,
   theme,
   onBack,
@@ -44,432 +57,330 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
   isFollowing,
   currentUser,
   isAdmin
-}) => {
-  // CRASH PROTECTION: If exhibit is null, don't render anything
-  if (!exhibit) return <div className="p-10 text-center opacity-50">ОБЪЕКТ НЕ НАЙДЕН</div>;
-
-  // Safe defaults to prevent "map of undefined" errors
-  const images = Array.isArray(exhibit.imageUrls) ? exhibit.imageUrls : [];
-  const specs = (exhibit.specs && typeof exhibit.specs === 'object') ? exhibit.specs : {};
-  const comments = Array.isArray(exhibit.comments) ? exhibit.comments : [];
-  const owner = exhibit.owner || 'Unknown';
-  
+}: ExhibitDetailPageProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [zoomState, setZoomState] = useState({ show: false, x: 0, y: 0 });
-  const [mobileScale, setMobileScale] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [commentInput, setCommentInput] = useState('');
+  const [commentText, setCommentText] = useState('');
+  const [shareCopied, setShareCopied] = useState(false);
+  
+  // Safe access to arrays
+  const images = Array.isArray(exhibit.imageUrls) ? exhibit.imageUrls : ['https://placehold.co/600x400?text=NO+IMAGE'];
+  const specs = exhibit.specs || {};
+  const comments = exhibit.comments || [];
+  
+  // Calculate tier via shared logic
+  const tierKey = getArtifactTier(exhibit);
+  const tier = TIER_CONFIG[tierKey];
+  const TierIcon = tier.icon;
 
-  const pinchDiff = useRef<number>(0);
-  const touchStartRef = useRef<{x: number, y: number} | null>(null);
-  const lastTouchRef = useRef<{x: number, y: number} | null>(null);
-
-  const isOwner = currentUser === owner;
-  const canModify = isOwner || isAdmin;
-
-  const renderRating = (rating: number = 0, max: number = 5) => {
-    return (
-      <div className={`flex gap-1 text-sm tracking-tighter ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>
-        {[...Array(max)].map((_, i) => (
-           <span key={i} className={i < rating ? "opacity-100" : "opacity-20"}>
-             ■
-           </span>
-        ))}
-      </div>
-    );
+  const handleNextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % images.length);
   };
 
-  const renderVideoPlayer = (url?: string) => {
-      if (!url) return null;
-      let embedUrl = url;
-      // Simple parse to avoid crash
-      try {
-        if (url.includes('youtube.com/watch?v=')) {
-            embedUrl = `https://www.youtube.com/embed/${url.split('v=')[1]?.split('&')[0]}`;
-        } else if (url.includes('youtu.be/')) {
-            embedUrl = `https://www.youtube.com/embed/${url.split('youtu.be/')[1]}`;
-        } else if (url.includes('rutube.ru/video/')) {
-            embedUrl = `https://rutube.ru/play/embed/${url.split('/video/')[1]?.split('/')[0]}`;
-        }
-      } catch(e) {
-          return null;
-      }
-      return (
-        <iframe 
-          src={embedUrl} 
-          title="Video Player" 
-          className="w-full h-full" 
-          frameBorder="0" 
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-          allowFullScreen 
-        />
-      );
+  const handlePrevImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
 
-  const handleNextImage = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (images.length === 0) return;
-    setCurrentImageIndex(prev => (prev + 1) % images.length);
-    setMobileScale(1); setPan({ x: 0, y: 0 });
-  };
+  const handleNativeShare = async () => {
+      const shareData = {
+          title: `NeoArchive: ${exhibit.title}`,
+          text: exhibit.description,
+          url: window.location.href
+      };
 
-  const handlePrevImage = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (images.length === 0) return;
-    setCurrentImageIndex(prev => (prev - 1 + images.length) % images.length);
-    setMobileScale(1); setPan({ x: 0, y: 0 });
-  };
-
-  const handleImageMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - left) / width) * 100;
-    const y = ((e.clientY - top) / height) * 100;
-    setZoomState({ show: true, x, y });
-  };
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 2) {
-      const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-      pinchDiff.current = dist;
-    } else if (e.touches.length === 1) {
-       const t = e.touches[0];
-       touchStartRef.current = { x: t.clientX, y: t.clientY };
-       lastTouchRef.current = { x: t.clientX, y: t.clientY };
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 2) {
-      if (e.cancelable) e.preventDefault();
-      const currentDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-      if (pinchDiff.current > 0) {
-        const diff = currentDist - pinchDiff.current;
-        const newScale = Math.min(Math.max(1, mobileScale + diff * 0.005), 4);
-        setMobileScale(newScale);
-        pinchDiff.current = currentDist;
-      }
-    } else if (e.touches.length === 1 && mobileScale > 1) {
-       if (e.cancelable) e.preventDefault();
-       const t = e.touches[0];
-       if (lastTouchRef.current) {
-          const dx = t.clientX - lastTouchRef.current.x;
-          const dy = t.clientY - lastTouchRef.current.y;
-          setPan(p => ({ x: p.x + dx, y: p.y + dy }));
-          lastTouchRef.current = { x: t.clientX, y: t.clientY };
-       }
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-      if (mobileScale <= 1.1 && e.changedTouches.length === 1 && touchStartRef.current) {
-          const touchEnd = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
-          const diffX = touchStartRef.current.x - touchEnd.x;
-          if (Math.abs(diffX) > 50) {
-              if (diffX > 0) handleNextImage(); else handlePrevImage();
+      if (navigator.share) {
+          try {
+              await navigator.share(shareData);
+          } catch (err) {
+              console.warn('Share cancelled', err);
+          }
+      } else {
+          // Fallback
+          try {
+              await navigator.clipboard.writeText(window.location.href);
+              setShareCopied(true);
+              setTimeout(() => setShareCopied(false), 2000);
+          } catch (err) {
+              console.error('Clipboard failed', err);
           }
       }
-      touchStartRef.current = null;
-      lastTouchRef.current = null;
   };
 
-  const handleDeleteConfirm = () => {
-      if (window.confirm("ВЫ УВЕРЕНЫ? ДАННЫЕ БУДУТ СТЕРТЫ ИЗ АРХИВА.")) {
-          onDelete(exhibit.id);
-      }
-  };
+  const isOwner = currentUser === exhibit.owner;
 
-  const safeImageSrc = images.length > 0 && images[currentImageIndex] 
-    ? images[currentImageIndex] 
-    : 'https://placehold.co/400x300?text=NO+DATA';
+  // Video Embed Helper
+  const getEmbedUrl = (url: string) => {
+      if (!url) return null;
+      // Simple Youtube Parser
+      const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+      const match = url.match(youtubeRegex);
+      return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+  };
+  const embedUrl = getEmbedUrl(exhibit.videoUrl || '');
 
   return (
-    <div className={`animate-in fade-in slide-in-from-right-8 duration-300 pb-20 ${
-       theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
-    }`}>
-      {/* Top Nav Bar */}
-      <div className={`sticky top-0 z-40 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between ${
-        theme === 'dark' ? 'bg-dark-bg/90 border-dark-dim' : 'bg-light-surface/90 border-light-dim'
-      }`}>
-        <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold hover:opacity-70 transition-opacity">
-          <ChevronLeft size={20} /> НАЗАД
+    <div className={`w-full min-h-full pb-20 animate-in fade-in duration-300 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
+      
+      {/* Top Navigation Bar */}
+      <div className="flex items-center justify-between mb-4 pb-2 border-b border-dashed border-opacity-20 border-gray-500">
+        <button 
+          onClick={onBack}
+          className={`flex items-center gap-2 font-bold hover:underline font-pixel text-xs ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
+        >
+          <ArrowLeft size={16} /> НАЗАД
         </button>
-        <div className="flex items-center gap-4">
-             {canModify && (
-                 <div className="flex gap-2">
-                     {isOwner && (
-                        <button onClick={() => onEdit(exhibit)} className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-xs font-bold border border-blue-400/30 px-2 py-1 rounded">
-                            <Edit size={14}/> ПРАВИТЬ
-                        </button>
-                     )}
-                     <button onClick={handleDeleteConfirm} className="text-red-500 hover:text-red-400 flex items-center gap-1 text-xs font-bold border border-red-500/30 px-2 py-1 rounded">
-                         <Trash size={14}/> {isAdmin && !isOwner ? 'FORCE DEL' : 'УДАЛИТЬ'}
-                     </button>
-                 </div>
-             )}
-             <div className="text-xs font-mono uppercase opacity-50 tracking-widest hidden sm:block">
-                ID: {exhibit.id}
-             </div>
+        
+        <div className="flex gap-4">
+          {isOwner && onDelete && (
+             <button onClick={() => onDelete(exhibit.id)} className="text-red-500 hover:text-red-400">
+                <Trash2 size={18} />
+             </button>
+          )}
+          <button 
+            onClick={handleNativeShare} 
+            className={`flex items-center gap-2 opacity-70 hover:opacity-100 transition-all ${shareCopied ? 'text-green-500' : ''}`}
+            title="Поделиться"
+          >
+            {shareCopied ? <Check size={18} /> : <Share2 size={18} />}
+            {shareCopied && <span className="font-pixel text-[10px]">COPIED!</span>}
+          </button>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto">
-          
-          <div className="relative w-full aspect-[4/3] md:aspect-[16/9] bg-black group select-none overflow-hidden flex items-center justify-center mb-4 md:mb-8 md:rounded-b-lg shadow-2xl">
-             <div 
-               className="w-full h-full relative"
-               onMouseMove={handleImageMouseMove}
-               onMouseLeave={() => setZoomState({ ...zoomState, show: false })}
-               onTouchStart={handleTouchStart}
-               onTouchMove={handleTouchMove}
-               onTouchEnd={handleTouchEnd}
-               style={{ touchAction: mobileScale > 1 ? 'none' : 'pan-y' }}
-             >
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-black/70 backdrop-blur rounded-full text-white text-xs font-bold md:hidden">
-                    {images.length > 0 ? `${currentImageIndex + 1} / ${images.length}` : '0 / 0'}
-                </div>
-
-                {exhibit.videoUrl && currentImageIndex === images.length ? (
-                   renderVideoPlayer(exhibit.videoUrl)
-                ) : (
-                   <img 
-                      src={safeImageSrc} 
-                      alt={exhibit.title} 
-                      className={`w-full h-full object-contain transition-transform duration-100 ${zoomState.show ? 'cursor-crosshair' : 'cursor-default'}`}
-                      style={{
-                        transformOrigin: zoomState.show ? `${zoomState.x}% ${zoomState.y}%` : 'center',
-                        transform: zoomState.show 
-                           ? "scale(2)" 
-                           : `translate(${pan.x}px, ${pan.y}px) scale(${mobileScale})`
-                      }}
-                    />
-                )}
-             </div>
-
-             {(images.length > 1 || exhibit.videoUrl) && !zoomState.show && (
-                 <>
-                   <button onClick={handlePrevImage} className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-2 md:p-3 rounded-full bg-black/50 text-white hover:bg-black/80 transition-all">
-                     <ChevronLeft size={24} />
-                   </button>
-                   <button onClick={handleNextImage} className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-2 md:p-3 rounded-full bg-black/50 text-white hover:bg-black/80 transition-all">
-                     <ChevronRight size={24} />
-                   </button>
-                 </>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Left Column: Media */}
+        <div className="space-y-4">
+          <div className={`relative aspect-square w-full rounded-lg overflow-hidden border-2 shadow-2xl ${
+              theme === 'dark' ? 'border-dark-dim bg-black' : 'border-light-dim bg-white'
+          } ${tier.name === 'LEGENDARY' ? 'shadow-yellow-500/20 border-yellow-500/50' : ''}`}>
+             <img 
+               src={images[currentImageIndex]} 
+               alt={exhibit.title} 
+               className="w-full h-full object-contain"
+             />
+             
+             {images.length > 1 && (
+               <>
+                 <button 
+                   onClick={handlePrevImage}
+                   className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors"
+                 >
+                   <ChevronLeft />
+                 </button>
+                 <button 
+                   onClick={handleNextImage}
+                   className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors"
+                 >
+                   <ChevronRight />
+                 </button>
+                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-xs font-bold font-mono">
+                   {currentImageIndex + 1} / {images.length}
+                 </div>
+               </>
              )}
           </div>
+          
+          {/* Thumbnails */}
+          {images.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto py-2 scrollbar-hide">
+               {images.map((img, idx) => (
+                 <button 
+                   key={idx}
+                   onClick={() => setCurrentImageIndex(idx)}
+                   className={`relative w-16 h-16 flex-shrink-0 border-2 rounded overflow-hidden ${
+                      currentImageIndex === idx 
+                        ? (theme === 'dark' ? 'border-dark-primary' : 'border-light-accent') 
+                        : 'border-transparent opacity-50 hover:opacity-100'
+                   }`}
+                 >
+                   <img src={img} className="w-full h-full object-cover" />
+                 </button>
+               ))}
+            </div>
+          )}
 
-          <div className="px-4 mb-8">
-             <div className="flex gap-2 overflow-x-auto scrollbar-hide justify-center">
-                 {images.map((img, idx) => (
-                    <div 
-                        key={idx}
-                        onClick={() => { setCurrentImageIndex(idx); setMobileScale(1); }}
-                        className={`w-16 h-16 flex-shrink-0 rounded border-2 overflow-hidden cursor-pointer transition-all ${
-                            idx === currentImageIndex 
-                              ? (theme === 'dark' ? 'border-dark-primary opacity-100' : 'border-light-accent opacity-100')
-                              : 'border-transparent opacity-40 hover:opacity-80'
-                        }`}
-                    >
-                        <img src={img} className="w-full h-full object-cover" alt="" />
-                    </div>
-                 ))}
-                 {exhibit.videoUrl && (
-                    <div 
-                        onClick={() => { setCurrentImageIndex(images.length); setMobileScale(1); }}
-                        className={`w-16 h-16 flex-shrink-0 rounded border-2 overflow-hidden cursor-pointer flex items-center justify-center bg-gray-900 ${
-                            currentImageIndex === images.length
-                              ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent')
-                              : 'border-transparent text-gray-500'
-                        }`}
-                    >
-                        <Video size={24} />
-                    </div>
-                 )}
+          {/* Video Player Section */}
+          {exhibit.videoUrl && (
+             <div className={`mt-4 border-2 border-dashed p-1 rounded-lg ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
+                 <div className="font-pixel text-[10px] mb-2 px-1 flex items-center gap-2 opacity-70">
+                     <Video size={12} /> VIDEO_SOURCE
+                 </div>
+                 <div className="relative aspect-video w-full bg-black rounded overflow-hidden">
+                     {embedUrl ? (
+                         <iframe 
+                           src={embedUrl} 
+                           className="w-full h-full" 
+                           frameBorder="0" 
+                           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                           allowFullScreen
+                         />
+                     ) : (
+                         <video 
+                           src={exhibit.videoUrl} 
+                           controls 
+                           className="w-full h-full"
+                         >
+                            Your browser does not support the video tag.
+                         </video>
+                     )}
+                 </div>
              </div>
-          </div>
+          )}
+        </div>
 
-          <div className="px-4 md:px-0 grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
-              <div className="md:col-span-2 space-y-6">
-                 <div>
-                    <div className={`inline-block px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider border rounded mb-2 ${
-                        theme === 'dark' ? 'border-dark-dim text-dark-dim' : 'border-light-dim text-light-dim'
-                    }`}>
-                        {exhibit.category}
-                    </div>
-                    <h1 className="text-3xl md:text-4xl font-pixel leading-tight mb-4">{exhibit.title}</h1>
-                    
-                    <div className="flex items-center gap-4 border-b pb-6 border-opacity-20 border-gray-500">
-                        <div className="flex gap-1 items-center mr-4">
-                           {renderRating(exhibit.rating)}
-                        </div>
-                        
-                        <button 
-                            onClick={() => onLike(exhibit.id)}
-                            className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded transition-colors ${
-                                isLiked 
-                                ? (theme === 'dark' ? 'bg-dark-primary/20 text-dark-primary' : 'bg-light-accent/20 text-light-accent')
-                                : 'hover:bg-gray-500/10'
-                            }`}
-                        >
-                            <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"}/> {exhibit.likes}
-                        </button>
-
-                        <button 
-                            onClick={() => onFavorite(exhibit.id)}
-                            className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded transition-colors ${
-                                isFavorited
-                                ? (theme === 'dark' ? 'bg-dark-primary/20 text-dark-primary' : 'bg-light-accent/20 text-light-accent')
-                                : 'hover:bg-gray-500/10'
-                            }`}
-                        >
-                            <Heart size={16} fill={isFavorited ? "currentColor" : "none"}/>
-                        </button>
-
-                        <button 
-                            onClick={() => onShare(exhibit.id)}
-                            className="flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded hover:bg-gray-500/10 transition-colors ml-auto"
-                        >
-                            <Share2 size={16} /> <span className="hidden sm:inline">ПОДЕЛИТЬСЯ</span>
-                        </button>
-                    </div>
-                 </div>
-
-                 <div className={`p-6 rounded border-l-4 leading-relaxed ${
-                    theme === 'dark' ? 'bg-dark-surface border-dark-primary' : 'bg-light-surface border-light-accent'
-                 }`}>
-                    <h3 className="font-bold text-xs uppercase mb-3 opacity-50 tracking-widest">[ОПИСАНИЕ ОБЪЕКТА]</h3>
-                    <p className="whitespace-pre-wrap">{exhibit.description}</p>
-                 </div>
-              </div>
-
-              <div className="md:col-span-1 flex flex-col md:block gap-6 md:gap-8">
-                  <div className="order-1 md:order-none">
-                    {Object.keys(specs).length > 0 && (
-                        <div>
-                            <h4 className="font-bold uppercase tracking-wider mb-4 text-sm opacity-80">Характеристики</h4>
-                            <div className={`rounded overflow-hidden border text-sm ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                                {Object.entries(specs).map(([key, val], idx) => (
-                                    <div 
-                                        key={key} 
-                                        className={`flex justify-between p-3 border-b last:border-0 ${
-                                            idx % 2 === 0 
-                                            ? (theme === 'dark' ? 'bg-white/5' : 'bg-gray-50')
-                                            : 'bg-transparent'
-                                        } ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}
-                                    >
-                                        <span className="opacity-60 font-bold text-xs uppercase">{key}</span>
-                                        <span className="font-mono text-right">{val}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {exhibit.quality && (
-                        <div className={`mt-4 p-4 rounded border text-sm ${theme === 'dark' ? 'border-dark-dim bg-yellow-900/10' : 'border-light-dim bg-yellow-50'}`}>
-                            <div className="font-bold uppercase text-xs mb-1 opacity-70">Состояние / Детали</div>
-                            <div>{exhibit.quality}</div>
-                        </div>
-                    )}
-                  </div>
-
-                  <div className={`order-2 md:order-none p-5 rounded border ${theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white shadow-sm'}`}>
-                      <div className="flex items-center gap-4 mb-4 cursor-pointer group" onClick={() => onAuthorClick(owner)}>
-                          <div className={`w-12 h-12 rounded-full overflow-hidden border-2 group-hover:scale-105 transition-transform ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}>
-                              <img src={`https://ui-avatars.com/api/?name=${owner}&background=random`} alt={owner} className="w-full h-full object-cover" />
-                          </div>
-                          <div>
-                              <div className="text-[10px] uppercase opacity-50 font-bold">Владелец</div>
-                              <div className="font-bold text-lg leading-none hover:underline">@{owner}</div>
-                          </div>
+        {/* Right Column: Info */}
+        <div className="flex flex-col h-full">
+            <div className="flex items-start justify-between">
+               <div className="flex-1 mr-2 min-w-0">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <div className={`inline-block px-2 py-0.5 text-[9px] font-pixel rounded border ${
+                          theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent'
+                      }`}>
+                          {exhibit.category}
                       </div>
                       
-                      {owner !== currentUser && (
-                         <div className="grid grid-cols-2 gap-2 mb-4">
-                             <button 
-                                 onClick={() => onFollow(owner)}
-                                 className={`py-2 text-xs font-bold uppercase rounded flex items-center justify-center gap-2 transition-all ${
-                                     isFollowing 
-                                        ? (theme === 'dark' ? 'bg-transparent border border-dark-primary text-dark-primary' : 'bg-transparent border border-light-accent text-light-accent')
-                                        : (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white')
-                                 }`}
-                             >
-                                 {isFollowing ? <UserCheck size={14}/> : <UserPlus size={14}/>}
-                                 {isFollowing ? 'В ПОДПИСКАХ' : 'ПОДПИСАТЬСЯ'}
-                             </button>
-                             <button
-                                onClick={() => onMessage(owner)}
-                                className={`py-2 text-xs font-bold uppercase rounded flex items-center justify-center gap-2 transition-all border ${
-                                    theme === 'dark' ? 'border-dark-dim hover:bg-white/10' : 'border-light-dim hover:bg-gray-100'
-                                }`}
-                             >
-                                <Mail size={14} /> ЛС
-                             </button>
-                         </div>
-                      )}
-
-                      <div className="text-xs space-y-2 opacity-70">
-                          <div className="flex justify-between border-b border-gray-500/20 pb-2">
-                              <span>Дата загрузки:</span>
-                              <span className="font-mono">{exhibit.timestamp}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-gray-500/20 pb-2">
-                              <span>Просмотров:</span>
-                              <span className="font-mono">{exhibit.views}</span>
-                          </div>
+                      {/* Tier Badge */}
+                      <div className={`inline-block px-2 py-0.5 text-[9px] font-bold font-pixel rounded border flex items-center gap-1 ${tier.bgColor} border-current ${tier.color}`}>
+                          <TierIcon size={10} /> {tier.name}
                       </div>
                   </div>
-              </div>
+                  {/* Title with overflow protection - REDUCED SIZE */}
+                  <h1 className="text-lg md:text-2xl lg:text-3xl font-bold font-pixel mb-2 leading-tight break-words">
+                    {exhibit.title}
+                  </h1>
+               </div>
+               
+               <div className="flex flex-col items-center gap-2 flex-shrink-0">
+                  <button 
+                     onClick={() => onLike(exhibit.id)}
+                     className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all active:scale-95 ${
+                        isLiked 
+                          ? (theme === 'dark' ? 'border-red-500 text-red-500 bg-red-500/10' : 'border-red-600 text-red-600 bg-red-600/10')
+                          : 'border-gray-500/30 opacity-70 hover:opacity-100'
+                     }`}
+                  >
+                     <Heart size={20} fill={isLiked ? "currentColor" : "none"} />
+                     <span className="text-xs font-bold mt-1 font-mono">{exhibit.likes}</span>
+                  </button>
+                  <div className={`flex flex-col items-center justify-center p-2 rounded-lg border opacity-70 ${
+                      theme === 'dark' ? 'border-gray-700 text-gray-400' : 'border-gray-300 text-gray-500'
+                  }`}>
+                      <Eye size={18} />
+                      <span className="text-[10px] font-bold mt-1 font-mono">{exhibit.views}</span>
+                  </div>
+               </div>
+            </div>
 
-              <div className="md:col-span-2 pt-6 border-t md:border-0 border-gray-500/20">
-                    <h3 className="flex items-center gap-2 font-bold mb-4 uppercase tracking-wider">
-                        <MessageSquare size={18} /> КОММЕНТАРИИ ({comments.length})
-                    </h3>
-                    
-                    <div className="space-y-4 mb-6">
-                        {comments.length === 0 && (
-                            <div className="opacity-50 text-sm italic py-4">Тишина в эфире...</div>
-                        )}
-                        {comments.map(comment => (
-                            <div key={comment.id} className={`p-3 rounded border text-sm ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
-                                <div className="flex justify-between mb-1">
-                                    <span 
-                                        className={`font-bold cursor-pointer hover:underline ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
-                                        onClick={() => onAuthorClick(comment.author)}
-                                    >
-                                        @{comment.author}
-                                    </span>
-                                    <span className="opacity-40 text-xs">{comment.timestamp}</span>
-                                </div>
-                                <p>{comment.text}</p>
-                            </div>
-                        ))}
-                    </div>
+            {/* Author Block */}
+            <div className={`flex items-center justify-between p-3 my-4 rounded border ${
+                theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'
+            }`}>
+               <div className="flex items-center gap-3 cursor-pointer" onClick={() => onAuthorClick(exhibit.owner)}>
+                  <div className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden flex-shrink-0">
+                     <img src={`https://ui-avatars.com/api/?name=${exhibit.owner}&background=random`} alt="avatar" />
+                  </div>
+                  <div className="overflow-hidden">
+                     <div className="font-bold font-pixel text-xs truncate">@{exhibit.owner}</div>
+                     <div className="text-[10px] opacity-50 font-mono">{exhibit.timestamp}</div>
+                  </div>
+               </div>
+               {!isOwner && (
+                 <button 
+                   onClick={() => onFollow(exhibit.owner)}
+                   className={`px-3 py-1 text-[10px] font-bold border rounded hover:opacity-80 transition-opacity font-pixel whitespace-nowrap ${
+                      isFollowing 
+                        ? (theme === 'dark' ? 'bg-transparent border-dark-dim text-dark-dim' : 'bg-gray-200 border-gray-300 text-gray-500')
+                        : (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent')
+                   }`}
+                 >
+                   {isFollowing ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}
+                 </button>
+               )}
+            </div>
 
-                    <div className="flex gap-2">
-                        <input 
-                            value={commentInput}
-                            onChange={e => setCommentInput(e.target.value)}
-                            placeholder="Оставить запись..."
-                            className={`flex-1 bg-transparent border-b p-3 focus:outline-none ${
-                                theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
-                            }`}
-                            onKeyDown={e => e.key === 'Enter' && (onPostComment(exhibit.id, commentInput), setCommentInput(''))}
-                        />
-                        <button 
-                            onClick={() => { onPostComment(exhibit.id, commentInput); setCommentInput(''); }}
-                            disabled={!commentInput.trim()}
-                            className={`px-4 rounded font-bold transition-all ${
-                                theme === 'dark' ? 'bg-dark-primary text-black hover:opacity-80' : 'bg-light-accent text-white hover:opacity-80'
-                            } disabled:opacity-50`}
-                        >
-                            <Send size={18} />
-                        </button>
-                    </div>
-              </div>
-          </div>
+            {/* Description */}
+            <div className={`prose max-w-none mb-6 ${theme === 'dark' ? 'prose-invert' : ''}`}>
+               <p className="font-mono text-xs md:text-sm leading-relaxed whitespace-pre-line opacity-90 break-words">
+                 {exhibit.description}
+               </p>
+            </div>
+
+            {/* Specs Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-8">
+               {Object.entries(specs).map(([key, val]) => (
+                 <div key={key} className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
+                    <div className="text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">{key}</div>
+                    <div className="font-bold font-mono text-xs truncate">{val}</div>
+                 </div>
+               ))}
+               <div className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
+                    <div className="text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">СОСТОЯНИЕ</div>
+                    <div className="font-bold font-mono text-xs truncate">{exhibit.condition || 'НЕ УКАЗАНО'}</div>
+               </div>
+            </div>
+
+            {/* Comments Section */}
+            <div className="mt-auto pt-4 border-t border-dashed border-gray-500/30">
+               <h3 className="font-pixel text-sm mb-4 flex items-center gap-2">
+                 <MessageSquare size={14} /> КОММЕНТАРИИ ({comments.length})
+               </h3>
+               
+               <div className="space-y-3 mb-6 max-h-52 overflow-y-auto pr-2">
+                  {comments.length === 0 ? (
+                    <div className="text-center py-4 opacity-50 text-xs font-mono">НЕТ ЗАПИСЕЙ В ПРОТОКОЛЕ</div>
+                  ) : (
+                    comments.map(comment => (
+                      <div key={comment.id} className={`p-2 rounded text-xs ${theme === 'dark' ? 'bg-white/5' : 'bg-black/5'}`}>
+                         <div className="flex justify-between items-baseline mb-1">
+                            <span 
+                              onClick={() => onAuthorClick(comment.author)}
+                              className={`font-bold cursor-pointer hover:underline font-pixel text-[9px] ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
+                            >
+                              @{comment.author}
+                            </span>
+                            <span className="text-[9px] opacity-40 font-mono">{comment.timestamp}</span>
+                         </div>
+                         <p className="opacity-80 font-mono break-words">{comment.text}</p>
+                      </div>
+                    ))
+                  )}
+               </div>
+
+               <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Внести данные в протокол..."
+                    onKeyDown={(e) => {
+                         if(e.key === 'Enter' && commentText.trim()) {
+                             onPostComment(exhibit.id, commentText);
+                             setCommentText('');
+                         }
+                    }}
+                    className={`flex-1 bg-transparent border-b-2 py-2 px-2 focus:outline-none font-mono text-xs md:text-sm ${
+                       theme === 'dark' 
+                         ? 'border-dark-dim focus:border-dark-primary placeholder-dark-dim' 
+                         : 'border-light-dim focus:border-light-accent placeholder-light-dim'
+                    }`}
+                  />
+                  <button 
+                     onClick={() => {
+                        if(commentText.trim()) {
+                           onPostComment(exhibit.id, commentText);
+                           setCommentText('');
+                        }
+                     }}
+                     className={`p-2 rounded-lg transition-transform hover:scale-105 ${
+                        theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
+                     }`}
+                  >
+                     <Send size={16} />
+                  </button>
+               </div>
+            </div>
+        </div>
       </div>
     </div>
   );
-};
-
-export default ExhibitDetailPage;
+}

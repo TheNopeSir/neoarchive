@@ -1,8 +1,9 @@
+
 import React from 'react';
 
 const CRTOverlay: React.FC = () => {
   return (
-    <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden h-full w-full mix-blend-overlay opacity-30">
+    <div className="pointer-events-none fixed inset-0 z-20 overflow-hidden h-full w-full mix-blend-overlay opacity-30">
       {/* Scanline moving bar - Slower and subtler */}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[rgba(255,255,255,0.03)] to-transparent animate-scanline h-[100vh] w-full" />
       
