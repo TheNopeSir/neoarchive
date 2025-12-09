@@ -828,7 +828,7 @@ export default function App() {
                   </button>
                   <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
                       <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden">
-                          <img src={`https://ui-avatars.com/api/?name=${chatPartner}&background=random`} alt={chatPartner} />
+                          <img src={`https://ui-avatars.com/api/?name=${chatPartner}&background=random`} alt={chatPartner || ''} />
                       </div>
                       <div>
                           <h2 className="font-pixel text-lg">@{chatPartner}</h2>
@@ -1503,7 +1503,7 @@ export default function App() {
                  <div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
                      <div className="relative">
                          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-gray-500">
-                             <img src={profileUser.avatarUrl} alt={profileUser.username} className="w-full h-full object-cover"/>
+                             <img src={profileUser.avatarUrl} alt={profileUser.username || ''} className="w-full h-full object-cover"/>
                          </div>
                          {isCurrentUser && (
                              <label className="absolute bottom-0 right-0 bg-gray-800 p-2 rounded-full cursor-pointer hover:bg-gray-700 text-white border border-gray-600">
