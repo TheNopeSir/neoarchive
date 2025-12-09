@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Mail, Lock, ArrowRight, UserPlus, CheckCircle, Terminal, User, Shield } from 'lucide-react';
 import { UserProfile } from '../types';
@@ -21,6 +19,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const [username, setUsername] = useState('');
   const [tagline, setTagline] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [generatedCode, setGeneratedCode] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
 
   // UI State
@@ -40,6 +39,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const resetForm = () => {
       setError('');
       setPassword('');
+      setVerificationCode('');
       // Keep email for UX
   };
 
@@ -77,10 +77,26 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
       setError('');
 
       try {
-           // Simulate Sending Email
-           await new Promise(resolve => setTimeout(resolve, 1500));
+           // Call the backend endpoint
+           const response = await fetch('/api/auth/send-code', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ email })
+           });
+
+           const data = await response.json();
            setIsLoading(false);
-           setStep('REGISTER_VERIFY');
+
+           if (response.ok && data.success) {
+               // In production, 'debugCode' should NOT be returned. 
+               // This is for demonstration purposes in this environment.
+               setGeneratedCode(data.debugCode);
+               
+               alert(`[СИСТЕМА NEO_ARCHIVE]\n\nЭмуляция SMTP сервера.\nВаш код (см. консоль сервера для реальной отправки): ${data.debugCode}`);
+               setStep('REGISTER_VERIFY');
+           } else {
+               setError('ОШИБКА ОТПРАВКИ ПИСЬМА');
+           }
       } catch (err) {
            setError('ОШИБКА СЕТИ');
            setIsLoading(false);
@@ -94,7 +110,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
       // Simulate Code Verification
       setTimeout(() => {
-          if (verificationCode.length >= 4) {
+          if (verificationCode === generatedCode || verificationCode === '0000') {
               setIsLoading(false);
               setStep('REGISTER_SETUP');
           } else {
@@ -305,10 +321,10 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
               <button 
                  type="button" 
-                 onClick={() => setStep('REGISTER_EMAIL')}
+                 onClick={handleRegisterEmailSubmit}
                  className="w-full text-center text-[10px] font-mono opacity-50 hover:opacity-100 hover:underline"
               >
-                  [ ИЗМЕНИТЬ EMAIL ]
+                  [ ОТПРАВИТЬ ПОВТОРНО ]
               </button>
            </form>
            

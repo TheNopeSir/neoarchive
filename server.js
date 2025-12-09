@@ -39,6 +39,7 @@ const INITIAL_DB_STATE = {
   users: [
       {
         username: "Neo_User_01",
+        email: "neo@matrix.com",
         tagline: "Подключен к сети.",
         avatarUrl: "https://picsum.photos/100/100?grayscale",
         joinedDate: "31.12.1999",
@@ -48,6 +49,7 @@ const INITIAL_DB_STATE = {
       },
       {
         username: "truester",
+        email: "admin@neoarchive.net",
         tagline: "Admin Construct",
         avatarUrl: "https://ui-avatars.com/api/?name=Admin&background=000&color=fff",
         joinedDate: "01.01.1999",
@@ -130,7 +132,57 @@ const startServer = (port) => {
 
             // --- API ROUTES ---
             if (pathname.startsWith('/api')) {
-                // Mock Auth
+                
+                // --- AUTH & EMAILS ---
+                
+                // Endpoint for sending verification code
+                if (pathname === '/api/auth/send-code' && req.method === 'POST') {
+                    const { email } = await getBody();
+                    
+                    // Generate a 4-digit code
+                    const code = Math.floor(1000 + Math.random() * 9000).toString();
+
+                    console.log(`📨 [SMTP MOCK] Preparing to send email to: ${email}`);
+                    console.log(`🔑 [SMTP MOCK] Generated Code: ${code}`);
+
+                    
+               
+                    try {
+                        const transporter = nodemailer.createTransport({
+                            host: "smtp.timeweb.ru", // or your provider
+                            port: 465,
+                            secure: true, // true for 465, false for other ports
+                            auth: {
+                                user: "admin@neoarchive.ru",
+                                pass: "jrCWj7*W,M$Xv#" 
+                            }
+                        });
+
+                        await transporter.sendMail({
+                            from: '"NeoArchive System" <system@neoarchive.net>',
+                            to: email,
+                            subject: "Код подтверждения / Verification Code",
+                            text: `Ваш код доступа к архиву: ${code}`,
+                            html: `<b>Ваш код доступа: ${code}</b>`
+                        });
+                        console.log("✅ Email sent successfully");
+                    } catch (error) {
+                        console.error("🔴 SMTP Error:", error);
+                        // Handle error appropriately
+                    }
+      
+
+                    // For demo purposes, we return the code to the client so you can test it without a real mail server.
+                    // In production, NEVER return the 'debugCode' to the client!
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ 
+                        success: true, 
+                        message: 'Code generated. Check server console for "Email".',
+                        debugCode: code // REMOVE THIS IN PRODUCTION
+                    }));
+                    return;
+                }
+
                 if (pathname === '/api/auth/google') {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: true, message: "Google Auth Link Established (Simulation Mode)", mockToken: "g_token_" + Date.now() }));
@@ -188,8 +240,7 @@ const startServer = (port) => {
                     res.writeHead(200, { 'Content-Type': mime });
                     res.end(content);
                 } else {
-                    // SPA Fallback: If file not found and request has no extension (navigation route), serve index.html
-                    // If request has extension (e.g. main.js), it is a missing asset, return 404.
+                    // SPA Fallback
                     if (err.code === 'ENOENT' && !ext) {
                         fs.readFile(path.join(DIST_DIR, 'index.html'), (err2, content2) => {
                             if (!err2) {
