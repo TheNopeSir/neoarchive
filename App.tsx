@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, 
@@ -160,7 +161,8 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewState>('AUTH'); // Start at Auth
   const [user, setUser] = useState<UserProfile | null>(null);
-  
+  const [isInitializing, setIsInitializing] = useState(true); // Prevent premature render of Auth
+
   // Data State
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -222,6 +224,15 @@ export default function App() {
       coverImage: '' 
   });
 
+  const refreshData = () => {
+      console.log("🔄 [App] Refreshing data...");
+      setExhibits([...db.getExhibits()]);
+      setCollections([...db.getCollections()]);
+      setNotifications([...db.getNotifications()]);
+      setMessages([...db.getMessages()]);
+      setGuestbook([...db.getGuestbook()]);
+  };
+
   // Initialize & Global Error Handling
   useEffect(() => {
     window.onerror = (msg, url, lineNo, columnNo, error) => {
@@ -230,19 +241,36 @@ export default function App() {
     };
 
     const init = async () => {
-        await db.initializeDatabase(); // Ensure DB is loaded first
+        try {
+            await db.initializeDatabase(); // Ensure DB is loaded first
 
-        // Check Local Storage (Remember Me) OR Session Storage (One time)
-        const savedUserStr = localStorage.getItem('neo_user') || sessionStorage.getItem('neo_user');
-        
-        if (savedUserStr) {
-             const savedUser = JSON.parse(savedUserStr);
-             console.log("🟢 [App] Restoring session for:", savedUser.username);
-             setUser(savedUser);
-             refreshData();
-             // View logic handled in Hash Routing Effect below
-        } else {
-             setView('AUTH');
+            // Check Local Storage (Remember Me) OR Session Storage (One time)
+            const savedUserStr = localStorage.getItem('neo_user') || sessionStorage.getItem('neo_user');
+            
+            if (savedUserStr) {
+                 try {
+                     const savedUser = JSON.parse(savedUserStr);
+                     console.log("🟢 [App] Restoring session for:", savedUser.username);
+                     setUser(savedUser);
+                     refreshData();
+                     
+                     // If we have a hash, the subsequent effect will handle the view
+                     if (!window.location.hash || window.location.hash === '#/') {
+                         setView('FEED');
+                     }
+                 } catch (err) {
+                     console.error("Session corrupted");
+                     localStorage.removeItem('neo_user');
+                     sessionStorage.removeItem('neo_user');
+                     setView('AUTH');
+                 }
+            } else {
+                 setView('AUTH');
+            }
+        } catch (e) {
+            console.error("Init failed", e);
+        } finally {
+            setIsInitializing(false);
         }
     };
     init();
@@ -280,13 +308,13 @@ export default function App() {
           }
       };
 
-      if (exhibits.length > 0) {
+      if (!isInitializing && exhibits.length > 0) {
           handleHashChange();
       }
 
       window.addEventListener('hashchange', handleHashChange);
       return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [exhibits, collections, user]);
+  }, [exhibits, collections, user, isInitializing]);
 
   const updateHash = (path: string) => {
       window.history.pushState(null, '', `#${path}`);
@@ -316,15 +344,6 @@ export default function App() {
 
       return () => observer.disconnect();
   }, [view, feedMode, visibleCount]); 
-
-  const refreshData = () => {
-      console.log("🔄 [App] Refreshing data...");
-      setExhibits([...db.getExhibits()]);
-      setCollections([...db.getCollections()]);
-      setNotifications([...db.getNotifications()]);
-      setMessages([...db.getMessages()]);
-      setGuestbook([...db.getGuestbook()]);
-  };
 
   const handleLogin = (loggedInUser: UserProfile, remember: boolean) => {
       setUser(loggedInUser);
@@ -449,7 +468,7 @@ export default function App() {
          condition: newExhibit.condition || getDefaultCondition(newExhibit.category || DefaultCategory.MISC)
      };
 
-     db.saveExhibit(exhibit);
+     await db.saveExhibit(exhibit); // Await persistence
      setExhibits(db.getExhibits());
      
      // Reset
@@ -594,7 +613,7 @@ export default function App() {
       };
       
       // PERSIST TO DB
-      db.saveCollection(newCol);
+      await db.saveCollection(newCol);
       setCollections(db.getCollections());
       
       setNewCollection({ title: '', description: '', coverImage: '' });
@@ -1958,6 +1977,8 @@ export default function App() {
     }
   };
 
+  if (isInitializing) return <div className="h-screen bg-black flex items-center justify-center text-green-500 font-pixel"><RetroLoader size="lg" text="SYSTEM BOOT" /></div>;
+
   return (
     <div className={`min-h-screen transition-colors duration-500 font-sans selection:bg-green-500 selection:text-black ${
       theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-800'
@@ -2062,7 +2083,7 @@ export default function App() {
       {/* Footer (Desktop Only) */}
       {view !== 'AUTH' && (
           <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
-              <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2025</p>
+              <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2023</p>
           </footer>
       )}
     </div>

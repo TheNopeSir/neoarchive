@@ -1,5 +1,4 @@
 
-
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
 import { supabase } from './supabaseClient';
@@ -16,6 +15,7 @@ let cache = {
 };
 
 const DEFAULT_USER: UserProfile = { ...MOCK_USER, email: 'neo@matrix.com' };
+const LOCAL_STORAGE_KEY = 'neo_archive_db_v1';
 
 // --- SLUG GENERATOR ---
 const slugify = (text: string): string => {
@@ -28,6 +28,44 @@ const slugify = (text: string): string => {
         .replace(/\-\-+/g, '-')         // Replace multiple - with single -
         .replace(/^-+/, '')             // Trim - from start
         .replace(/-+$/, '');            // Trim - from end
+};
+
+// --- PERSISTENCE HELPERS ---
+
+const saveToLocal = () => {
+    try {
+        const dataToSave = {
+            exhibits: cache.exhibits,
+            collections: cache.collections,
+            notifications: cache.notifications,
+            messages: cache.messages,
+            guestbook: cache.guestbook,
+            users: cache.users
+        };
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
+    } catch (e) {
+        console.error("🔴 [Storage] Failed to save to LocalStorage", e);
+    }
+};
+
+const loadFromLocal = (): boolean => {
+    const json = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (json) {
+        try {
+            const data = JSON.parse(json);
+            cache.exhibits = data.exhibits || [];
+            cache.collections = data.collections || [];
+            cache.notifications = data.notifications || [];
+            cache.messages = data.messages || [];
+            cache.guestbook = data.guestbook || [];
+            cache.users = data.users || [];
+            return true;
+        } catch (e) {
+            console.error("🔴 [Storage] LocalStorage Corrupted", e);
+            return false;
+        }
+    }
+    return false;
 };
 
 // --- DATA MAPPING HELPERS (Supabase snake_case <-> App camelCase) ---
@@ -100,19 +138,20 @@ const loadFromSupabase = async () => {
         
         // 1. Exhibits
         const { data: exData, error: exError } = await supabase.from('exhibits').select('*').order('timestamp', { ascending: false });
-        if (!exError && exData) {
+        if (!exError && exData && exData.length > 0) {
+            // Only overwrite if we got data back, otherwise keep local (offline support)
             cache.exhibits = exData.map(mapExhibitFromDB);
         }
 
         // 2. Collections
         const { data: colData, error: colError } = await supabase.from('collections').select('*');
-        if (!colError && colData) {
+        if (!colError && colData && colData.length > 0) {
             cache.collections = colData.map(mapCollectionFromDB);
         }
 
         // 3. Notifications
         const { data: notifData, error: notifError } = await supabase.from('notifications').select('*').order('timestamp', { ascending: false }).limit(50);
-        if (!notifError && notifData) {
+        if (!notifError && notifData && notifData.length > 0) {
             cache.notifications = notifData.map((row: any) => ({
                 id: row.id,
                 type: row.type,
@@ -127,7 +166,7 @@ const loadFromSupabase = async () => {
 
         // 4. Guestbook
         const { data: gbData, error: gbError } = await supabase.from('guestbook').select('*').order('timestamp', { ascending: false });
-        if (!gbError && gbData) {
+        if (!gbError && gbData && gbData.length > 0) {
             cache.guestbook = gbData.map((row: any) => ({
                 id: row.id,
                 author: row.author,
@@ -138,8 +177,9 @@ const loadFromSupabase = async () => {
             }));
         }
         
-        cache.isLoaded = true;
         console.log("✅ [Storage] Cloud Sync Complete");
+        // Update local storage with fresh cloud data
+        saveToLocal();
 
     } catch (e) {
         console.error("🔴 [Storage] Sync Failed:", e);
@@ -156,9 +196,28 @@ export const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export const initializeDatabase = async () => {
-  if (!cache.isLoaded) {
-      await loadFromSupabase();
+  if (cache.isLoaded) return;
+
+  // 1. Load from Local Storage FIRST (Instant)
+  const hasLocalData = loadFromLocal();
+  
+  // 2. If completely empty (first run), load Mocks
+  if (!hasLocalData || cache.exhibits.length === 0) {
+      console.log("⚠️ [Storage] No Local Data, applying defaults");
+      cache.exhibits = [...INITIAL_EXHIBITS];
+      cache.collections = [...MOCK_COLLECTIONS];
+      cache.notifications = [...MOCK_NOTIFICATIONS];
+      cache.messages = [...MOCK_MESSAGES];
+      cache.users = [DEFAULT_USER];
+      saveToLocal();
+  } else {
+      console.log("🟢 [Storage] Restored from Local Storage");
   }
+
+  cache.isLoaded = true;
+
+  // 3. Try to sync with Supabase in background (don't await strictly if offline)
+  loadFromSupabase();
 };
 
 export const getFullDatabase = () => {
@@ -208,6 +267,8 @@ export const updateUserProfile = async (user: UserProfile) => {
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
     else cache.users.push(user);
+    
+    saveToLocal(); // PERSIST
 
     // Обновляем сессию
     const currentSessionStr = localStorage.getItem('neo_user');
@@ -229,8 +290,9 @@ export const saveExhibit = async (exhibit: Exhibit) => {
   const uniqueSuffix = Date.now().toString().slice(-4);
   exhibit.slug = `${baseSlug}-${uniqueSuffix}`;
 
-  // Optimistic Update
+  // Optimistic Update & Local Save
   cache.exhibits.unshift(exhibit);
+  saveToLocal();
   
   // Async Cloud Save
   const { error } = await supabase.from('exhibits').insert(mapExhibitToDB(exhibit));
@@ -241,6 +303,7 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
   const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
+    saveToLocal();
     
     const { error } = await supabase.from('exhibits')
         .update(mapExhibitToDB(updatedExhibit))
@@ -252,6 +315,7 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
 
 export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
+  saveToLocal();
   const { error } = await supabase.from('exhibits').delete().eq('id', id);
   if (error) console.error("Cloud Delete Error:", error);
 };
@@ -267,6 +331,7 @@ export const saveCollection = async (collection: Collection) => {
     collection.slug = `${baseSlug}-${uniqueSuffix}`;
 
     cache.collections.unshift(collection);
+    saveToLocal();
     const { error } = await supabase.from('collections').insert(mapCollectionToDB(collection));
     if (error) console.error("Cloud Save Error (Collection):", error);
 };
@@ -275,6 +340,7 @@ export const updateCollection = async (updatedCollection: Collection) => {
     const index = cache.collections.findIndex(c => c.id === updatedCollection.id);
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
+        saveToLocal();
         const { error } = await supabase.from('collections')
             .update(mapCollectionToDB(updatedCollection))
             .eq('id', updatedCollection.id);
@@ -284,6 +350,7 @@ export const updateCollection = async (updatedCollection: Collection) => {
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
+    saveToLocal();
     const { error } = await supabase.from('collections').delete().eq('id', id);
     if (error) console.error("Cloud Delete Error:", error);
 };
@@ -294,6 +361,7 @@ export const getNotifications = (): Notification[] => cache.notifications;
 
 export const saveNotification = async (notif: Notification) => {
     cache.notifications.unshift(notif);
+    saveToLocal();
     const dbNotif = {
         id: notif.id,
         type: notif.type,
@@ -311,6 +379,7 @@ export const markNotificationsRead = async (recipient: string) => {
     cache.notifications.forEach(n => {
         if (n.recipient === recipient) n.isRead = true;
     });
+    saveToLocal();
     // Batch update via logic is hard, doing by recipient is easier
     await supabase.from('notifications').update({ is_read: true }).eq('recipient', recipient);
 };
@@ -319,6 +388,7 @@ export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 
 export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
+    saveToLocal();
     const dbEntry = {
         id: entry.id,
         author: entry.author,
@@ -332,9 +402,13 @@ export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
 
 // Messages are local-only for now in this demo (or use similar logic)
 export const getMessages = (): Message[] => cache.messages;
-export const saveMessage = (msg: Message) => cache.messages.push(msg);
+export const saveMessage = (msg: Message) => {
+    cache.messages.push(msg);
+    saveToLocal();
+};
 export const markMessagesRead = (sender: string, receiver: string) => {
     cache.messages.forEach(m => {
         if (m.sender === sender && m.receiver === receiver) m.isRead = true;
     });
+    saveToLocal();
 };
