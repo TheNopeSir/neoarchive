@@ -1,5 +1,30 @@
-# Docker configuration has been removed in favor of direct Node.js execution.
-# To run the application:
-# 1. npm install
-# 2. npm run build
-# 3. npm start
+FROM node:24-slim
+
+# Устанавливаем curl для healthcheck
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Создаём пользователя
+RUN groupadd --gid 2000 app && useradd --uid 2000 --gid 2000 -m -s /bin/bash app
+
+WORKDIR /app
+
+# Копируем package files
+COPY package*.json ./
+
+# Устанавливаем зависимости
+RUN npm ci --verbose
+
+# Копируем весь проект
+COPY --chown=app:app . .
+
+# Собираем фронтенд
+RUN npm run build
+
+# Меняем пользователя
+USER app
+
+# Открываем порт
+EXPOSE 3000
+
+# Запускаем сервер (это выполняется ПОСЛЕ деплоя, а не во время сборки!)
+CMD ["node", "server.js"]
