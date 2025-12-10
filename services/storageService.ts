@@ -1,5 +1,6 @@
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
+import { supabase } from './supabaseClient';
 
 const API_URL = '/api'; 
 
@@ -61,7 +62,6 @@ const loadFromServer = async () => {
         } else {
             console.log("⚠️ [Storage] Server exhibits empty, seeding initial data...");
             cache.exhibits = INITIAL_EXHIBITS;
-            // Seed efficiently? No, just bulk for init is fine
             await fetch(`${API_URL}/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'exhibits', data: INITIAL_EXHIBITS })});
         }
 
@@ -88,6 +88,7 @@ const loadFromServer = async () => {
 
         cache.guestbook = data.guestbook || [];
         
+        // Load mock users to cache, but we will mostly rely on Supabase for current user
         if (!data.users || !Array.isArray(data.users) || data.users.length === 0) {
             cache.users = [DEFAULT_USER, ADMIN_USER];
              await fetch(`${API_URL}/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'users', data: cache.users })});
@@ -135,37 +136,83 @@ export const getFullDatabase = () => {
     return { ...cache, timestamp: new Date().toISOString() };
 };
 
-// --- AUTHENTICATION ---
+// --- AUTHENTICATION (SUPABASE) ---
+
+// Helper to map Supabase User to UserProfile
+const mapSupabaseUser = (sbUser: any): UserProfile => {
+    return {
+        username: sbUser.user_metadata?.username || sbUser.email?.split('@')[0] || 'Unknown',
+        email: sbUser.email || '',
+        tagline: sbUser.user_metadata?.tagline || 'Новый пользователь',
+        avatarUrl: `https://ui-avatars.com/api/?name=${sbUser.user_metadata?.username || 'U'}&background=random`,
+        joinedDate: new Date(sbUser.created_at).toLocaleDateString('ru-RU'),
+        following: [],
+        achievements: [],
+        isAdmin: false
+    };
+};
+
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
     await initializeDatabase(); 
     
-    // Server handles persistence for registration
-    const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, email, tagline })
+    // Supabase Registration
+    const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+            data: {
+                username,
+                tagline
+            }
+        }
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(data.error || "ОШИБКА РЕГИСТРАЦИИ");
+    if (error) {
+        console.error("Supabase SignUp Error:", error);
+        throw new Error(error.message);
     }
 
-    cache.users.push(data.user);
-    return data.user;
+    if (data.user) {
+        // We create a local profile copy for caching purposes immediately
+        const newUser = mapSupabaseUser(data.user);
+        
+        // Optional: Save to local mock DB so other users can "see" this new user in lists
+        // In a real app, you'd have a 'profiles' table in Supabase
+        cache.users.push(newUser);
+        manageServerData('create', 'users', newUser);
+        
+        return newUser;
+    }
+    
+    throw new Error("Неизвестная ошибка регистрации");
 };
 
 export const loginUser = async (login: string, password: string): Promise<UserProfile> => {
     await initializeDatabase();
-    const user = cache.users.find(u => 
-        (u.email && u.email.toLowerCase() === login.toLowerCase()) ||
-        u.username.toLowerCase() === login.toLowerCase()
-    );
     
-    if (!user) throw new Error("ПОЛЬЗОВАТЕЛЬ НЕ НАЙДЕН");
-    if (user.password !== password) throw new Error("НЕВЕРНЫЙ ПАРОЛЬ");
-    return user;
+    // Supabase Login
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email: login,
+        password: password
+    });
+
+    if (error) {
+        console.error("Supabase SignIn Error:", error);
+        throw new Error("Неверный логин или пароль");
+    }
+
+    if (data.user) {
+        const userProfile = mapSupabaseUser(data.user);
+        
+        // Ensure local cache has this user (sync if missing)
+        if (!cache.users.find(u => u.username === userProfile.username)) {
+            cache.users.push(userProfile);
+        }
+        
+        return userProfile;
+    }
+
+    throw new Error("Пользователь не найден");
 };
 
 export const updateUserProfile = (user: UserProfile) => {
@@ -181,6 +228,9 @@ export const updateUserProfile = (user: UserProfile) => {
              localStorage.setItem('neo_user', JSON.stringify(user));
         }
     }
+    
+    // NOTE: In a full implementation, we should also update Supabase metadata here
+    // supabase.auth.updateUser({ data: { tagline: user.tagline } });
 };
 
 // --- EXHIBITS CRUD ---
