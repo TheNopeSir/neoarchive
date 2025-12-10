@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 
 // Configuration
 const PORT = parseInt(process.env.PORT || '3000', 10);
+const HOST = process.env.HOST || '0.0.0.0'; // Default to 0.0.0.0 for Docker
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
 const DIST_DIR = path.join(__dirname, 'dist');
@@ -20,14 +21,13 @@ const EMAIL_CONFIG = {
     secure: true,
     auth: {
         user: 'morpheus@neoarch.ru',
-        // Escaping backslash: The password is +VWY6Mp8F\0DUg (Literal backslash + 0)
         pass: '+VWY6Mp8F\\0DUg'
     }
 };
 
 const transporter = nodemailer.createTransport(EMAIL_CONFIG);
 
-// Verify SMTP connection on startup
+// Verify SMTP connection on startup (non-blocking)
 transporter.verify(function (error, success) {
     if (error) {
         console.error('🔴 [SMTP] Connection Error:', error);
@@ -36,7 +36,7 @@ transporter.verify(function (error, success) {
     }
 });
 
-console.log(`🚀 [System] Initializing server...`);
+console.log(`🚀 [System] Initializing server on PORT ${PORT}...`);
 
 // MIME Types
 const MIMES = {
@@ -142,9 +142,6 @@ const startServer = (port) => {
     }
 
     const server = http.createServer(async (req, res) => {
-        // Log Request
-        console.log(`📥 [${req.method}] ${req.url}`);
-
         // CORS Headers
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
@@ -182,11 +179,23 @@ const startServer = (port) => {
             if (pathname.length > 1 && pathname.endsWith('/')) {
                 pathname = pathname.slice(0, -1);
             }
+            
+            // Log Request (excluding static files to reduce noise, unless needed)
+            if (pathname.startsWith('/api')) {
+                console.log(`📥 [API] ${req.method} ${pathname}`);
+            }
 
             // --- API ROUTES ---
             if (pathname.startsWith('/api')) {
                 res.setHeader('Content-Type', 'application/json');
                 
+                // 0. Health Check
+                if (pathname === '/api/status' && req.method === 'GET') {
+                    res.writeHead(200);
+                    res.end(JSON.stringify({ status: 'online', timestamp: new Date().toISOString() }));
+                    return;
+                }
+
                 // 1. Send Verification Code
                 if (pathname === '/api/auth/send-code' && req.method === 'POST') {
                     const { email } = await getBody();
@@ -392,8 +401,8 @@ const startServer = (port) => {
         }
     });
 
-    server.listen(port, '0.0.0.0', () => {
-        console.log(`✅ Server running at http://localhost:${port}`);
+    server.listen(port, HOST, () => {
+        console.log(`✅ Server running on http://${HOST}:${port}`);
     });
 };
 
