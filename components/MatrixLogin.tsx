@@ -76,43 +76,53 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
       setIsLoading(true);
       setError('');
 
+      // Create a controller to timeout the request if server hangs
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
       try {
-           // Call the backend endpoint
            const response = await fetch('/api/auth/send-code', {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ email })
+               body: JSON.stringify({ email }),
+               signal: controller.signal
            });
+           
+           clearTimeout(timeoutId);
 
-           // Catch parsing errors (often means 404/500 HTML returned instead of JSON)
+           if (response.status === 405) throw new Error('ERR_METHOD_NOT_ALLOWED (405)');
+           if (response.status === 404) throw new Error('ERR_API_NOT_FOUND (404)');
+
+           const text = await response.text();
            let data;
            try {
-               const text = await response.text();
-               try {
-                   data = JSON.parse(text);
-               } catch {
-                   if (text.trim().startsWith('<')) {
-                       // HTML returned - likely Nginx error or wrong server config
-                       throw new Error(`СЕРВЕР НЕДОСТУПЕН (${response.status}). ПРОВЕРЬТЕ КОНСОЛЬ.`);
-                   }
-                   throw new Error('INVALID RESPONSE');
-               }
-           } catch (parseErr: any) {
-               console.error("Failed to parse API response", parseErr);
-               throw new Error(parseErr.message || `API ERROR ${response.status}`);
+               data = JSON.parse(text);
+           } catch {
+               console.error("Non-JSON response:", text.substring(0, 100));
+               throw new Error('SERVER ERROR: INVALID RESPONSE');
            }
 
-           setIsLoading(false);
+           if (!response.ok) {
+               throw new Error(data.error || `SERVER ERROR (${response.status})`);
+           }
 
-           if (response.ok && data.success) {
+           if (data.success) {
                setGeneratedCode(data.debugCode);
-               alert(`[СИСТЕМА NEO_ARCHIVE]\n\nКод подтверждения отправлен на ${email}.\nПроверьте входящие (и спам).`);
+               alert(`[СИСТЕМА NEO_ARCHIVE]\n\nКод: ${data.debugCode} (DEBUG MODE)\nОтправлено на ${email}`);
                setStep('REGISTER_VERIFY');
            } else {
-               setError(data.error || 'ОШИБКА ОТПРАВКИ ПИСЬМА');
+               setError(data.error || 'ОШИБКА ОТПРАВКИ');
            }
+
       } catch (err: any) {
-           setError(err.message || 'ОШИБКА СЕТИ');
+           clearTimeout(timeoutId);
+           console.error("Registration error:", err);
+           if (err.name === 'AbortError') {
+               setError('TIMEOUT: СЕРВЕР НЕ ОТВЕЧАЕТ');
+           } else {
+               setError(err.message || 'ОШИБКА ПОДКЛЮЧЕНИЯ');
+           }
+      } finally {
            setIsLoading(false);
       }
   };

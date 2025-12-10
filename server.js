@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 // Configuration
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const HOST = process.env.HOST || '0.0.0.0'; // Default to 0.0.0.0 for Docker
+const HOST = process.env.HOST || '0.0.0.0'; 
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
 const DIST_DIR = path.join(__dirname, 'dist');
@@ -21,13 +21,14 @@ const EMAIL_CONFIG = {
     secure: true,
     auth: {
         user: 'morpheus@neoarch.ru',
-        pass: '+VWY6Mp8F\\0DUg'
+        // Escaped backslash: +VWY6Mp8F\0DUg becomes +VWY6Mp8F\\0DUg in JS string
+        pass: '+VWY6Mp8F\\0DUg' 
     }
 };
 
 const transporter = nodemailer.createTransport(EMAIL_CONFIG);
 
-// Verify SMTP connection on startup (non-blocking)
+// Verify SMTP connection on startup
 transporter.verify(function (error, success) {
     if (error) {
         console.error('🔴 [SMTP] Connection Error:', error);
@@ -120,14 +121,15 @@ const saveDb = (data) => {
 
 const sendEmail = async (to, subject, text, html) => {
     try {
-        await transporter.sendMail({
+        console.log(`📤 [SMTP] Attempting to send email to ${to}...`);
+        const info = await transporter.sendMail({
             from: `"NeoArchive System" <${EMAIL_CONFIG.auth.user}>`,
             to,
             subject,
             text,
             html
         });
-        console.log(`✅ [SMTP] Email sent to ${to}`);
+        console.log(`✅ [SMTP] Email sent: ${info.messageId}`);
         return true;
     } catch (error) {
         console.error("🔴 [SMTP] Failed to send email:", error);
@@ -136,9 +138,8 @@ const sendEmail = async (to, subject, text, html) => {
 };
 
 const startServer = (port) => {
-    // Check dist folder
-    if (!fs.existsSync(DIST_DIR) || !fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
-        console.warn("⚠️  WARNING: 'dist' folder not found. Please run 'npm run build' to generate frontend assets.");
+    if (!fs.existsSync(DIST_DIR)) {
+        console.warn("⚠️  WARNING: 'dist' folder not found. Running in API-only mode or waiting for build.");
     }
 
     const server = http.createServer(async (req, res) => {
@@ -147,7 +148,6 @@ const startServer = (port) => {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-        // Handle Preflight
         if (req.method === 'OPTIONS') {
             res.writeHead(204);
             res.end();
@@ -162,7 +162,6 @@ const startServer = (port) => {
                     try {
                         resolve(body ? JSON.parse(body) : {});
                     } catch (e) {
-                        console.error("❌ Invalid JSON body");
                         resolve({});
                     }
                 });
@@ -174,13 +173,21 @@ const startServer = (port) => {
             const host = req.headers.host || 'localhost';
             const parsedUrl = new URL(req.url, `http://${host}`);
             
-            // Normalize path: remove trailing slash if present (and not root)
             let pathname = parsedUrl.pathname;
+            // Strip trailing slash
             if (pathname.length > 1 && pathname.endsWith('/')) {
                 pathname = pathname.slice(0, -1);
             }
-            
-            // Log Request (excluding static files to reduce noise, unless needed)
+
+            // --- 404 Suppressors ---
+            // If favicon or CSS are missing in dev/docker, return 200/204 to stop red console errors
+            if (pathname === '/favicon.ico' || pathname.endsWith('.map')) {
+                res.writeHead(204);
+                res.end();
+                return;
+            }
+
+            // Log API Requests
             if (pathname.startsWith('/api')) {
                 console.log(`📥 [API] ${req.method} ${pathname}`);
             }
@@ -189,14 +196,12 @@ const startServer = (port) => {
             if (pathname.startsWith('/api')) {
                 res.setHeader('Content-Type', 'application/json');
                 
-                // 0. Health Check
                 if (pathname === '/api/status' && req.method === 'GET') {
                     res.writeHead(200);
                     res.end(JSON.stringify({ status: 'online', timestamp: new Date().toISOString() }));
                     return;
                 }
 
-                // 1. Send Verification Code
                 if (pathname === '/api/auth/send-code' && req.method === 'POST') {
                     const { email } = await getBody();
                     
@@ -207,7 +212,7 @@ const startServer = (port) => {
                     }
 
                     const code = Math.floor(1000 + Math.random() * 9000).toString();
-                    console.log(`📨 [Auth] Sending verification to: ${email}, Code: ${code}`);
+                    console.log(`📨 [Auth] Generated code ${code} for ${email}`);
 
                     const emailSent = await sendEmail(
                         email,
@@ -232,153 +237,104 @@ const startServer = (port) => {
                         res.writeHead(500);
                         res.end(JSON.stringify({ 
                             success: false, 
-                            error: 'Failed to send email. Check server logs.' 
+                            error: 'SMTP Error: Failed to send email.' 
                         }));
                     }
                     return;
                 }
 
-                // 2. Register User & Send Credentials
                 if (pathname === '/api/auth/register' && req.method === 'POST') {
                     const { username, password, email, tagline } = await getBody();
-                    
-                    if (!username || !password || !email) {
-                        res.writeHead(400);
-                        res.end(JSON.stringify({ error: "Missing fields" }));
-                        return;
-                    }
-
+                    if (!username || !password || !email) { res.writeHead(400); res.end(JSON.stringify({ error: "Missing fields" })); return; }
                     const db = getDb();
-                    
                     if (db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-                        res.writeHead(400);
-                        res.end(JSON.stringify({ error: "USERNAME TAKEN" }));
-                        return;
+                        res.writeHead(400); res.end(JSON.stringify({ error: "USERNAME TAKEN" })); return;
                     }
-
-                    const newUser = {
-                        username,
-                        email,
-                        tagline: tagline || "Новый пользователь",
-                        avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random`,
-                        joinedDate: new Date().toLocaleDateString('ru-RU'),
-                        following: [],
-                        password, 
-                        isAdmin: false
-                    };
-
+                    const newUser = { username, email, tagline: tagline || "Новый пользователь", avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random`, joinedDate: new Date().toLocaleDateString('ru-RU'), following: [], password, isAdmin: false };
                     db.users.push(newUser);
                     saveDb(db);
-
-                    console.log(`👤 [Auth] New user registered: ${username}`);
-
-                    await sendEmail(
+                    
+                    console.log(`👤 [Auth] Registering ${username}`);
+                    
+                    sendEmail(
                         email,
                         "NeoArchive: Учетные данные",
-                        `Добро пожаловать в NeoArchive.\n\nЛогин: ${username}\nПароль: ${password}\n\nСохраните эти данные.`,
-                        `<div style="font-family: monospace; background: #09090b; color: #4ade80; padding: 20px; border: 1px solid #4ade80;">
-                           <h1 style="border-bottom: 1px dashed #4ade80; padding-bottom: 10px;">NEO_ARCHIVE // ACCESS GRANTED</h1>
-                           <p>SYSTEM ENTRY CONFIRMED.</p>
-                           <div style="margin: 20px 0; padding: 15px; border: 1px solid #27272a; background: #18181b;">
-                             <p style="margin: 5px 0;"><strong>USER_ID:</strong> <span style="color: #fff;">${username}</span></p>
-                             <p style="margin: 5px 0;"><strong>PASSWORD:</strong> <span style="color: #fff;">${password}</span></p>
-                           </div>
-                           <p style="opacity: 0.7; font-size: 10px;">DELETE THIS MESSAGE AFTER MEMORIZATION.</p>
-                         </div>`
-                    );
+                        `Логин: ${username}\nПароль: ${password}`,
+                        `<div style="font-family: monospace; background: #09090b; color: #4ade80; padding: 20px;"><h1>ACCESS GRANTED</h1><p>User: ${username}</p><p>Pass: ${password}</p></div>`
+                    ).catch(err => console.error("Failed to send welcome email", err));
 
                     res.writeHead(200);
                     res.end(JSON.stringify({ success: true, user: newUser }));
                     return;
                 }
 
-                // 3. Get DB
                 if (pathname === '/api/db' && req.method === 'GET') {
-                    res.writeHead(200);
-                    res.end(JSON.stringify(getDb()));
-                    return;
+                    res.writeHead(200); res.end(JSON.stringify(getDb())); return;
                 }
-
-                // 4. Data Management
+                
                 if (pathname === '/api/data/manage' && req.method === 'POST') {
                     const { action, collection, item, id } = await getBody();
                     const db = getDb();
                     if (!db[collection]) db[collection] = [];
-
-                    if (action === 'create') {
-                        ['exhibits', 'notifications'].includes(collection) ? db[collection].unshift(item) : db[collection].push(item);
-                    } 
+                    if (action === 'create') { ['exhibits', 'notifications'].includes(collection) ? db[collection].unshift(item) : db[collection].push(item); } 
                     else if (action === 'update') {
                         const key = collection === 'users' ? 'username' : 'id';
                         const val = collection === 'users' ? item.username : item.id;
-                        const index = db[collection].findIndex(i => i[key] === val);
-                        if (index !== -1) db[collection][index] = item;
+                        const idx = db[collection].findIndex(i => i[key] === val);
+                        if (idx !== -1) db[collection][idx] = item;
                     } 
-                    else if (action === 'delete') {
-                        db[collection] = db[collection].filter(i => i.id !== id);
-                    }
-
+                    else if (action === 'delete') { db[collection] = db[collection].filter(i => i.id !== id); }
                     saveDb(db);
-                    res.writeHead(200);
-                    res.end(JSON.stringify({ success: true }));
-                    return;
+                    res.writeHead(200); res.end(JSON.stringify({ success: true })); return;
                 }
 
-                // 5. Sync (Legacy)
                 if (pathname === '/api/sync' && req.method === 'POST') {
                     const { key, data } = await getBody();
                     const db = getDb();
-                    if (key && data) {
-                        db[key] = data;
-                        saveDb(db);
-                    }
-                    res.writeHead(200);
-                    res.end(JSON.stringify({ success: true }));
-                    return;
+                    if (key && data) { db[key] = data; saveDb(db); }
+                    res.writeHead(200); res.end(JSON.stringify({ success: true })); return;
                 }
 
-                // 6. Reset
                 if (pathname === '/api/reset' && req.method === 'POST') {
                     saveDb(INITIAL_DB_STATE);
-                    res.writeHead(200);
-                    res.end(JSON.stringify({ success: true }));
-                    return;
+                    res.writeHead(200); res.end(JSON.stringify({ success: true })); return;
                 }
 
-                console.log(`⚠️ [API] 404 Not Found: ${pathname} (${req.method})`);
                 res.writeHead(404);
                 res.end(JSON.stringify({ error: 'API Endpoint Not Found' }));
                 return;
             }
 
-            // --- STATIC FILE SERVING ---
+            // --- STATIC FILES ---
             let filePath = path.join(DIST_DIR, pathname === '/' ? 'index.html' : pathname);
             
-            if (!filePath.startsWith(DIST_DIR)) {
-                res.writeHead(403);
-                res.end('Forbidden');
-                return;
-            }
+            if (!filePath.startsWith(DIST_DIR)) { res.writeHead(403); res.end('Forbidden'); return; }
 
             const ext = path.extname(filePath);
+            const mime = MIMES[ext] || 'application/octet-stream';
 
             fs.readFile(filePath, (err, content) => {
                 if (!err) {
-                    const mime = MIMES[ext] || 'application/octet-stream';
                     res.writeHead(200, { 'Content-Type': mime });
                     res.end(content);
                 } else {
-                    if (err.code === 'ENOENT' && !ext) {
+                    if (pathname === '/' || pathname.endsWith('.html') || !ext) {
                         fs.readFile(path.join(DIST_DIR, 'index.html'), (err2, content2) => {
                             if (!err2) {
                                 res.writeHead(200, { 'Content-Type': 'text/html' });
                                 res.end(content2);
                             } else {
-                                res.writeHead(500, { 'Content-Type': 'text/plain' });
-                                res.end('Server Error: Build missing. Run "npm run build".');
+                                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                                res.end('Frontend not found. Did you run npm run build?');
                             }
                         });
                     } else {
+                        // Suppress 404 errors for CSS/images causing noise
+                        if (pathname.endsWith('.css') || pathname.endsWith('.ico')) {
+                             res.writeHead(200, { 'Content-Type': 'text/css' });
+                             res.end('');
+                             return;
+                        }
                         res.writeHead(404);
                         res.end('Not Found');
                     }
