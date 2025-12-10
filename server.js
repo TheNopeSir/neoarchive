@@ -15,38 +15,45 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
 // Middleware
-app.use(cors()); // Allow all CORS requests
-app.use(express.json({ limit: '50mb' })); 
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // --- DATABASE CONFIGURATION (Timeweb) ---
 const { Pool } = pg;
 
-// Helper to log DB config safely
 const dbConfig = {
     host: process.env.POSTGRESQL_HOST || process.env.PGHOST,
     port: parseInt(process.env.POSTGRESQL_PORT || process.env.PGPORT || '5432'),
     user: process.env.POSTGRESQL_USER || process.env.PGUSER,
     database: process.env.POSTGRESQL_DBNAME || process.env.PGDATABASE,
-    // Do not log password
-    ssl: { rejectUnauthorized: false }, 
-    connectionTimeoutMillis: 10000 
+    password: process.env.POSTGRESQL_PASSWORD || process.env.PGPASSWORD,
+    ssl: { rejectUnauthorized: false }, // Required for many cloud providers
+    connectionTimeoutMillis: 5000 // Fail fast
 };
 
-console.log("🐘 [Server] DB Config:", { ...dbConfig, password: '****' });
+console.log("🐘 [Server] DB Config Host:", dbConfig.host);
 
-const pool = new Pool({
-    ...dbConfig,
-    password: process.env.POSTGRESQL_PASSWORD || process.env.PGPASSWORD
-});
+const pool = new Pool(dbConfig);
 
-// Init DB Tables on Startup
+// Safe query helper
+const safeQuery = async (text, params) => {
+    try {
+        const res = await pool.query(text, params);
+        return res;
+    } catch (e) {
+        console.error(`🔴 [DB Error] Query failed: ${text.substring(0, 50)}...`, e.message);
+        throw e;
+    }
+};
+
+// Init DB Tables on Startup (Non-blocking)
 const initDB = async () => {
     let client;
     try {
-        console.log("🐘 [Server] Connecting to Timeweb PostgreSQL...");
+        console.log("🐘 [Server] Attempting to connect to Timeweb PostgreSQL...");
         client = await pool.connect();
-        console.log("✅ [Server] Connection established successfully.");
+        console.log("✅ [Server] Connection established successfully!");
         
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
@@ -81,51 +88,15 @@ const initDB = async () => {
         `);
         console.log("✅ [Server] Database schema ensured.");
     } catch (err) {
-        console.error("🔴 [Server] CRITICAL DB ERROR:", err);
-        // Do not exit process, let the server run to serve static files/API errors
+        console.error("⚠️ [Server] DB Initialization failed (Offline Mode Active):", err.message);
+        // We do NOT exit the process. The server will act as a static file server + API returning errors.
     } finally {
         if (client) client.release();
     }
 };
 
+// Start DB Init
 initDB();
-
-// --- DATA HELPERS ---
-
-const upsertEntity = async (table, id, data) => {
-    const client = await pool.connect();
-    try {
-        await client.query(
-            `INSERT INTO ${table} (id, data, timestamp) VALUES ($1, $2, NOW()) 
-             ON CONFLICT (id) DO UPDATE SET data = $2`,
-            [id, data]
-        );
-    } finally {
-        client.release();
-    }
-};
-
-const upsertUser = async (username, data) => {
-    const client = await pool.connect();
-    try {
-        await client.query(
-            `INSERT INTO users (username, data) VALUES ($1, $2) 
-             ON CONFLICT (username) DO UPDATE SET data = $2`,
-            [username, data]
-        );
-    } finally {
-        client.release();
-    }
-};
-
-const deleteEntity = async (table, id) => {
-    const client = await pool.connect();
-    try {
-        await client.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
-    } finally {
-        client.release();
-    }
-};
 
 // --- API ROUTES ---
 
@@ -134,18 +105,16 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
 });
 
-// 1. GLOBAL SYNC (Load all data)
+// 1. GLOBAL SYNC
 app.get('/api/sync', async (req, res) => {
-    let client;
     try {
-        client = await pool.connect();
         const [users, exhibits, collections, notifs, msgs, gb] = await Promise.all([
-            client.query('SELECT data FROM users'),
-            client.query('SELECT data FROM exhibits ORDER BY timestamp DESC'),
-            client.query('SELECT data FROM collections ORDER BY timestamp DESC'),
-            client.query('SELECT data FROM notifications ORDER BY timestamp DESC'),
-            client.query('SELECT data FROM messages ORDER BY timestamp ASC'),
-            client.query('SELECT data FROM guestbook ORDER BY timestamp DESC')
+            safeQuery('SELECT data FROM users'),
+            safeQuery('SELECT data FROM exhibits ORDER BY timestamp DESC'),
+            safeQuery('SELECT data FROM collections ORDER BY timestamp DESC'),
+            safeQuery('SELECT data FROM notifications ORDER BY timestamp DESC'),
+            safeQuery('SELECT data FROM messages ORDER BY timestamp ASC'),
+            safeQuery('SELECT data FROM guestbook ORDER BY timestamp DESC')
         ]);
         
         res.json({
@@ -157,42 +126,45 @@ app.get('/api/sync', async (req, res) => {
             guestbook: gb.rows.map(r => r.data),
         });
     } catch (e) {
-        console.error("🔴 Sync Error:", e);
-        res.status(500).json({ error: "Database Sync Failed", details: e.message });
-    } finally {
-        if (client) client.release();
+        // Return 503 Service Unavailable so frontend knows to use cache
+        res.status(503).json({ error: "Database Unavailable", details: e.message });
     }
 });
 
 // 2. USER PROFILE SYNC
 app.post('/api/users/update', async (req, res) => {
     try {
-        await upsertUser(req.body.username, req.body);
+        await safeQuery(
+            `INSERT INTO users (username, data) VALUES ($1, $2) 
+             ON CONFLICT (username) DO UPDATE SET data = $2`,
+            [req.body.username, req.body]
+        );
         res.json({ success: true });
     } catch (e) { 
-        console.error("User Update Error:", e);
         res.status(500).json({ error: e.message }); 
     }
 });
 
-// 3. CRUD OPERATIONS
+// 3. CRUD OPERATIONS GENERATOR
 const createCrudRoutes = (resourceName) => {
     app.post(`/api/${resourceName}`, async (req, res) => {
         try {
-            await upsertEntity(resourceName, req.body.id, req.body);
+            await safeQuery(
+                `INSERT INTO ${resourceName} (id, data, timestamp) VALUES ($1, $2, NOW()) 
+                 ON CONFLICT (id) DO UPDATE SET data = $2`,
+                [req.body.id, req.body]
+            );
             res.json({ success: true });
         } catch (e) { 
-            console.error(`${resourceName} Create Error:`, e);
             res.status(500).json({ error: e.message }); 
         }
     });
 
     app.delete(`/api/${resourceName}/:id`, async (req, res) => {
         try {
-            await deleteEntity(resourceName, req.params.id);
+            await safeQuery(`DELETE FROM ${resourceName} WHERE id = $1`, [req.params.id]);
             res.json({ success: true });
         } catch (e) { 
-            console.error(`${resourceName} Delete Error:`, e);
             res.status(500).json({ error: e.message }); 
         }
     });
@@ -204,10 +176,14 @@ createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
 
-// Fallback for SPA
+// Handle 404 for API routes specifically (return JSON, not HTML)
+app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API Endpoint ${req.path} not found` });
+});
+
+// Fallback for SPA (Serve index.html for all other routes)
 app.get('*', (req, res) => {
-    const indexPath = path.join(__dirname, 'dist', 'index.html');
-    res.sendFile(indexPath);
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {

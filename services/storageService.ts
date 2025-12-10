@@ -48,7 +48,7 @@ const loadFromLocalCache = (): boolean => {
     return false;
 };
 
-// --- API COMMUNICATIONS (TIMEWEB) ---
+// --- API COMMUNICATIONS (Robust) ---
 const apiCall = async (endpoint: string, method: string, data?: any) => {
     try {
         const res = await fetch(`${API_URL}${endpoint}`, {
@@ -57,12 +57,20 @@ const apiCall = async (endpoint: string, method: string, data?: any) => {
             body: data ? JSON.stringify(data) : undefined
         });
         
+        // If 503 or 502, server is down, handle gracefully
+        if (res.status === 503 || res.status === 502 || res.status === 504) {
+            throw new Error("Server Unavailable");
+        }
+
         if (!res.ok) {
             const errBody = await res.json().catch(() => ({}));
+            // If 404, it might be an old endpoint, just ignore
+            if (res.status === 404) throw new Error("Endpoint not found");
             throw new Error(errBody.error || `API Error: ${res.statusText}`);
         }
         return await res.json();
     } catch (e) {
+        // Log but do not crash the app logic unless critical
         console.warn(`⚠️ API Call Failed [${endpoint}]:`, e);
         throw e;
     }
@@ -79,10 +87,10 @@ export const fileToBase64 = (file: File): Promise<string> => {
 
 // --- INITIALIZATION ---
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
-  // 1. Load optimistic cache first
+  // 1. Load optimistic cache first (Fastest)
   loadFromLocalCache();
 
-  // 2. Sync Data from Timeweb
+  // 2. Sync Data from Timeweb (Async, don't block auth on failure)
   try {
       const serverData = await apiCall('/sync', 'GET');
       if (serverData) {
@@ -94,9 +102,10 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
           cache.users = serverData.users || [];
           cache.isLoaded = true;
           saveToLocalCache();
+          console.log("✅ [Sync] Data synchronized with Timeweb");
       }
   } catch (e) {
-      console.warn("⚠️ Timeweb server unreachable, running in cached mode");
+      console.warn("⚠️ [Sync] Timeweb server unreachable, running in cached/offline mode");
   }
 
   // 3. Check Supabase Session (Restore User)
@@ -128,7 +137,9 @@ export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOStr
 // --- AUTH (SUPABASE + TIMEWEB SYNC) ---
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    // 1. Create User in Supabase
+    console.log("📝 [Auth] Registering with Supabase...");
+    
+    // 1. Create User in Supabase (Primary Source of Truth for Auth)
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -137,10 +148,14 @@ export const registerUser = async (username: string, password: string, tagline: 
         }
     });
 
-    if (error) throw new Error(error.message);
-    if (!data.user) throw new Error("Registration failed");
+    if (error) {
+        console.error("🔴 [Auth] Supabase Error:", error);
+        throw new Error(error.message);
+    }
+    
+    if (!data.user) throw new Error("Registration failed - No user data returned");
 
-    // 2. Create Profile
+    // 2. Create Profile Object
     const userProfile: UserProfile = {
         username,
         email,
@@ -152,21 +167,25 @@ export const registerUser = async (username: string, password: string, tagline: 
         isAdmin: false
     };
 
-    // Save to local cache immediately so UI updates
+    // 3. Save to local cache immediately (Optimistic UI)
     cache.users.push(userProfile);
     saveToLocalCache();
 
-    // 3. Try to sync to Timeweb, but don't block registration if it fails
+    // 4. Try to sync profile to Timeweb (Backend)
+    // We swallow errors here so the user can still proceed even if backend is flaky
     try {
         await apiCall('/users/update', 'POST', userProfile);
+        console.log("✅ [Auth] Profile synced to Timeweb");
     } catch (e) {
-        console.warn("⚠️ Failed to sync new user to Timeweb (continuing in offline mode for now)", e);
+        console.warn("⚠️ [Auth] Failed to sync profile to Timeweb (Offline mode active)");
     }
     
     return userProfile;
 };
 
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
+    console.log("🔐 [Auth] Logging in via Supabase...");
+    
     // 1. Auth with Supabase
     const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -178,9 +197,9 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
 
     const username = data.user.user_metadata?.username;
     
-    if (!username) throw new Error("User profile corrupted (no username)");
+    if (!username) throw new Error("User profile corrupted (no username in metadata)");
 
-    // 2. Fetch/Sync Profile from Timeweb Cache
+    // 2. Fetch/Sync Profile from Cache
     let userProfile = cache.users.find(u => u.username === username);
 
     if (!userProfile) {
@@ -199,7 +218,7 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
         try {
             await apiCall('/users/update', 'POST', userProfile);
         } catch (e) {
-            console.warn("⚠️ Failed to sync user restoration to Timeweb", e);
+            console.warn("⚠️ [Auth] Failed to sync restored profile");
         }
     }
 
@@ -215,10 +234,12 @@ export const updateUserProfile = async (user: UserProfile) => {
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
     saveToLocalCache();
-    await apiCall('/users/update', 'POST', user).catch(console.error);
+    // Fire and forget update
+    apiCall('/users/update', 'POST', user).catch(e => console.warn("Background sync failed:", e));
 };
 
 // --- CRUD OPERATIONS (TIMEWEB) ---
+// All operations update local cache FIRST (Optimistic), then try to sync.
 
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
@@ -226,7 +247,7 @@ export const saveExhibit = async (exhibit: Exhibit) => {
   exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
   cache.exhibits.unshift(exhibit);
   saveToLocalCache();
-  await apiCall('/exhibits', 'POST', exhibit).catch(console.error);
+  await apiCall('/exhibits', 'POST', exhibit).catch(e => console.warn("Sync failed:", e));
 };
 
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
@@ -234,14 +255,14 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
     saveToLocalCache();
-    await apiCall('/exhibits', 'POST', updatedExhibit).catch(console.error);
+    await apiCall('/exhibits', 'POST', updatedExhibit).catch(e => console.warn("Sync failed:", e));
   }
 };
 
 export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
   saveToLocalCache();
-  await apiCall(`/exhibits/${id}`, 'DELETE').catch(console.error);
+  await apiCall(`/exhibits/${id}`, 'DELETE').catch(e => console.warn("Sync failed:", e));
 };
 
 export const getCollections = (): Collection[] => cache.collections;
@@ -250,7 +271,7 @@ export const saveCollection = async (collection: Collection) => {
     collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
     cache.collections.unshift(collection);
     saveToLocalCache();
-    await apiCall('/collections', 'POST', collection).catch(console.error);
+    await apiCall('/collections', 'POST', collection).catch(e => console.warn("Sync failed:", e));
 };
 
 export const updateCollection = async (updatedCollection: Collection) => {
@@ -258,14 +279,14 @@ export const updateCollection = async (updatedCollection: Collection) => {
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
         saveToLocalCache();
-        await apiCall('/collections', 'POST', updatedCollection).catch(console.error);
+        await apiCall('/collections', 'POST', updatedCollection).catch(e => console.warn("Sync failed:", e));
     }
 };
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
     saveToLocalCache();
-    await apiCall(`/collections/${id}`, 'DELETE').catch(console.error);
+    await apiCall(`/collections/${id}`, 'DELETE').catch(e => console.warn("Sync failed:", e));
 };
 
 export const getNotifications = (): Notification[] => cache.notifications;
@@ -273,7 +294,7 @@ export const getNotifications = (): Notification[] => cache.notifications;
 export const saveNotification = async (notif: Notification) => {
     cache.notifications.unshift(notif);
     saveToLocalCache();
-    await apiCall('/notifications', 'POST', notif).catch(console.error);
+    await apiCall('/notifications', 'POST', notif).catch(e => console.warn("Sync failed:", e));
 };
 
 export const markNotificationsRead = async (recipient: string) => {
@@ -285,7 +306,7 @@ export const markNotificationsRead = async (recipient: string) => {
         }
     });
     saveToLocalCache();
-    toUpdate.forEach(n => apiCall('/notifications', 'POST', n).catch(console.error));
+    toUpdate.forEach(n => apiCall('/notifications', 'POST', n).catch(e => console.warn("Sync failed:", e)));
 };
 
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
@@ -293,7 +314,7 @@ export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
     saveToLocalCache();
-    await apiCall('/guestbook', 'POST', entry).catch(console.error);
+    await apiCall('/guestbook', 'POST', entry).catch(e => console.warn("Sync failed:", e));
 };
 
 export const getMessages = (): Message[] => cache.messages;
@@ -301,7 +322,7 @@ export const getMessages = (): Message[] => cache.messages;
 export const saveMessage = async (msg: Message) => {
     cache.messages.push(msg);
     saveToLocalCache();
-    await apiCall('/messages', 'POST', msg).catch(console.error);
+    await apiCall('/messages', 'POST', msg).catch(e => console.warn("Sync failed:", e));
 };
 
 export const markMessagesRead = (sender: string, receiver: string) => {
@@ -313,5 +334,5 @@ export const markMessagesRead = (sender: string, receiver: string) => {
         }
     });
     saveToLocalCache();
-    toUpdate.forEach(m => apiCall('/messages', 'POST', m).catch(console.error));
+    toUpdate.forEach(m => apiCall('/messages', 'POST', m).catch(e => console.warn("Sync failed:", e)));
 };
