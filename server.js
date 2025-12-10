@@ -23,7 +23,11 @@ const EMAIL_CONFIG = {
         user: 'morpheus@neoarch.ru',
         // Escaped backslash: +VWY6Mp8F\0DUg becomes +VWY6Mp8F\\0DUg in JS string
         pass: '+VWY6Mp8F\\0DUg' 
-    }
+    },
+    // Add connection timeout settings
+    connectionTimeout: 10000,
+    greetingTimeout: 5000,
+    socketTimeout: 15000
 };
 
 const transporter = nodemailer.createTransport(EMAIL_CONFIG);
@@ -122,17 +126,29 @@ const saveDb = (data) => {
 const sendEmail = async (to, subject, text, html) => {
     try {
         console.log(`📤 [SMTP] Attempting to send email to ${to}...`);
-        const info = await transporter.sendMail({
+        
+        // Wrap sending in a race with a timeout to prevent indefinite hanging
+        const mailOptions = {
             from: `"NeoArchive System" <${EMAIL_CONFIG.auth.user}>`,
             to,
             subject,
             text,
             html
-        });
+        };
+
+        const sendPromise = transporter.sendMail(mailOptions);
+        
+        // 15 second explicit timeout for the sending process
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("SMTP Sending Timed Out (15s)")), 15000)
+        );
+
+        const info = await Promise.race([sendPromise, timeoutPromise]);
+        
         console.log(`✅ [SMTP] Email sent: ${info.messageId}`);
         return true;
     } catch (error) {
-        console.error("🔴 [SMTP] Failed to send email:", error);
+        console.error("🔴 [SMTP] Failed to send email:", error.message || error);
         return false;
     }
 };
@@ -237,7 +253,7 @@ const startServer = (port) => {
                         res.writeHead(500);
                         res.end(JSON.stringify({ 
                             success: false, 
-                            error: 'SMTP Error: Failed to send email.' 
+                            error: 'SMTP Error: Failed to send email. Check server logs.' 
                         }));
                     }
                     return;

@@ -78,7 +78,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
       // Create a controller to timeout the request if server hangs
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      // Increased timeout to 30 seconds for slow SMTP
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       try {
            const response = await fetch('/api/auth/send-code', {
@@ -118,7 +119,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
            clearTimeout(timeoutId);
            console.error("Registration error:", err);
            if (err.name === 'AbortError') {
-               setError('TIMEOUT: СЕРВЕР НЕ ОТВЕЧАЕТ');
+               setError('TIMEOUT: СЕРВЕР ДОЛГО НЕ ОТВЕЧАЕТ');
            } else {
                setError(err.message || 'ОШИБКА ПОДКЛЮЧЕНИЯ');
            }
