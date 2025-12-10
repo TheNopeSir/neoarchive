@@ -9,6 +9,7 @@ export interface Comment {
 
 export interface Exhibit {
   id: string;
+  slug?: string; // SEO Friendly URL
   title: string;
   description: string;
   imageUrls: string[];
@@ -28,6 +29,7 @@ export interface Exhibit {
 
 export interface Collection {
   id: string;
+  slug?: string; // SEO Friendly URL
   title: string;
   description: string;
   owner: string;

@@ -104,6 +104,58 @@ const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null 
     </div>
 );
 
+const MobileNavigation: React.FC<{
+    theme: 'dark' | 'light';
+    view: ViewState;
+    setView: (v: ViewState) => void;
+    updateHash: (path: string) => void;
+    hasNotifications: boolean;
+    username: string;
+    onResetFeed: () => void;
+    onProfileClick: () => void;
+}> = ({ theme, view, setView, updateHash, hasNotifications, username, onResetFeed, onProfileClick }) => {
+    const navItems = [
+        { id: 'FEED', icon: Home, label: 'ГЛАВНАЯ', action: () => { onResetFeed(); setView('FEED'); updateHash('/feed'); } },
+        { id: 'SEARCH', icon: Search, label: 'ПОИСК', action: () => { setView('SEARCH'); } },
+        { id: 'ADD', icon: PlusCircle, label: 'ДОБАВИТЬ', action: () => { setView('CREATE_HUB'); }, highlight: true },
+        { id: 'ACTIVITY', icon: Bell, label: 'АКТИВНОСТЬ', action: () => { setView('ACTIVITY'); }, hasBadge: hasNotifications },
+        { id: 'PROFILE', icon: User, label: 'ПРОФИЛЬ', action: onProfileClick }
+    ];
+
+    return (
+        <div className={`md:hidden fixed bottom-0 left-0 w-full z-50 border-t pb-safe ${
+            theme === 'dark' ? 'bg-black/95 border-dark-dim text-gray-400' : 'bg-white/95 border-light-dim text-gray-500'
+        }`}>
+            <div className="flex justify-around items-center h-16">
+                {navItems.map(item => {
+                    const isActive = view === item.id || (item.id === 'PROFILE' && view === 'USER_PROFILE') || (item.id === 'ADD' && ['CREATE_HUB', 'CREATE_ARTIFACT', 'CREATE_COLLECTION'].includes(view));
+                    return (
+                        <button 
+                            key={item.id}
+                            onClick={item.action}
+                            className={`flex flex-col items-center justify-center w-full h-full gap-1 relative ${
+                                isActive 
+                                ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') 
+                                : ''
+                            }`}
+                        >
+                            <item.icon 
+                                size={item.highlight ? 28 : 22} 
+                                strokeWidth={item.highlight ? 2 : 1.5}
+                                className={item.highlight ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}
+                            />
+                            {!item.highlight && <span className="text-[9px] font-pixel">{item.label}</span>}
+                            {item.hasBadge && (
+                                <span className="absolute top-3 right-6 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewState>('AUTH'); // Start at Auth
@@ -196,23 +248,23 @@ export default function App() {
     init();
   }, []);
 
-  // --- HASH ROUTING / DEEP LINKING ---
+  // --- HASH ROUTING / DEEP LINKING (UPDATED FOR SLUGS) ---
   useEffect(() => {
-      // Logic to handle URL hash changes for deep linking
       const handleHashChange = () => {
-          if (!user && view === 'AUTH') return; // Don't route if not auth (unless public view allowed)
+          if (!user && view === 'AUTH') return; 
           
           const hash = window.location.hash;
           if (hash.startsWith('#/exhibit/')) {
-              const id = hash.split('/')[2];
-              const item = exhibits.find(e => e.id === id);
+              const param = hash.split('/')[2];
+              // Try match by slug (if available) or ID
+              const item = exhibits.find(e => e.slug === param || e.id === param);
               if (item) {
                   setSelectedExhibit(item);
                   setView('EXHIBIT');
               }
           } else if (hash.startsWith('#/collection/')) {
-              const id = hash.split('/')[2];
-              const col = collections.find(c => c.id === id);
+              const param = hash.split('/')[2];
+              const col = collections.find(c => c.slug === param || c.id === param);
               if (col) {
                   setSelectedCollection(col);
                   setView('COLLECTION_DETAIL');
@@ -228,7 +280,6 @@ export default function App() {
           }
       };
 
-      // Run on exhibits load and hash change
       if (exhibits.length > 0) {
           handleHashChange();
       }
@@ -264,7 +315,7 @@ export default function App() {
       }
 
       return () => observer.disconnect();
-  }, [view, feedMode, visibleCount]); // Re-bind if count changes to ensure fresh ref logic
+  }, [view, feedMode, visibleCount]); 
 
   const refreshData = () => {
       console.log("🔄 [App] Refreshing data...");
@@ -280,10 +331,10 @@ export default function App() {
       
       if (remember) {
         localStorage.setItem('neo_user', JSON.stringify(loggedInUser));
-        sessionStorage.removeItem('neo_user'); // Clear session if exists
+        sessionStorage.removeItem('neo_user'); 
       } else {
         sessionStorage.setItem('neo_user', JSON.stringify(loggedInUser));
-        localStorage.removeItem('neo_user'); // Clear local if exists
+        localStorage.removeItem('neo_user');
       }
       
       setView('FEED');
@@ -325,13 +376,15 @@ export default function App() {
       }
 
       setView('EXHIBIT');
-      updateHash(`/exhibit/${item.id}`);
+      // Use Slug if available for cleaner URL
+      updateHash(`/exhibit/${item.slug || item.id}`);
   };
 
   const handleCollectionClick = (col: Collection) => {
       setSelectedCollection(col);
       setView('COLLECTION_DETAIL');
-      updateHash(`/collection/${col.id}`);
+      // Use Slug if available
+      updateHash(`/collection/${col.slug || col.id}`);
   };
 
   const handleAuthorClick = (author: string) => {
@@ -1912,16 +1965,16 @@ export default function App() {
       <MatrixRain theme={theme} />
       {theme === 'dark' && <CRTOverlay />}
       
-      {/* Header / Navbar */}
+      {/* Header / Navbar (Desktop Only) */}
       {view !== 'AUTH' && (
-        <header className={`sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
-            <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+        <header className={`hidden md:flex sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
+            <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between w-full">
                 <div 
                     onClick={() => { setView('FEED'); setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
                     className="font-pixel text-lg font-bold cursor-pointer flex items-center gap-2"
                 >
                     <Terminal size={20} className={theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'} />
-                    <span className="hidden md:inline">NEO_ARCHIVE</span>
+                    <span>NEO_ARCHIVE</span>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -1930,7 +1983,7 @@ export default function App() {
                            value={searchQuery}
                            onChange={(e) => { setSearchQuery(e.target.value); if(view !== 'SEARCH') setView('SEARCH'); }}
                            placeholder="ПОИСК..."
-                           className={`w-32 md:w-64 bg-transparent border rounded-full px-3 py-1 text-xs font-pixel focus:outline-none focus:w-full transition-all ${
+                           className={`w-64 bg-transparent border rounded-full px-3 py-1 text-xs font-pixel focus:outline-none focus:w-full transition-all ${
                                theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
                            }`}
                         />
@@ -1940,6 +1993,7 @@ export default function App() {
                     <button 
                         onClick={() => setView('CREATE_HUB')} 
                         className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}
+                        title="Добавить"
                     >
                         <PlusSquare size={20} />
                     </button>
@@ -1947,6 +2001,7 @@ export default function App() {
                     <button 
                         onClick={() => setView('ACTIVITY')} 
                         className="relative p-2 opacity-70 hover:opacity-100"
+                        title="Активность"
                     >
                         <Bell size={20} />
                         {(notifications.some(n => n.recipient === user?.username && !n.isRead) || messages.some(m => m.receiver === user?.username && !m.isRead)) && (
@@ -1963,6 +2018,7 @@ export default function App() {
                              }
                          }}
                          className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden border border-transparent hover:border-current transition-all"
+                         title="Профиль"
                     >
                         <img src={`https://ui-avatars.com/api/?name=${user?.username || 'Guest'}&background=random`} alt="User" />
                     </button>
@@ -1971,7 +2027,7 @@ export default function App() {
                         {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
                     </button>
                     
-                    <button onClick={handleLogout} className="opacity-50 hover:opacity-100 text-red-500">
+                    <button onClick={handleLogout} className="opacity-50 hover:opacity-100 text-red-500" title="Выход">
                         <LogOut size={20} />
                     </button>
                 </div>
@@ -1980,14 +2036,32 @@ export default function App() {
       )}
       
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-4 py-6">
+      <main className="relative z-10 max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
          {view === 'FEED' && <HeroSection theme={theme} user={user} />}
          {renderContentArea()}
       </main>
 
-      {/* Footer */}
+      {/* Mobile Navigation */}
+      {view !== 'AUTH' && user && (
+          <MobileNavigation 
+              theme={theme}
+              view={view}
+              setView={setView}
+              updateHash={updateHash}
+              hasNotifications={notifications.some(n => n.recipient === user?.username && !n.isRead) || messages.some(m => m.receiver === user?.username && !m.isRead)}
+              username={user.username}
+              onResetFeed={() => { setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); }}
+              onProfileClick={() => {
+                   setViewedProfile(user.username);
+                   setView('USER_PROFILE');
+                   updateHash(`/profile/${user.username}`);
+              }}
+          />
+      )}
+
+      {/* Footer (Desktop Only) */}
       {view !== 'AUTH' && (
-          <footer className="mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
+          <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
               <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2025</p>
           </footer>
       )}

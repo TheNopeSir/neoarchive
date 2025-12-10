@@ -1,9 +1,10 @@
+
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
 import { supabase } from './supabaseClient';
 
-const API_URL = '/api'; 
-
+// Локальный кэш для быстрого отображения (Optimistic UI)
 let cache = {
     exhibits: [] as Exhibit[],
     collections: [] as Collection[],
@@ -14,101 +15,134 @@ let cache = {
     isLoaded: false
 };
 
-const ADMIN_USER: UserProfile = {
-    username: "truester",
-    email: "admin@neoarchive.net",
-    tagline: "Admin Construct",
-    avatarUrl: "https://ui-avatars.com/api/?name=Admin&background=000&color=fff",
-    joinedDate: "01.01.1999",
-    following: [],
-    password: "trinityisall1",
-    isAdmin: true
-};
-
 const DEFAULT_USER: UserProfile = { ...MOCK_USER, email: 'neo@matrix.com' };
 
-// --- CORE SERVER SYNC FUNCTIONS ---
-
-// Optimized: Only send what changed
-const manageServerData = async (
-    action: 'create' | 'update' | 'delete', 
-    collection: string, 
-    item?: any, 
-    id?: string
-) => {
-    try {
-        const response = await fetch(`${API_URL}/data/manage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, collection, item, id })
-        });
-        if (!response.ok) {
-            console.error("Server sync failed");
-        }
-    } catch (e) {
-        console.error("Network error during sync:", e);
-    }
+// --- SLUG GENERATOR ---
+const slugify = (text: string): string => {
+    return text
+        .toString()
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-')           // Replace spaces with -
+        .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+        .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+        .replace(/^-+/, '')             // Trim - from start
+        .replace(/-+$/, '');            // Trim - from end
 };
 
-const loadFromServer = async () => {
+// --- DATA MAPPING HELPERS (Supabase snake_case <-> App camelCase) ---
+
+const mapExhibitFromDB = (row: any): Exhibit => ({
+    id: row.id,
+    slug: row.slug || row.id, // Fallback to ID if no slug
+    title: row.title,
+    description: row.description,
+    imageUrls: row.image_urls || [],
+    videoUrl: row.video_url,
+    category: row.category,
+    owner: row.owner,
+    timestamp: row.timestamp,
+    likes: row.likes,
+    likedBy: row.liked_by || [],
+    views: row.views,
+    condition: row.condition,
+    quality: row.quality,
+    specs: row.specs || {},
+    comments: row.comments || []
+});
+
+const mapExhibitToDB = (item: Exhibit) => ({
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    description: item.description,
+    image_urls: item.imageUrls,
+    video_url: item.videoUrl,
+    category: item.category,
+    owner: item.owner,
+    timestamp: item.timestamp,
+    likes: item.likes,
+    liked_by: item.likedBy,
+    views: item.views,
+    condition: item.condition,
+    quality: item.quality,
+    specs: item.specs,
+    comments: item.comments
+});
+
+const mapCollectionFromDB = (row: any): Collection => ({
+    id: row.id,
+    slug: row.slug || row.id,
+    title: row.title,
+    description: row.description,
+    owner: row.owner,
+    coverImage: row.cover_image,
+    exhibitIds: row.exhibit_ids || [],
+    timestamp: row.timestamp
+});
+
+const mapCollectionToDB = (item: Collection) => ({
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    description: item.description,
+    owner: item.owner,
+    cover_image: item.coverImage,
+    exhibit_ids: item.exhibitIds,
+    timestamp: item.timestamp
+});
+
+// --- CORE LOAD FUNCTION ---
+
+const loadFromSupabase = async () => {
     try {
-        const res = await fetch(`${API_URL}/db`);
-        if (!res.ok) throw new Error("Failed to load");
-        const data = await res.json();
+        console.log("☁️ [Storage] Syncing with Cloud Database...");
         
-        // Smart Seeding
-        if (data.exhibits && data.exhibits.length > 0) {
-            cache.exhibits = data.exhibits;
-        } else {
-            console.log("⚠️ [Storage] Server exhibits empty, seeding initial data...");
-            cache.exhibits = INITIAL_EXHIBITS;
-            await fetch(`${API_URL}/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'exhibits', data: INITIAL_EXHIBITS })});
+        // 1. Exhibits
+        const { data: exData, error: exError } = await supabase.from('exhibits').select('*').order('timestamp', { ascending: false });
+        if (!exError && exData) {
+            cache.exhibits = exData.map(mapExhibitFromDB);
         }
 
-        if (data.collections && data.collections.length > 0) {
-            cache.collections = data.collections;
-        } else {
-            cache.collections = MOCK_COLLECTIONS;
-             await fetch(`${API_URL}/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'collections', data: MOCK_COLLECTIONS })});
+        // 2. Collections
+        const { data: colData, error: colError } = await supabase.from('collections').select('*');
+        if (!colError && colData) {
+            cache.collections = colData.map(mapCollectionFromDB);
         }
 
-        if (data.notifications && data.notifications.length > 0) {
-            cache.notifications = data.notifications;
-        } else {
-            cache.notifications = MOCK_NOTIFICATIONS;
-             await fetch(`${API_URL}/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'notifications', data: MOCK_NOTIFICATIONS })});
+        // 3. Notifications
+        const { data: notifData, error: notifError } = await supabase.from('notifications').select('*').order('timestamp', { ascending: false }).limit(50);
+        if (!notifError && notifData) {
+            cache.notifications = notifData.map((row: any) => ({
+                id: row.id,
+                type: row.type,
+                actor: row.actor,
+                recipient: row.recipient,
+                targetId: row.target_id,
+                targetPreview: row.target_preview,
+                timestamp: row.timestamp,
+                isRead: row.is_read
+            }));
         }
 
-        if (data.messages && data.messages.length > 0) {
-            cache.messages = data.messages;
-        } else {
-            cache.messages = MOCK_MESSAGES;
-             await fetch(`${API_URL}/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'messages', data: MOCK_MESSAGES })});
+        // 4. Guestbook
+        const { data: gbData, error: gbError } = await supabase.from('guestbook').select('*').order('timestamp', { ascending: false });
+        if (!gbError && gbData) {
+            cache.guestbook = gbData.map((row: any) => ({
+                id: row.id,
+                author: row.author,
+                targetUser: row.target_user,
+                text: row.text,
+                timestamp: row.timestamp,
+                isRead: row.is_read
+            }));
         }
-
-        cache.guestbook = data.guestbook || [];
         
-        // Load mock users to cache, but we will mostly rely on Supabase for current user
-        if (!data.users || !Array.isArray(data.users) || data.users.length === 0) {
-            cache.users = [DEFAULT_USER, ADMIN_USER];
-             await fetch(`${API_URL}/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'users', data: cache.users })});
-        } else {
-            cache.users = data.users;
-            if (!cache.users.find(u => u.username === 'truester')) {
-                cache.users.push(ADMIN_USER);
-                manageServerData('create', 'users', ADMIN_USER);
-            }
-        }
-
         cache.isLoaded = true;
+        console.log("✅ [Storage] Cloud Sync Complete");
+
     } catch (e) {
-        console.warn("Server offline or unreachable", e);
-        cache.exhibits = INITIAL_EXHIBITS;
-        cache.collections = MOCK_COLLECTIONS;
-        cache.notifications = MOCK_NOTIFICATIONS;
-        cache.messages = MOCK_MESSAGES;
-        cache.users = [DEFAULT_USER, ADMIN_USER];
-        cache.isLoaded = true;
+        console.error("🔴 [Storage] Sync Failed:", e);
     }
 };
 
@@ -123,22 +157,16 @@ export const fileToBase64 = (file: File): Promise<string> => {
 
 export const initializeDatabase = async () => {
   if (!cache.isLoaded) {
-      await loadFromServer();
+      await loadFromSupabase();
   }
-};
-
-export const resetDatabase = async () => {
-    await fetch(`${API_URL}/reset`, { method: 'POST' });
-    window.location.reload();
 };
 
 export const getFullDatabase = () => {
     return { ...cache, timestamp: new Date().toISOString() };
 };
 
-// --- AUTHENTICATION (SUPABASE) ---
+// --- AUTH HELPERS ---
 
-// Helper to map Supabase User to UserProfile
 const mapSupabaseUser = (sbUser: any): UserProfile => {
     return {
         username: sbUser.user_metadata?.username || sbUser.email?.split('@')[0] || 'Unknown',
@@ -153,74 +181,35 @@ const mapSupabaseUser = (sbUser: any): UserProfile => {
 };
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    await initializeDatabase(); 
-    
-    // Supabase Registration
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-            data: {
-                username,
-                tagline
-            }
-        }
+        options: { data: { username, tagline } }
     });
-
-    if (error) {
-        console.error("Supabase SignUp Error:", error);
-        throw new Error(error.message);
-    }
-
-    if (data.user) {
-        // We create a local profile copy for caching purposes immediately
-        const newUser = mapSupabaseUser(data.user);
-        
-        // Optional: Save to local mock DB so other users can "see" this new user in lists
-        // In a real app, you'd have a 'profiles' table in Supabase
-        cache.users.push(newUser);
-        manageServerData('create', 'users', newUser);
-        
-        return newUser;
-    }
-    
-    throw new Error("Неизвестная ошибка регистрации");
+    if (error) throw new Error(error.message);
+    if (data.user) return mapSupabaseUser(data.user);
+    throw new Error("Ошибка регистрации");
 };
 
 export const loginUser = async (login: string, password: string): Promise<UserProfile> => {
-    await initializeDatabase();
-    
-    // Supabase Login
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email: login,
-        password: password
-    });
-
-    if (error) {
-        console.error("Supabase SignIn Error:", error);
-        throw new Error("Неверный логин или пароль");
-    }
-
-    if (data.user) {
-        const userProfile = mapSupabaseUser(data.user);
-        
-        // Ensure local cache has this user (sync if missing)
-        if (!cache.users.find(u => u.username === userProfile.username)) {
-            cache.users.push(userProfile);
-        }
-        
-        return userProfile;
-    }
-
+    const { data, error } = await supabase.auth.signInWithPassword({ email: login, password });
+    if (error) throw new Error("Неверный логин или пароль");
+    if (data.user) return mapSupabaseUser(data.user);
     throw new Error("Пользователь не найден");
 };
 
-export const updateUserProfile = (user: UserProfile) => {
+export const updateUserProfile = async (user: UserProfile) => {
+    // Обновляем метаданные в Supabase Auth
+    const { error } = await supabase.auth.updateUser({
+        data: { tagline: user.tagline, avatar_url: user.avatarUrl } // Note: avatar_url key for standard metadata
+    });
+    
+    // Обновляем локальный кэш
     const idx = cache.users.findIndex(u => u.username === user.username);
-    if (idx !== -1) { cache.users[idx] = user; } else { cache.users.push(user); }
-    
-    manageServerData('update', 'users', user);
-    
+    if (idx !== -1) cache.users[idx] = user;
+    else cache.users.push(user);
+
+    // Обновляем сессию
     const currentSessionStr = localStorage.getItem('neo_user');
     if (currentSessionStr) {
         const currentSession = JSON.parse(currentSessionStr);
@@ -228,92 +217,124 @@ export const updateUserProfile = (user: UserProfile) => {
              localStorage.setItem('neo_user', JSON.stringify(user));
         }
     }
-    
-    // NOTE: In a full implementation, we should also update Supabase metadata here
-    // supabase.auth.updateUser({ data: { tagline: user.tagline } });
 };
 
 // --- EXHIBITS CRUD ---
+
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
-export const saveExhibit = (exhibit: Exhibit) => {
+export const saveExhibit = async (exhibit: Exhibit) => {
+  // Generate Slug
+  const baseSlug = slugify(exhibit.title);
+  const uniqueSuffix = Date.now().toString().slice(-4);
+  exhibit.slug = `${baseSlug}-${uniqueSuffix}`;
+
+  // Optimistic Update
   cache.exhibits.unshift(exhibit);
-  manageServerData('create', 'exhibits', exhibit);
+  
+  // Async Cloud Save
+  const { error } = await supabase.from('exhibits').insert(mapExhibitToDB(exhibit));
+  if (error) console.error("Cloud Save Error (Exhibit):", error);
 };
 
-export const updateExhibit = (updatedExhibit: Exhibit) => {
+export const updateExhibit = async (updatedExhibit: Exhibit) => {
   const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
-    manageServerData('update', 'exhibits', updatedExhibit);
+    
+    const { error } = await supabase.from('exhibits')
+        .update(mapExhibitToDB(updatedExhibit))
+        .eq('id', updatedExhibit.id);
+        
+    if (error) console.error("Cloud Update Error (Exhibit):", error);
   }
 };
 
-export const deleteExhibit = (id: string) => {
+export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
-  manageServerData('delete', 'exhibits', null, id);
+  const { error } = await supabase.from('exhibits').delete().eq('id', id);
+  if (error) console.error("Cloud Delete Error:", error);
 };
 
 // --- COLLECTIONS CRUD ---
+
 export const getCollections = (): Collection[] => cache.collections;
 
-export const saveCollection = (collection: Collection) => {
+export const saveCollection = async (collection: Collection) => {
+    // Generate Slug
+    const baseSlug = slugify(collection.title);
+    const uniqueSuffix = Date.now().toString().slice(-4);
+    collection.slug = `${baseSlug}-${uniqueSuffix}`;
+
     cache.collections.unshift(collection);
-    manageServerData('create', 'collections', collection);
+    const { error } = await supabase.from('collections').insert(mapCollectionToDB(collection));
+    if (error) console.error("Cloud Save Error (Collection):", error);
 };
 
-export const updateCollection = (updatedCollection: Collection) => {
+export const updateCollection = async (updatedCollection: Collection) => {
     const index = cache.collections.findIndex(c => c.id === updatedCollection.id);
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
-        manageServerData('update', 'collections', updatedCollection);
+        const { error } = await supabase.from('collections')
+            .update(mapCollectionToDB(updatedCollection))
+            .eq('id', updatedCollection.id);
+        if (error) console.error("Cloud Update Error (Collection):", error);
     }
 };
 
-export const deleteCollection = (id: string) => {
+export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
-    manageServerData('delete', 'collections', null, id);
+    const { error } = await supabase.from('collections').delete().eq('id', id);
+    if (error) console.error("Cloud Delete Error:", error);
 };
 
-// --- MESSAGES / NOTIFICATIONS ---
-export const getMessages = (): Message[] => cache.messages;
-
-export const saveMessage = (msg: Message) => {
-    cache.messages.push(msg);
-    manageServerData('create', 'messages', msg);
-};
-
-export const markMessagesRead = (sender: string, receiver: string) => {
-    // This involves multiple updates, so we loop through cache and send updates
-    // In a real DB we would send a query, but here we iterate
-    cache.messages.forEach(m => {
-        if (m.sender === sender && m.receiver === receiver && !m.isRead) {
-            m.isRead = true;
-            manageServerData('update', 'messages', m);
-        }
-    });
-};
+// --- NOTIFICATIONS & GUESTBOOK ---
 
 export const getNotifications = (): Notification[] => cache.notifications;
 
-export const saveNotification = (notif: Notification) => {
+export const saveNotification = async (notif: Notification) => {
     cache.notifications.unshift(notif);
-    manageServerData('create', 'notifications', notif);
-}
+    const dbNotif = {
+        id: notif.id,
+        type: notif.type,
+        actor: notif.actor,
+        recipient: notif.recipient,
+        target_id: notif.targetId,
+        target_preview: notif.targetPreview,
+        timestamp: notif.timestamp,
+        is_read: notif.isRead
+    };
+    await supabase.from('notifications').insert(dbNotif);
+};
 
-export const markNotificationsRead = (recipient: string) => {
+export const markNotificationsRead = async (recipient: string) => {
     cache.notifications.forEach(n => {
-        if (n.recipient === recipient && !n.isRead) {
-            n.isRead = true;
-            manageServerData('update', 'notifications', n);
-        }
+        if (n.recipient === recipient) n.isRead = true;
     });
-}
+    // Batch update via logic is hard, doing by recipient is easier
+    await supabase.from('notifications').update({ is_read: true }).eq('recipient', recipient);
+};
 
-// --- GUESTBOOK ---
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 
-export const saveGuestbookEntry = (entry: GuestbookEntry) => {
+export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
-    manageServerData('create', 'guestbook', entry);
+    const dbEntry = {
+        id: entry.id,
+        author: entry.author,
+        target_user: entry.targetUser,
+        text: entry.text,
+        timestamp: entry.timestamp,
+        is_read: entry.isRead
+    };
+    await supabase.from('guestbook').insert(dbEntry);
+};
+
+// Messages are local-only for now in this demo (or use similar logic)
+export const getMessages = (): Message[] => cache.messages;
+export const saveMessage = (msg: Message) => cache.messages.push(msg);
+export const markMessagesRead = (sender: string, receiver: string) => {
+    cache.messages.forEach(m => {
+        if (m.sender === sender && m.receiver === receiver) m.isRead = true;
+    });
 };

@@ -259,7 +259,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
          <div className="flex justify-between items-start mb-8 border-b-2 border-dashed pb-4 border-current opacity-70">
              <div className="flex items-center gap-2">
                  <Terminal size={20} />
-                 <span className="font-pixel text-sm">NEO_AUTH v3.0 (SUPABASE)</span>
+                 <span className="font-pixel text-sm">NEO_AUTH v3.0</span>
              </div>
              <div className="flex gap-1">
                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
@@ -281,7 +281,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
          {/* Footer */}
          <div className="mt-8 text-center opacity-40 font-mono text-[10px]">
              SECURE CLOUD CONNECTION<br/>
-             PROVIDER: SUPABASE
+             PROVIDER: CLOUD_NET
          </div>
       </div>
     </div>
