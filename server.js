@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -14,22 +15,29 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
 // Middleware
-app.use(cors());
+app.use(cors()); // Allow all CORS requests
 app.use(express.json({ limit: '50mb' })); 
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // --- DATABASE CONFIGURATION (Timeweb) ---
 const { Pool } = pg;
 
-// Данные берутся из .env файла
-const pool = new Pool({
+// Helper to log DB config safely
+const dbConfig = {
     host: process.env.POSTGRESQL_HOST || process.env.PGHOST,
     port: parseInt(process.env.POSTGRESQL_PORT || process.env.PGPORT || '5432'),
     user: process.env.POSTGRESQL_USER || process.env.PGUSER,
-    password: process.env.POSTGRESQL_PASSWORD || process.env.PGPASSWORD,
     database: process.env.POSTGRESQL_DBNAME || process.env.PGDATABASE,
-    ssl: { rejectUnauthorized: false }, // Обязательно для облачных БД без ручной установки сертификатов
-    connectionTimeoutMillis: 5000 // Тайм-аут подключения
+    // Do not log password
+    ssl: { rejectUnauthorized: false }, 
+    connectionTimeoutMillis: 10000 
+};
+
+console.log("🐘 [Server] DB Config:", { ...dbConfig, password: '****' });
+
+const pool = new Pool({
+    ...dbConfig,
+    password: process.env.POSTGRESQL_PASSWORD || process.env.PGPASSWORD
 });
 
 // Init DB Tables on Startup
@@ -38,9 +46,8 @@ const initDB = async () => {
     try {
         console.log("🐘 [Server] Connecting to Timeweb PostgreSQL...");
         client = await pool.connect();
-        console.log("✅ [Server] Connection established.");
+        console.log("✅ [Server] Connection established successfully.");
         
-        // Создаем таблицы, если их нет. Храним данные в JSONB для гибкости.
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
@@ -75,7 +82,7 @@ const initDB = async () => {
         console.log("✅ [Server] Database schema ensured.");
     } catch (err) {
         console.error("🔴 [Server] CRITICAL DB ERROR:", err);
-        // Не переключаемся на файлы, а выводим ошибку, чтобы сразу видеть проблему
+        // Do not exit process, let the server run to serve static files/API errors
     } finally {
         if (client) client.release();
     }
@@ -85,7 +92,6 @@ initDB();
 
 // --- DATA HELPERS ---
 
-// Helper to save generic entity
 const upsertEntity = async (table, id, data) => {
     const client = await pool.connect();
     try {
@@ -99,7 +105,6 @@ const upsertEntity = async (table, id, data) => {
     }
 };
 
-// Helper for users (PK is username)
 const upsertUser = async (username, data) => {
     const client = await pool.connect();
     try {
@@ -124,10 +129,16 @@ const deleteEntity = async (table, id) => {
 
 // --- API ROUTES ---
 
+// Health Check
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date() });
+});
+
 // 1. GLOBAL SYNC (Load all data)
 app.get('/api/sync', async (req, res) => {
-    const client = await pool.connect();
+    let client;
     try {
+        client = await pool.connect();
         const [users, exhibits, collections, notifs, msgs, gb] = await Promise.all([
             client.query('SELECT data FROM users'),
             client.query('SELECT data FROM exhibits ORDER BY timestamp DESC'),
@@ -146,114 +157,52 @@ app.get('/api/sync', async (req, res) => {
             guestbook: gb.rows.map(r => r.data),
         });
     } catch (e) {
-        console.error("Sync Error:", e);
-        res.status(500).json({ error: "Database Sync Failed" });
+        console.error("🔴 Sync Error:", e);
+        res.status(500).json({ error: "Database Sync Failed", details: e.message });
     } finally {
-        client.release();
+        if (client) client.release();
     }
 });
 
-// 2. AUTHENTICATION
-app.post('/api/auth/register', async (req, res) => {
-    const user = req.body;
-    try {
-        await upsertUser(user.username, user);
-        res.json(user);
-    } catch (e) {
-        console.error("Register Error", e);
-        res.status(500).json({ error: "Registration Failed" });
-    }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-    const { login, password } = req.body;
-    const client = await pool.connect();
-    try {
-        // Ищем пользователя по username или email внутри JSONB
-        const result = await client.query(
-            `SELECT data FROM users 
-             WHERE (username = $1 OR data->>'email' = $1) 
-             AND data->>'password' = $2`,
-            [login, password]
-        );
-
-        if (result.rows.length > 0) {
-            res.json(result.rows[0].data);
-        } else {
-            res.status(401).json({ error: "Invalid credentials" });
-        }
-    } catch (e) {
-        console.error("Login Error", e);
-        res.status(500).json({ error: "Login System Error" });
-    } finally {
-        client.release();
-    }
-});
-
-// 3. CRUD OPERATIONS
-
-// Users Update
+// 2. USER PROFILE SYNC
 app.post('/api/users/update', async (req, res) => {
     try {
         await upsertUser(req.body.username, req.body);
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        console.error("User Update Error:", e);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
-// Exhibits
-app.post('/api/exhibits', async (req, res) => {
-    try {
-        await upsertEntity('exhibits', req.body.id, req.body);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 3. CRUD OPERATIONS
+const createCrudRoutes = (resourceName) => {
+    app.post(`/api/${resourceName}`, async (req, res) => {
+        try {
+            await upsertEntity(resourceName, req.body.id, req.body);
+            res.json({ success: true });
+        } catch (e) { 
+            console.error(`${resourceName} Create Error:`, e);
+            res.status(500).json({ error: e.message }); 
+        }
+    });
 
-app.delete('/api/exhibits/:id', async (req, res) => {
-    try {
-        await deleteEntity('exhibits', req.params.id);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+    app.delete(`/api/${resourceName}/:id`, async (req, res) => {
+        try {
+            await deleteEntity(resourceName, req.params.id);
+            res.json({ success: true });
+        } catch (e) { 
+            console.error(`${resourceName} Delete Error:`, e);
+            res.status(500).json({ error: e.message }); 
+        }
+    });
+};
 
-// Collections
-app.post('/api/collections', async (req, res) => {
-    try {
-        await upsertEntity('collections', req.body.id, req.body);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/collections/:id', async (req, res) => {
-    try {
-        await deleteEntity('collections', req.params.id);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Notifications
-app.post('/api/notifications', async (req, res) => {
-    try {
-        await upsertEntity('notifications', req.body.id, req.body);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Messages
-app.post('/api/messages', async (req, res) => {
-    try {
-        await upsertEntity('messages', req.body.id, req.body);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Guestbook
-app.post('/api/guestbook', async (req, res) => {
-    try {
-        await upsertEntity('guestbook', req.body.id, req.body);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
+createCrudRoutes('exhibits');
+createCrudRoutes('collections');
+createCrudRoutes('notifications');
+createCrudRoutes('messages');
+createCrudRoutes('guestbook');
 
 // Fallback for SPA
 app.get('*', (req, res) => {

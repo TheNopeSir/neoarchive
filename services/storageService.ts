@@ -1,5 +1,6 @@
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
-import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
+import { supabase } from './supabaseClient';
 
 // Internal Cache
 let cache = {
@@ -47,7 +48,7 @@ const loadFromLocalCache = (): boolean => {
     return false;
 };
 
-// --- API COMMUNICATIONS ---
+// --- API COMMUNICATIONS (TIMEWEB) ---
 const apiCall = async (endpoint: string, method: string, data?: any) => {
     try {
         const res = await fetch(`${API_URL}${endpoint}`, {
@@ -62,8 +63,8 @@ const apiCall = async (endpoint: string, method: string, data?: any) => {
         }
         return await res.json();
     } catch (e) {
-        console.error(`🔴 API Call Failed [${endpoint}]:`, e);
-        throw e; // Пробрасываем ошибку дальше
+        console.warn(`⚠️ API Call Failed [${endpoint}]:`, e);
+        throw e;
     }
 };
 
@@ -77,13 +78,11 @@ export const fileToBase64 = (file: File): Promise<string> => {
 };
 
 // --- INITIALIZATION ---
-export const initializeDatabase = async () => {
-  if (cache.isLoaded) return;
-
-  // 1. Load optimistic cache first for speed
+export const initializeDatabase = async (): Promise<UserProfile | null> => {
+  // 1. Load optimistic cache first
   loadFromLocalCache();
 
-  // 2. Fetch full sync from Server (Postgres)
+  // 2. Sync Data from Timeweb
   try {
       const serverData = await apiCall('/sync', 'GET');
       if (serverData) {
@@ -93,22 +92,56 @@ export const initializeDatabase = async () => {
           cache.messages = serverData.messages || [];
           cache.guestbook = serverData.guestbook || [];
           cache.users = serverData.users || [];
-          
           cache.isLoaded = true;
           saveToLocalCache();
-          console.log("✅ Data synced with Timeweb Cloud");
       }
   } catch (e) {
-      console.warn("⚠️ Server unreachable, running in cached mode");
+      console.warn("⚠️ Timeweb server unreachable, running in cached mode");
   }
+
+  // 3. Check Supabase Session (Restore User)
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (session?.user) {
+      const username = session.user.user_metadata?.username;
+      if (username) {
+          // Try to find full profile in our Timeweb data
+          const userProfile = cache.users.find(u => u.username === username);
+          if (userProfile) return userProfile;
+          
+          // Fallback if profile missing in Timeweb but exists in Supabase
+          return {
+              username: username,
+              email: session.user.email || '',
+              tagline: 'Restored Session',
+              avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
+              joinedDate: new Date().toLocaleDateString(),
+              following: []
+          };
+      }
+  }
+  return null;
 };
 
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
-// --- AUTH ---
+// --- AUTH (SUPABASE + TIMEWEB SYNC) ---
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    const user: UserProfile = {
+    // 1. Create User in Supabase
+    const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+            data: { username } // Store username in Supabase metadata
+        }
+    });
+
+    if (error) throw new Error(error.message);
+    if (!data.user) throw new Error("Registration failed");
+
+    // 2. Create Profile
+    const userProfile: UserProfile = {
         username,
         email,
         tagline,
@@ -116,28 +149,66 @@ export const registerUser = async (username: string, password: string, tagline: 
         joinedDate: new Date().toLocaleString('ru-RU'),
         following: [],
         achievements: ['HELLO_WORLD'],
-        password, 
         isAdmin: false
     };
-    
-    // Register directly against DB
-    const res = await apiCall('/auth/register', 'POST', user);
-    
-    // Update local cache
-    cache.users.push(user);
+
+    // Save to local cache immediately so UI updates
+    cache.users.push(userProfile);
     saveToLocalCache();
+
+    // 3. Try to sync to Timeweb, but don't block registration if it fails
+    try {
+        await apiCall('/users/update', 'POST', userProfile);
+    } catch (e) {
+        console.warn("⚠️ Failed to sync new user to Timeweb (continuing in offline mode for now)", e);
+    }
     
-    return user;
+    return userProfile;
 };
 
-export const loginUser = async (login: string, password: string): Promise<UserProfile> => {
-    try {
-        // Authenticate against Timeweb DB
-        const user = await apiCall('/auth/login', 'POST', { login, password });
-        return user;
-    } catch (e) {
-        throw new Error("Неверный логин или пароль");
+export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
+    // 1. Auth with Supabase
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (error) throw new Error(error.message);
+    if (!data.user) throw new Error("Login failed");
+
+    const username = data.user.user_metadata?.username;
+    
+    if (!username) throw new Error("User profile corrupted (no username)");
+
+    // 2. Fetch/Sync Profile from Timeweb Cache
+    let userProfile = cache.users.find(u => u.username === username);
+
+    if (!userProfile) {
+        // Fallback: create a local profile if not found in DB
+        userProfile = {
+            username,
+            email: data.user.email || email,
+            tagline: 'Welcome back',
+            avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
+            joinedDate: new Date().toLocaleString('ru-RU'),
+            following: [],
+            achievements: []
+        };
+        
+        // Try to sync restoration
+        try {
+            await apiCall('/users/update', 'POST', userProfile);
+        } catch (e) {
+            console.warn("⚠️ Failed to sync user restoration to Timeweb", e);
+        }
     }
+
+    return userProfile;
+};
+
+export const logoutUser = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('neo_user'); // Legacy cleanup
 };
 
 export const updateUserProfile = async (user: UserProfile) => {
@@ -147,7 +218,7 @@ export const updateUserProfile = async (user: UserProfile) => {
     await apiCall('/users/update', 'POST', user).catch(console.error);
 };
 
-// --- CRUD OPERATIONS (Optimistic UI + API Sync) ---
+// --- CRUD OPERATIONS (TIMEWEB) ---
 
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
@@ -214,7 +285,6 @@ export const markNotificationsRead = async (recipient: string) => {
         }
     });
     saveToLocalCache();
-    // Batch updates not supported yet, loop calls (simple for now)
     toUpdate.forEach(n => apiCall('/notifications', 'POST', n).catch(console.error));
 };
 
