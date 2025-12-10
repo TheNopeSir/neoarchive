@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
 import dotenv from 'dotenv';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,7 +24,7 @@ app.use(express.static(path.join(__dirname, 'dist')));
 // --- DATABASE CONFIGURATION (Timeweb) ---
 const { Pool } = pg;
 
-// Fallback credentials in case .env fails to load in specific environments
+// Use provided credentials or fallback to hardcoded ones (for this specific user request)
 const dbConfig = {
     host: process.env.POSTGRESQL_HOST || 'a584c7ff2ab7c4ced51afbdd.twc1.net',
     port: parseInt(process.env.POSTGRESQL_PORT || '5432'),
@@ -31,7 +32,7 @@ const dbConfig = {
     database: process.env.POSTGRESQL_DBNAME || 'default_db',
     password: process.env.POSTGRESQL_PASSWORD || 'txO%AY~q4d8W%a',
     ssl: { rejectUnauthorized: false }, 
-    connectionTimeoutMillis: 10000 // Increased timeout
+    connectionTimeoutMillis: 5000 
 };
 
 console.log("🐘 [Server] DB Config Host:", dbConfig.host);
@@ -55,7 +56,7 @@ const initDB = async () => {
     try {
         console.log("🐘 [Server] Attempting to connect to Timeweb PostgreSQL...");
         client = await pool.connect();
-        console.log("✅ [Server] Connection established successfully!");
+        console.log("✅ [Server] DB Connection established successfully!");
         
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
@@ -91,6 +92,7 @@ const initDB = async () => {
         console.log("✅ [Server] Database schema ensured.");
     } catch (err) {
         console.error("⚠️ [Server] DB Initialization failed (Offline Mode Active):", err.message);
+        console.error("   Ensure 'default_db' exists in Timeweb dashboard or check .env credentials.");
     } finally {
         if (client) client.release();
     }
@@ -187,6 +189,23 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
+// Helper to find local IP
+function getLocalIp() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return '0.0.0.0';
+}
+
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ NeoArchive Server running on port ${PORT}`);
+    const ip = getLocalIp();
+    console.log(`\n🚀 NeoArchive Server running!`);
+    console.log(`   > Local:   http://localhost:${PORT}`);
+    console.log(`   > Network: http://${ip}:${PORT}`);
+    console.log(`   (Note: If accessing from mobile, ensure Firewall allows Node.js)\n`);
 });
