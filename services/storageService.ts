@@ -1,4 +1,3 @@
-
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
 
@@ -13,8 +12,8 @@ let cache = {
     isLoaded: false
 };
 
-const DEFAULT_USER: UserProfile = { ...MOCK_USER, email: 'neo@matrix.com' };
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
+const API_URL = '/api';
 
 // --- SLUG GENERATOR ---
 const slugify = (text: string): string => {
@@ -49,9 +48,6 @@ const loadFromLocalCache = (): boolean => {
 };
 
 // --- API COMMUNICATIONS ---
-const API_URL = '/api';
-
-// Generic Fetch Wrapper
 const apiCall = async (endpoint: string, method: string, data?: any) => {
     try {
         const res = await fetch(`${API_URL}${endpoint}`, {
@@ -59,11 +55,15 @@ const apiCall = async (endpoint: string, method: string, data?: any) => {
             headers: { 'Content-Type': 'application/json' },
             body: data ? JSON.stringify(data) : undefined
         });
-        if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+        
+        if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.error || `API Error: ${res.statusText}`);
+        }
         return await res.json();
     } catch (e) {
         console.error(`🔴 API Call Failed [${endpoint}]:`, e);
-        return null;
+        throw e; // Пробрасываем ошибку дальше
     }
 };
 
@@ -80,10 +80,10 @@ export const fileToBase64 = (file: File): Promise<string> => {
 export const initializeDatabase = async () => {
   if (cache.isLoaded) return;
 
-  // 1. Load optimistic cache
+  // 1. Load optimistic cache first for speed
   loadFromLocalCache();
 
-  // 2. Fetch full sync from Server (Postgres or File)
+  // 2. Fetch full sync from Server (Postgres)
   try {
       const serverData = await apiCall('/sync', 'GET');
       if (serverData) {
@@ -94,27 +94,12 @@ export const initializeDatabase = async () => {
           cache.guestbook = serverData.guestbook || [];
           cache.users = serverData.users || [];
           
-          if (cache.exhibits.length === 0 && cache.collections.length === 0) {
-               // First run fallback
-               console.log("⚠️ No server data, applying defaults");
-               cache.exhibits = [...INITIAL_EXHIBITS];
-               cache.collections = [...MOCK_COLLECTIONS];
-               cache.notifications = [...MOCK_NOTIFICATIONS];
-               cache.messages = [...MOCK_MESSAGES];
-               // Sync defaults back to server
-               cache.exhibits.forEach(e => apiCall('/exhibits', 'POST', e));
-          }
-          
           cache.isLoaded = true;
           saveToLocalCache();
+          console.log("✅ Data synced with Timeweb Cloud");
       }
   } catch (e) {
-      console.warn("⚠️ Server unreachable, running in offline mode");
-      if (!cache.isLoaded) {
-          cache.exhibits = [...INITIAL_EXHIBITS];
-          cache.collections = [...MOCK_COLLECTIONS];
-          cache.isLoaded = true;
-      }
+      console.warn("⚠️ Server unreachable, running in cached mode");
   }
 };
 
@@ -131,12 +116,12 @@ export const registerUser = async (username: string, password: string, tagline: 
         joinedDate: new Date().toLocaleString('ru-RU'),
         following: [],
         achievements: ['HELLO_WORLD'],
-        password, // In a real app, hash this!
+        password, 
         isAdmin: false
     };
     
+    // Register directly against DB
     const res = await apiCall('/auth/register', 'POST', user);
-    if (!res) throw new Error("Server Error");
     
     // Update local cache
     cache.users.push(user);
@@ -146,29 +131,23 @@ export const registerUser = async (username: string, password: string, tagline: 
 };
 
 export const loginUser = async (login: string, password: string): Promise<UserProfile> => {
-    // In this simple implementation, we check the cache which is synced with the server
-    // In a real production app, this should be a POST /auth/login call returning a token
-    const user = cache.users.find(u => (u.email === login || u.username === login) && u.password === password);
-    if (user) return user;
-    
-    // Force sync check if not found locally
-    const serverData = await apiCall('/sync', 'GET');
-    if (serverData && serverData.users) {
-        const found = serverData.users.find((u: UserProfile) => (u.email === login || u.username === login) && u.password === password);
-        if (found) return found;
+    try {
+        // Authenticate against Timeweb DB
+        const user = await apiCall('/auth/login', 'POST', { login, password });
+        return user;
+    } catch (e) {
+        throw new Error("Неверный логин или пароль");
     }
-
-    throw new Error("Неверный логин или пароль");
 };
 
 export const updateUserProfile = async (user: UserProfile) => {
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
     saveToLocalCache();
-    await apiCall('/users/update', 'POST', user);
+    await apiCall('/users/update', 'POST', user).catch(console.error);
 };
 
-// --- CRUD OPERATIONS ---
+// --- CRUD OPERATIONS (Optimistic UI + API Sync) ---
 
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
@@ -176,7 +155,7 @@ export const saveExhibit = async (exhibit: Exhibit) => {
   exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
   cache.exhibits.unshift(exhibit);
   saveToLocalCache();
-  await apiCall('/exhibits', 'POST', exhibit);
+  await apiCall('/exhibits', 'POST', exhibit).catch(console.error);
 };
 
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
@@ -184,14 +163,14 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
     saveToLocalCache();
-    await apiCall('/exhibits', 'POST', updatedExhibit);
+    await apiCall('/exhibits', 'POST', updatedExhibit).catch(console.error);
   }
 };
 
 export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
   saveToLocalCache();
-  await apiCall(`/exhibits/${id}`, 'DELETE');
+  await apiCall(`/exhibits/${id}`, 'DELETE').catch(console.error);
 };
 
 export const getCollections = (): Collection[] => cache.collections;
@@ -200,7 +179,7 @@ export const saveCollection = async (collection: Collection) => {
     collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
     cache.collections.unshift(collection);
     saveToLocalCache();
-    await apiCall('/collections', 'POST', collection);
+    await apiCall('/collections', 'POST', collection).catch(console.error);
 };
 
 export const updateCollection = async (updatedCollection: Collection) => {
@@ -208,14 +187,14 @@ export const updateCollection = async (updatedCollection: Collection) => {
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
         saveToLocalCache();
-        await apiCall('/collections', 'POST', updatedCollection);
+        await apiCall('/collections', 'POST', updatedCollection).catch(console.error);
     }
 };
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
     saveToLocalCache();
-    await apiCall(`/collections/${id}`, 'DELETE');
+    await apiCall(`/collections/${id}`, 'DELETE').catch(console.error);
 };
 
 export const getNotifications = (): Notification[] => cache.notifications;
@@ -223,18 +202,20 @@ export const getNotifications = (): Notification[] => cache.notifications;
 export const saveNotification = async (notif: Notification) => {
     cache.notifications.unshift(notif);
     saveToLocalCache();
-    await apiCall('/notifications', 'POST', notif);
+    await apiCall('/notifications', 'POST', notif).catch(console.error);
 };
 
 export const markNotificationsRead = async (recipient: string) => {
+    const toUpdate: Notification[] = [];
     cache.notifications.forEach(n => {
-        if (n.recipient === recipient) {
+        if (n.recipient === recipient && !n.isRead) {
              n.isRead = true;
-             // Send update to server for each modified notif (simplified)
-             apiCall('/notifications', 'POST', n);
+             toUpdate.push(n);
         }
     });
     saveToLocalCache();
+    // Batch updates not supported yet, loop calls (simple for now)
+    toUpdate.forEach(n => apiCall('/notifications', 'POST', n).catch(console.error));
 };
 
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
@@ -242,7 +223,7 @@ export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
     saveToLocalCache();
-    await apiCall('/guestbook', 'POST', entry);
+    await apiCall('/guestbook', 'POST', entry).catch(console.error);
 };
 
 export const getMessages = (): Message[] => cache.messages;
@@ -250,15 +231,17 @@ export const getMessages = (): Message[] => cache.messages;
 export const saveMessage = async (msg: Message) => {
     cache.messages.push(msg);
     saveToLocalCache();
-    await apiCall('/messages', 'POST', msg);
+    await apiCall('/messages', 'POST', msg).catch(console.error);
 };
 
 export const markMessagesRead = (sender: string, receiver: string) => {
+    const toUpdate: Message[] = [];
     cache.messages.forEach(m => {
-        if (m.sender === sender && m.receiver === receiver) {
+        if (m.sender === sender && m.receiver === receiver && !m.isRead) {
             m.isRead = true;
-            apiCall('/messages', 'POST', m);
+            toUpdate.push(m);
         }
     });
     saveToLocalCache();
+    toUpdate.forEach(m => apiCall('/messages', 'POST', m).catch(console.error));
 };
