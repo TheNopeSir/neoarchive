@@ -1,9 +1,8 @@
 
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
-import { supabase } from './supabaseClient';
 
-// Локальный кэш для быстрого отображения (Optimistic UI)
+// Internal Cache
 let cache = {
     exhibits: [] as Exhibit[],
     collections: [] as Collection[],
@@ -15,7 +14,7 @@ let cache = {
 };
 
 const DEFAULT_USER: UserProfile = { ...MOCK_USER, email: 'neo@matrix.com' };
-const LOCAL_STORAGE_KEY = 'neo_archive_db_v1';
+const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 
 // --- SLUG GENERATOR ---
 const slugify = (text: string): string => {
@@ -23,166 +22,48 @@ const slugify = (text: string): string => {
         .toString()
         .toLowerCase()
         .trim()
-        .replace(/\s+/g, '-')           // Replace spaces with -
-        .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
-        .replace(/\-\-+/g, '-')         // Replace multiple - with single -
-        .replace(/^-+/, '')             // Trim - from start
-        .replace(/-+$/, '');            // Trim - from end
+        .replace(/\s+/g, '-')
+        .replace(/[^\w\-]+/g, '')
+        .replace(/\-\-+/g, '-')
+        .replace(/^-+/, '')
+        .replace(/-+$/, '');
 };
 
-// --- PERSISTENCE HELPERS ---
-
-const saveToLocal = () => {
+// --- CLIENT CACHE ---
+const saveToLocalCache = () => {
     try {
-        const dataToSave = {
-            exhibits: cache.exhibits,
-            collections: cache.collections,
-            notifications: cache.notifications,
-            messages: cache.messages,
-            guestbook: cache.guestbook,
-            users: cache.users
-        };
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
-    } catch (e) {
-        console.error("🔴 [Storage] Failed to save to LocalStorage", e);
-    }
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cache));
+    } catch (e) { console.error("Cache Error", e); }
 };
 
-const loadFromLocal = (): boolean => {
+const loadFromLocalCache = (): boolean => {
     const json = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (json) {
         try {
             const data = JSON.parse(json);
-            cache.exhibits = data.exhibits || [];
-            cache.collections = data.collections || [];
-            cache.notifications = data.notifications || [];
-            cache.messages = data.messages || [];
-            cache.guestbook = data.guestbook || [];
-            cache.users = data.users || [];
+            cache = { ...cache, ...data, isLoaded: true };
             return true;
-        } catch (e) {
-            console.error("🔴 [Storage] LocalStorage Corrupted", e);
-            return false;
-        }
+        } catch (e) { return false; }
     }
     return false;
 };
 
-// --- DATA MAPPING HELPERS (Supabase snake_case <-> App camelCase) ---
+// --- API COMMUNICATIONS ---
+const API_URL = '/api';
 
-const mapExhibitFromDB = (row: any): Exhibit => ({
-    id: row.id,
-    slug: row.slug || row.id, // Fallback to ID if no slug
-    title: row.title,
-    description: row.description,
-    imageUrls: row.image_urls || [],
-    videoUrl: row.video_url,
-    category: row.category,
-    owner: row.owner,
-    timestamp: row.timestamp,
-    likes: row.likes,
-    likedBy: row.liked_by || [],
-    views: row.views,
-    condition: row.condition,
-    quality: row.quality,
-    specs: row.specs || {},
-    comments: row.comments || []
-});
-
-const mapExhibitToDB = (item: Exhibit) => ({
-    id: item.id,
-    slug: item.slug,
-    title: item.title,
-    description: item.description,
-    image_urls: item.imageUrls,
-    video_url: item.videoUrl,
-    category: item.category,
-    owner: item.owner,
-    timestamp: item.timestamp,
-    likes: item.likes,
-    liked_by: item.likedBy,
-    views: item.views,
-    condition: item.condition,
-    quality: item.quality,
-    specs: item.specs,
-    comments: item.comments
-});
-
-const mapCollectionFromDB = (row: any): Collection => ({
-    id: row.id,
-    slug: row.slug || row.id,
-    title: row.title,
-    description: row.description,
-    owner: row.owner,
-    coverImage: row.cover_image,
-    exhibitIds: row.exhibit_ids || [],
-    timestamp: row.timestamp
-});
-
-const mapCollectionToDB = (item: Collection) => ({
-    id: item.id,
-    slug: item.slug,
-    title: item.title,
-    description: item.description,
-    owner: item.owner,
-    cover_image: item.coverImage,
-    exhibit_ids: item.exhibitIds,
-    timestamp: item.timestamp
-});
-
-// --- CORE LOAD FUNCTION ---
-
-const loadFromSupabase = async () => {
+// Generic Fetch Wrapper
+const apiCall = async (endpoint: string, method: string, data?: any) => {
     try {
-        console.log("☁️ [Storage] Syncing with Cloud Database...");
-        
-        // 1. Exhibits
-        const { data: exData, error: exError } = await supabase.from('exhibits').select('*').order('timestamp', { ascending: false });
-        if (!exError && exData && exData.length > 0) {
-            // Only overwrite if we got data back, otherwise keep local (offline support)
-            cache.exhibits = exData.map(mapExhibitFromDB);
-        }
-
-        // 2. Collections
-        const { data: colData, error: colError } = await supabase.from('collections').select('*');
-        if (!colError && colData && colData.length > 0) {
-            cache.collections = colData.map(mapCollectionFromDB);
-        }
-
-        // 3. Notifications
-        const { data: notifData, error: notifError } = await supabase.from('notifications').select('*').order('timestamp', { ascending: false }).limit(50);
-        if (!notifError && notifData && notifData.length > 0) {
-            cache.notifications = notifData.map((row: any) => ({
-                id: row.id,
-                type: row.type,
-                actor: row.actor,
-                recipient: row.recipient,
-                targetId: row.target_id,
-                targetPreview: row.target_preview,
-                timestamp: row.timestamp,
-                isRead: row.is_read
-            }));
-        }
-
-        // 4. Guestbook
-        const { data: gbData, error: gbError } = await supabase.from('guestbook').select('*').order('timestamp', { ascending: false });
-        if (!gbError && gbData && gbData.length > 0) {
-            cache.guestbook = gbData.map((row: any) => ({
-                id: row.id,
-                author: row.author,
-                targetUser: row.target_user,
-                text: row.text,
-                timestamp: row.timestamp,
-                isRead: row.is_read
-            }));
-        }
-        
-        console.log("✅ [Storage] Cloud Sync Complete");
-        // Update local storage with fresh cloud data
-        saveToLocal();
-
+        const res = await fetch(`${API_URL}${endpoint}`, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: data ? JSON.stringify(data) : undefined
+        });
+        if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+        return await res.json();
     } catch (e) {
-        console.error("🔴 [Storage] Sync Failed:", e);
+        console.error(`🔴 API Call Failed [${endpoint}]:`, e);
+        return null;
     }
 };
 
@@ -195,220 +76,189 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+// --- INITIALIZATION ---
 export const initializeDatabase = async () => {
   if (cache.isLoaded) return;
 
-  // 1. Load from Local Storage FIRST (Instant)
-  const hasLocalData = loadFromLocal();
-  
-  // 2. If completely empty (first run), load Mocks
-  if (!hasLocalData || cache.exhibits.length === 0) {
-      console.log("⚠️ [Storage] No Local Data, applying defaults");
-      cache.exhibits = [...INITIAL_EXHIBITS];
-      cache.collections = [...MOCK_COLLECTIONS];
-      cache.notifications = [...MOCK_NOTIFICATIONS];
-      cache.messages = [...MOCK_MESSAGES];
-      cache.users = [DEFAULT_USER];
-      saveToLocal();
-  } else {
-      console.log("🟢 [Storage] Restored from Local Storage");
+  // 1. Load optimistic cache
+  loadFromLocalCache();
+
+  // 2. Fetch full sync from Server (Postgres or File)
+  try {
+      const serverData = await apiCall('/sync', 'GET');
+      if (serverData) {
+          cache.exhibits = serverData.exhibits || [];
+          cache.collections = serverData.collections || [];
+          cache.notifications = serverData.notifications || [];
+          cache.messages = serverData.messages || [];
+          cache.guestbook = serverData.guestbook || [];
+          cache.users = serverData.users || [];
+          
+          if (cache.exhibits.length === 0 && cache.collections.length === 0) {
+               // First run fallback
+               console.log("⚠️ No server data, applying defaults");
+               cache.exhibits = [...INITIAL_EXHIBITS];
+               cache.collections = [...MOCK_COLLECTIONS];
+               cache.notifications = [...MOCK_NOTIFICATIONS];
+               cache.messages = [...MOCK_MESSAGES];
+               // Sync defaults back to server
+               cache.exhibits.forEach(e => apiCall('/exhibits', 'POST', e));
+          }
+          
+          cache.isLoaded = true;
+          saveToLocalCache();
+      }
+  } catch (e) {
+      console.warn("⚠️ Server unreachable, running in offline mode");
+      if (!cache.isLoaded) {
+          cache.exhibits = [...INITIAL_EXHIBITS];
+          cache.collections = [...MOCK_COLLECTIONS];
+          cache.isLoaded = true;
+      }
   }
-
-  cache.isLoaded = true;
-
-  // 3. Try to sync with Supabase in background (don't await strictly if offline)
-  loadFromSupabase();
 };
 
-export const getFullDatabase = () => {
-    return { ...cache, timestamp: new Date().toISOString() };
-};
+export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
-// --- AUTH HELPERS ---
-
-const mapSupabaseUser = (sbUser: any): UserProfile => {
-    return {
-        username: sbUser.user_metadata?.username || sbUser.email?.split('@')[0] || 'Unknown',
-        email: sbUser.email || '',
-        tagline: sbUser.user_metadata?.tagline || 'Новый пользователь',
-        avatarUrl: `https://ui-avatars.com/api/?name=${sbUser.user_metadata?.username || 'U'}&background=random`,
-        joinedDate: new Date(sbUser.created_at).toLocaleDateString('ru-RU'),
-        following: [],
-        achievements: [],
-        isAdmin: false
-    };
-};
+// --- AUTH ---
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    const { data, error } = await supabase.auth.signUp({
+    const user: UserProfile = {
+        username,
         email,
-        password,
-        options: { data: { username, tagline } }
-    });
-    if (error) throw new Error(error.message);
-    if (data.user) return mapSupabaseUser(data.user);
-    throw new Error("Ошибка регистрации");
+        tagline,
+        avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random`,
+        joinedDate: new Date().toLocaleString('ru-RU'),
+        following: [],
+        achievements: ['HELLO_WORLD'],
+        password, // In a real app, hash this!
+        isAdmin: false
+    };
+    
+    const res = await apiCall('/auth/register', 'POST', user);
+    if (!res) throw new Error("Server Error");
+    
+    // Update local cache
+    cache.users.push(user);
+    saveToLocalCache();
+    
+    return user;
 };
 
 export const loginUser = async (login: string, password: string): Promise<UserProfile> => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email: login, password });
-    if (error) throw new Error("Неверный логин или пароль");
-    if (data.user) return mapSupabaseUser(data.user);
-    throw new Error("Пользователь не найден");
+    // In this simple implementation, we check the cache which is synced with the server
+    // In a real production app, this should be a POST /auth/login call returning a token
+    const user = cache.users.find(u => (u.email === login || u.username === login) && u.password === password);
+    if (user) return user;
+    
+    // Force sync check if not found locally
+    const serverData = await apiCall('/sync', 'GET');
+    if (serverData && serverData.users) {
+        const found = serverData.users.find((u: UserProfile) => (u.email === login || u.username === login) && u.password === password);
+        if (found) return found;
+    }
+
+    throw new Error("Неверный логин или пароль");
 };
 
 export const updateUserProfile = async (user: UserProfile) => {
-    // Обновляем метаданные в Supabase Auth
-    const { error } = await supabase.auth.updateUser({
-        data: { tagline: user.tagline, avatar_url: user.avatarUrl } // Note: avatar_url key for standard metadata
-    });
-    
-    // Обновляем локальный кэш
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
-    else cache.users.push(user);
-    
-    saveToLocal(); // PERSIST
-
-    // Обновляем сессию
-    const currentSessionStr = localStorage.getItem('neo_user');
-    if (currentSessionStr) {
-        const currentSession = JSON.parse(currentSessionStr);
-        if (currentSession.username === user.username) {
-             localStorage.setItem('neo_user', JSON.stringify(user));
-        }
-    }
+    saveToLocalCache();
+    await apiCall('/users/update', 'POST', user);
 };
 
-// --- EXHIBITS CRUD ---
+// --- CRUD OPERATIONS ---
 
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
 export const saveExhibit = async (exhibit: Exhibit) => {
-  // Generate Slug
-  const baseSlug = slugify(exhibit.title);
-  const uniqueSuffix = Date.now().toString().slice(-4);
-  exhibit.slug = `${baseSlug}-${uniqueSuffix}`;
-
-  // Optimistic Update & Local Save
+  exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
   cache.exhibits.unshift(exhibit);
-  saveToLocal();
-  
-  // Async Cloud Save
-  const { error } = await supabase.from('exhibits').insert(mapExhibitToDB(exhibit));
-  if (error) console.error("Cloud Save Error (Exhibit):", error);
+  saveToLocalCache();
+  await apiCall('/exhibits', 'POST', exhibit);
 };
 
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
   const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
-    saveToLocal();
-    
-    const { error } = await supabase.from('exhibits')
-        .update(mapExhibitToDB(updatedExhibit))
-        .eq('id', updatedExhibit.id);
-        
-    if (error) console.error("Cloud Update Error (Exhibit):", error);
+    saveToLocalCache();
+    await apiCall('/exhibits', 'POST', updatedExhibit);
   }
 };
 
 export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
-  saveToLocal();
-  const { error } = await supabase.from('exhibits').delete().eq('id', id);
-  if (error) console.error("Cloud Delete Error:", error);
+  saveToLocalCache();
+  await apiCall(`/exhibits/${id}`, 'DELETE');
 };
-
-// --- COLLECTIONS CRUD ---
 
 export const getCollections = (): Collection[] => cache.collections;
 
 export const saveCollection = async (collection: Collection) => {
-    // Generate Slug
-    const baseSlug = slugify(collection.title);
-    const uniqueSuffix = Date.now().toString().slice(-4);
-    collection.slug = `${baseSlug}-${uniqueSuffix}`;
-
+    collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
     cache.collections.unshift(collection);
-    saveToLocal();
-    const { error } = await supabase.from('collections').insert(mapCollectionToDB(collection));
-    if (error) console.error("Cloud Save Error (Collection):", error);
+    saveToLocalCache();
+    await apiCall('/collections', 'POST', collection);
 };
 
 export const updateCollection = async (updatedCollection: Collection) => {
     const index = cache.collections.findIndex(c => c.id === updatedCollection.id);
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
-        saveToLocal();
-        const { error } = await supabase.from('collections')
-            .update(mapCollectionToDB(updatedCollection))
-            .eq('id', updatedCollection.id);
-        if (error) console.error("Cloud Update Error (Collection):", error);
+        saveToLocalCache();
+        await apiCall('/collections', 'POST', updatedCollection);
     }
 };
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
-    saveToLocal();
-    const { error } = await supabase.from('collections').delete().eq('id', id);
-    if (error) console.error("Cloud Delete Error:", error);
+    saveToLocalCache();
+    await apiCall(`/collections/${id}`, 'DELETE');
 };
-
-// --- NOTIFICATIONS & GUESTBOOK ---
 
 export const getNotifications = (): Notification[] => cache.notifications;
 
 export const saveNotification = async (notif: Notification) => {
     cache.notifications.unshift(notif);
-    saveToLocal();
-    const dbNotif = {
-        id: notif.id,
-        type: notif.type,
-        actor: notif.actor,
-        recipient: notif.recipient,
-        target_id: notif.targetId,
-        target_preview: notif.targetPreview,
-        timestamp: notif.timestamp,
-        is_read: notif.isRead
-    };
-    await supabase.from('notifications').insert(dbNotif);
+    saveToLocalCache();
+    await apiCall('/notifications', 'POST', notif);
 };
 
 export const markNotificationsRead = async (recipient: string) => {
     cache.notifications.forEach(n => {
-        if (n.recipient === recipient) n.isRead = true;
+        if (n.recipient === recipient) {
+             n.isRead = true;
+             // Send update to server for each modified notif (simplified)
+             apiCall('/notifications', 'POST', n);
+        }
     });
-    saveToLocal();
-    // Batch update via logic is hard, doing by recipient is easier
-    await supabase.from('notifications').update({ is_read: true }).eq('recipient', recipient);
+    saveToLocalCache();
 };
 
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 
 export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
-    saveToLocal();
-    const dbEntry = {
-        id: entry.id,
-        author: entry.author,
-        target_user: entry.targetUser,
-        text: entry.text,
-        timestamp: entry.timestamp,
-        is_read: entry.isRead
-    };
-    await supabase.from('guestbook').insert(dbEntry);
+    saveToLocalCache();
+    await apiCall('/guestbook', 'POST', entry);
 };
 
-// Messages are local-only for now in this demo (or use similar logic)
 export const getMessages = (): Message[] => cache.messages;
-export const saveMessage = (msg: Message) => {
+
+export const saveMessage = async (msg: Message) => {
     cache.messages.push(msg);
-    saveToLocal();
+    saveToLocalCache();
+    await apiCall('/messages', 'POST', msg);
 };
+
 export const markMessagesRead = (sender: string, receiver: string) => {
     cache.messages.forEach(m => {
-        if (m.sender === sender && m.receiver === receiver) m.isRead = true;
+        if (m.sender === sender && m.receiver === receiver) {
+            m.isRead = true;
+            apiCall('/messages', 'POST', m);
+        }
     });
-    saveToLocal();
+    saveToLocalCache();
 };
