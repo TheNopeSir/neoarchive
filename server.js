@@ -6,10 +6,11 @@ import { fileURLToPath } from 'url';
 import pg from 'pg';
 import dotenv from 'dotenv';
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Explicitly load .env from root
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -22,14 +23,15 @@ app.use(express.static(path.join(__dirname, 'dist')));
 // --- DATABASE CONFIGURATION (Timeweb) ---
 const { Pool } = pg;
 
+// Fallback credentials in case .env fails to load in specific environments
 const dbConfig = {
-    host: process.env.POSTGRESQL_HOST || process.env.PGHOST,
-    port: parseInt(process.env.POSTGRESQL_PORT || process.env.PGPORT || '5432'),
-    user: process.env.POSTGRESQL_USER || process.env.PGUSER,
-    database: process.env.POSTGRESQL_DBNAME || process.env.PGDATABASE,
-    password: process.env.POSTGRESQL_PASSWORD || process.env.PGPASSWORD,
-    ssl: { rejectUnauthorized: false }, // Required for many cloud providers
-    connectionTimeoutMillis: 5000 // Fail fast
+    host: process.env.POSTGRESQL_HOST || 'a584c7ff2ab7c4ced51afbdd.twc1.net',
+    port: parseInt(process.env.POSTGRESQL_PORT || '5432'),
+    user: process.env.POSTGRESQL_USER || 'gen_user',
+    database: process.env.POSTGRESQL_DBNAME || 'default_db',
+    password: process.env.POSTGRESQL_PASSWORD || 'txO%AY~q4d8W%a',
+    ssl: { rejectUnauthorized: false }, 
+    connectionTimeoutMillis: 10000 // Increased timeout
 };
 
 console.log("🐘 [Server] DB Config Host:", dbConfig.host);
@@ -89,7 +91,6 @@ const initDB = async () => {
         console.log("✅ [Server] Database schema ensured.");
     } catch (err) {
         console.error("⚠️ [Server] DB Initialization failed (Offline Mode Active):", err.message);
-        // We do NOT exit the process. The server will act as a static file server + API returning errors.
     } finally {
         if (client) client.release();
     }
@@ -126,7 +127,7 @@ app.get('/api/sync', async (req, res) => {
             guestbook: gb.rows.map(r => r.data),
         });
     } catch (e) {
-        // Return 503 Service Unavailable so frontend knows to use cache
+        console.error("Sync Error:", e.message);
         res.status(503).json({ error: "Database Unavailable", details: e.message });
     }
 });

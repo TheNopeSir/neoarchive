@@ -65,13 +65,13 @@ const apiCall = async (endpoint: string, method: string, data?: any) => {
         if (!res.ok) {
             const errBody = await res.json().catch(() => ({}));
             // If 404, it might be an old endpoint, just ignore
-            if (res.status === 404) throw new Error("Endpoint not found");
+            if (res.status === 404) throw new Error(`Endpoint ${endpoint} not found`);
             throw new Error(errBody.error || `API Error: ${res.statusText}`);
         }
         return await res.json();
     } catch (e) {
         // Log but do not crash the app logic unless critical
-        console.warn(`⚠️ API Call Failed [${endpoint}]:`, e);
+        console.warn(`⚠️ API Call Failed [${endpoint}] (using cache):`, e);
         throw e;
     }
 };
@@ -153,6 +153,11 @@ export const registerUser = async (username: string, password: string, tagline: 
         throw new Error(error.message);
     }
     
+    // Note: Supabase might require email confirmation, data.user might be null if autoconfirm is off
+    if (!data.user && !error) {
+        throw new Error("Подтвердите email для завершения регистрации");
+    }
+
     if (!data.user) throw new Error("Registration failed - No user data returned");
 
     // 2. Create Profile Object
