@@ -93,7 +93,8 @@ try {
 const getDb = () => {
   try {
     if (!fs.existsSync(DB_FILE)) return INITIAL_DB_STATE;
-    return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+    const data = fs.readFileSync(DB_FILE, 'utf-8');
+    return data ? JSON.parse(data) : INITIAL_DB_STATE;
   } catch (e) {
     console.error("Error reading DB:", e);
     return INITIAL_DB_STATE;
@@ -183,7 +184,6 @@ const startServer = (port) => {
                     );
 
                     res.writeHead(200, { 'Content-Type': 'application/json' });
-                    // We send debugCode for testing if email fails, but generally rely on email
                     res.end(JSON.stringify({ 
                         success: true, 
                         message: emailSent ? 'Code sent via Email.' : 'SMTP Error. Check server console.',
@@ -218,7 +218,7 @@ const startServer = (port) => {
                         avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random`,
                         joinedDate: new Date().toLocaleDateString('ru-RU'),
                         following: [],
-                        password, // Storing plain text as requested by architecture (Not production safe)
+                        password, 
                         isAdmin: false
                     };
 
@@ -248,20 +248,58 @@ const startServer = (port) => {
                     return;
                 }
 
-                if (pathname === '/api/auth/google') {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ success: true, message: "Google Auth Link Established (Simulation Mode)", mockToken: "g_token_" + Date.now() }));
-                    return;
-                }
-
-                // Get DB
+                // 3. Get DB (Read-Only/Initial Load)
                 if (pathname === '/api/db' && req.method === 'GET') {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify(getDb()));
                     return;
                 }
 
-                // Sync
+                // 4. Granular CRUD Operations (The "Real" Storage Logic)
+                if (pathname === '/api/data/manage' && req.method === 'POST') {
+                    const { action, collection, item, id } = await getBody();
+                    
+                    if (!action || !collection) {
+                         res.writeHead(400, { 'Content-Type': 'application/json' });
+                         res.end(JSON.stringify({ error: "Missing action or collection" }));
+                         return;
+                    }
+
+                    const db = getDb();
+                    // Ensure collection exists
+                    if (!db[collection]) db[collection] = [];
+
+                    if (action === 'create') {
+                        // Prepend for exhibits/notifications (LIFO), append for others if needed
+                        if (['exhibits', 'notifications'].includes(collection)) {
+                            db[collection].unshift(item);
+                        } else {
+                            db[collection].push(item);
+                        }
+                    } 
+                    else if (action === 'update') {
+                        // Find by ID or Username (for users)
+                        const key = collection === 'users' ? 'username' : 'id';
+                        const val = collection === 'users' ? item.username : item.id;
+                        
+                        const index = db[collection].findIndex(i => i[key] === val);
+                        if (index !== -1) {
+                            db[collection][index] = item;
+                        }
+                    } 
+                    else if (action === 'delete') {
+                        db[collection] = db[collection].filter(i => i.id !== id);
+                    }
+
+                    saveDb(db); // Persist to Disk
+                    console.log(`💾 [DB] ${action.toUpperCase()} on ${collection}`);
+                    
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true }));
+                    return;
+                }
+
+                // 5. Bulk Sync (Legacy/Fallback)
                 if (pathname === '/api/sync' && req.method === 'POST') {
                     const { key, data } = await getBody();
                     if (key && data) {
@@ -274,7 +312,7 @@ const startServer = (port) => {
                     return;
                 }
 
-                // Reset
+                // 6. Reset DB
                 if (pathname === '/api/reset' && req.method === 'POST') {
                     saveDb(INITIAL_DB_STATE);
                     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -282,7 +320,6 @@ const startServer = (port) => {
                     return;
                 }
 
-                // API 404
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'API Endpoint Not Found' }));
                 return;
@@ -290,7 +327,7 @@ const startServer = (port) => {
 
             // --- STATIC FILE SERVING ---
             let filePath = path.join(DIST_DIR, pathname === '/' ? 'index.html' : pathname);
-            // Security: Prevent directory traversal
+            
             if (!filePath.startsWith(DIST_DIR)) {
                 res.writeHead(403);
                 res.end('Forbidden');
@@ -305,21 +342,19 @@ const startServer = (port) => {
                     res.writeHead(200, { 'Content-Type': mime });
                     res.end(content);
                 } else {
-                    // SPA Fallback
                     if (err.code === 'ENOENT' && !ext) {
                         fs.readFile(path.join(DIST_DIR, 'index.html'), (err2, content2) => {
                             if (!err2) {
                                 res.writeHead(200, { 'Content-Type': 'text/html' });
                                 res.end(content2);
                             } else {
-                                console.error("🔴 [Server] index.html missing in dist!");
                                 res.writeHead(500, { 'Content-Type': 'text/plain' });
-                                res.end('Server Error: Frontend build missing. Run "npm run build".');
+                                res.end('Server Error: Build missing.');
                             }
                         });
                     } else {
-                        res.writeHead(404, { 'Content-Type': 'text/plain' });
-                        res.end('404 Not Found');
+                        res.writeHead(404);
+                        res.end('Not Found');
                     }
                 }
             });
