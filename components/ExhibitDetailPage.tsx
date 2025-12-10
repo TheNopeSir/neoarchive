@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   ChevronLeft, 
@@ -81,10 +80,12 @@ export default function ExhibitDetailPage({
   };
 
   const handleNativeShare = async () => {
+      // Use the current URL which now contains the hash (e.g. /#/exhibit/123)
+      const urlToShare = window.location.href; 
       const shareData = {
           title: `NeoArchive: ${exhibit.title}`,
           text: exhibit.description,
-          url: window.location.href
+          url: urlToShare
       };
 
       if (navigator.share) {
@@ -96,7 +97,7 @@ export default function ExhibitDetailPage({
       } else {
           // Fallback
           try {
-              await navigator.clipboard.writeText(window.location.href);
+              await navigator.clipboard.writeText(urlToShare);
               setShareCopied(true);
               setTimeout(() => setShareCopied(false), 2000);
           } catch (err) {
@@ -244,8 +245,8 @@ export default function ExhibitDetailPage({
                           <TierIcon size={10} /> {tier.name}
                       </div>
                   </div>
-                  {/* Title with overflow protection - REDUCED SIZE */}
-                  <h1 className="text-lg md:text-2xl lg:text-3xl font-bold font-pixel mb-2 leading-tight break-words">
+                  {/* Title with overflow protection - ADJUSTED SIZE */}
+                  <h1 className="text-xl md:text-2xl lg:text-3xl font-bold font-pixel mb-2 leading-tight break-words">
                     {exhibit.title}
                   </h1>
                </div>

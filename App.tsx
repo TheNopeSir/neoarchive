@@ -47,7 +47,8 @@ import {
   Link,
   Smartphone,
   Laptop,
-  Video
+  Video,
+  Image as ImageIcon
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -186,14 +187,59 @@ export default function App() {
              const savedUser = JSON.parse(savedUserStr);
              console.log("🟢 [App] Restoring session for:", savedUser.username);
              setUser(savedUser);
-             setView('FEED');
              refreshData();
+             // View logic handled in Hash Routing Effect below
         } else {
              setView('AUTH');
         }
     };
     init();
   }, []);
+
+  // --- HASH ROUTING / DEEP LINKING ---
+  useEffect(() => {
+      // Logic to handle URL hash changes for deep linking
+      const handleHashChange = () => {
+          if (!user && view === 'AUTH') return; // Don't route if not auth (unless public view allowed)
+          
+          const hash = window.location.hash;
+          if (hash.startsWith('#/exhibit/')) {
+              const id = hash.split('/')[2];
+              const item = exhibits.find(e => e.id === id);
+              if (item) {
+                  setSelectedExhibit(item);
+                  setView('EXHIBIT');
+              }
+          } else if (hash.startsWith('#/collection/')) {
+              const id = hash.split('/')[2];
+              const col = collections.find(c => c.id === id);
+              if (col) {
+                  setSelectedCollection(col);
+                  setView('COLLECTION_DETAIL');
+              }
+          } else if (hash.startsWith('#/profile/')) {
+              const username = hash.split('/')[2];
+              if (username) {
+                  setViewedProfile(username);
+                  setView('USER_PROFILE');
+              }
+          } else if (hash === '#/feed' || hash === '') {
+              if (view !== 'AUTH') setView('FEED');
+          }
+      };
+
+      // Run on exhibits load and hash change
+      if (exhibits.length > 0) {
+          handleHashChange();
+      }
+
+      window.addEventListener('hashchange', handleHashChange);
+      return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [exhibits, collections, user]);
+
+  const updateHash = (path: string) => {
+      window.history.pushState(null, '', `#${path}`);
+  };
 
   // Reset pagination when context changes
   useEffect(() => {
@@ -241,6 +287,7 @@ export default function App() {
       }
       
       setView('FEED');
+      updateHash('/feed');
       refreshData();
   };
 
@@ -250,6 +297,7 @@ export default function App() {
       sessionStorage.removeItem('neo_user');
       setUser(null);
       setView('AUTH');
+      window.location.hash = '';
   };
 
   const handleShuffle = () => {
@@ -277,11 +325,13 @@ export default function App() {
       }
 
       setView('EXHIBIT');
+      updateHash(`/exhibit/${item.id}`);
   };
 
   const handleCollectionClick = (col: Collection) => {
       setSelectedCollection(col);
       setView('COLLECTION_DETAIL');
+      updateHash(`/collection/${col.id}`);
   };
 
   const handleAuthorClick = (author: string) => {
@@ -290,12 +340,14 @@ export default function App() {
       setBadgeIndex(0); // Reset carousel
       setIsEditingProfile(false); // Reset edit state
       setView('USER_PROFILE');
+      updateHash(`/profile/${author}`);
   };
 
   const handleBack = () => {
       setSelectedExhibit(null);
       setSelectedCollection(null);
       setView('FEED');
+      updateHash('/feed');
       refreshData();
   };
 
@@ -357,6 +409,7 @@ export default function App() {
      });
      setIsLoading(false);
      setView('FEED');
+     updateHash('/feed');
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -948,6 +1001,7 @@ export default function App() {
                                               onClick={() => {
                                                   setSelectedCategory(cat);
                                                   setView('FEED');
+                                                  updateHash('/feed');
                                               }}
                                               className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${
                                                   theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'
@@ -1266,7 +1320,7 @@ export default function App() {
                      </div>
                  </div>
 
-                 {/* Image Upload Section */}
+                 {/* Image Upload Section - SPLIT INTO CAMERA AND GALLERY */}
                  <div className="space-y-1">
                     <label className="text-[10px] font-pixel uppercase opacity-70">ИЗОБРАЖЕНИЯ (МИН. 1) *</label>
                     <div className="flex flex-wrap gap-2 mb-2">
@@ -1281,11 +1335,27 @@ export default function App() {
                                  </button>
                              </div>
                         ))}
+                        
+                        {/* Gallery Option */}
                         <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
                             theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'
                         }`}>
-                            <Camera size={24} className="opacity-50" />
-                            <span className="text-[8px] font-pixel mt-1 opacity-50">ФОТО</span>
+                            <ImageIcon size={20} className="opacity-50" />
+                            <span className="text-[8px] font-pixel mt-1 opacity-50">ГАЛЕРЕЯ</span>
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={handleImageUpload}
+                            />
+                        </label>
+
+                        {/* Camera Option */}
+                        <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
+                            theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'
+                        }`}>
+                            <Camera size={20} className="opacity-50" />
+                            <span className="text-[8px] font-pixel mt-1 opacity-50">КАМЕРА</span>
                             <input 
                                 type="file" 
                                 accept="image/*" 
@@ -1496,7 +1566,7 @@ export default function App() {
              <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32">
                  <button onClick={() => setView('FEED')} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
                      <ArrowLeft size={16} /> НАЗАД
-                 </button>
+                  </button>
                  
                  <div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
                      <div className="relative">
@@ -1600,6 +1670,14 @@ export default function App() {
                          })}
                      </div>
                  )}
+
+                 {/* Hall of Fame Link */}
+                 <button 
+                    onClick={() => setView('HALL_OF_FAME')}
+                    className="w-full py-3 border border-dashed border-gray-500/30 text-xs font-pixel opacity-70 hover:opacity-100 flex items-center justify-center gap-2"
+                 >
+                     <Trophy size={14} /> ОТКРЫТЬ ЗАЛ СЛАВЫ
+                 </button>
                  
                  {/* Tabs */}
                  <div className="flex gap-4 border-b border-gray-500/30">
@@ -1673,7 +1751,7 @@ export default function App() {
                 exhibit={selectedExhibit}
                 theme={theme}
                 onBack={handleBack}
-                onShare={(id: string) => alert(`Share ${id}`)}
+                onShare={(id: string) => { /* handled internally */ }}
                 onFavorite={(id: string) => toggleFavorite(id)}
                 onLike={(id: string) => toggleLike(id)}
                 isFavorited={false}
@@ -1701,7 +1779,7 @@ export default function App() {
                   <div className="relative aspect-[3/1] rounded-xl overflow-hidden mb-8 group">
                       <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
-                          <h1 className="text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
+                          <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
                           <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
                           {user?.username === selectedCollection.owner && (
                               <button 
@@ -1762,11 +1840,11 @@ export default function App() {
 
                  {feedMode === 'ARTIFACTS' && (
                      <>
-                        {/* Categories */}
-                        <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-hide justify-center">
+                        {/* Categories - Mobile Friendly Scroll */}
+                        <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 md:justify-center">
                             <button 
-                                onClick={() => setSelectedCategory('ВСЕ')}
-                                className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border ${
+                                onClick={() => { setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
+                                className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border flex-shrink-0 ${
                                     selectedCategory === 'ВСЕ'
                                     ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
                                     : 'border-transparent opacity-60 hover:opacity-100'
@@ -1777,8 +1855,8 @@ export default function App() {
                             {Object.values(DefaultCategory).map(cat => (
                                 <button
                                     key={cat}
-                                    onClick={() => setSelectedCategory(cat)}
-                                    className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border ${
+                                    onClick={() => { setSelectedCategory(cat); updateHash('/feed'); }}
+                                    className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border flex-shrink-0 ${
                                         selectedCategory === cat
                                         ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
                                         : 'border-transparent opacity-60 hover:opacity-100'
@@ -1839,7 +1917,7 @@ export default function App() {
         <header className={`sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
             <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
                 <div 
-                    onClick={() => { setView('FEED'); setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); }}
+                    onClick={() => { setView('FEED'); setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
                     className="font-pixel text-lg font-bold cursor-pointer flex items-center gap-2"
                 >
                     <Terminal size={20} className={theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'} />
@@ -1881,6 +1959,7 @@ export default function App() {
                              if (user) {
                                  setViewedProfile(user.username);
                                  setView('USER_PROFILE');
+                                 updateHash(`/profile/${user.username}`);
                              }
                          }}
                          className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden border border-transparent hover:border-current transition-all"
@@ -1909,7 +1988,7 @@ export default function App() {
       {/* Footer */}
       {view !== 'AUTH' && (
           <footer className="mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
-              <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2023</p>
+              <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2025</p>
           </footer>
       )}
     </div>
