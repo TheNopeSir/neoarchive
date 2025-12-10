@@ -20,14 +20,23 @@ const EMAIL_CONFIG = {
     secure: true,
     auth: {
         user: 'morpheus@neoarch.ru',
+        // Escaping backslash: The password is +VWY6Mp8F\0DUg (Literal backslash + 0)
         pass: '+VWY6Mp8F\\0DUg'
     }
 };
 
 const transporter = nodemailer.createTransport(EMAIL_CONFIG);
 
+// Verify SMTP connection on startup
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error('🔴 [SMTP] Connection Error:', error);
+    } else {
+        console.log('✅ [SMTP] Server is ready to take our messages');
+    }
+});
+
 console.log(`🚀 [System] Initializing server...`);
-console.log(`📧 [System] Email User configured: ${EMAIL_CONFIG.auth.user}`);
 
 // MIME Types
 const MIMES = {
@@ -130,16 +139,18 @@ const startServer = (port) => {
     // Check dist folder
     if (!fs.existsSync(DIST_DIR) || !fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
         console.warn("⚠️  WARNING: 'dist' folder not found. Please run 'npm run build' to generate frontend assets.");
-    } else {
-        console.log("✅ [Frontend] Assets verified.");
     }
 
     const server = http.createServer(async (req, res) => {
-        // Headers
+        // Log Request
+        console.log(`📥 [${req.method}] ${req.url}`);
+
+        // CORS Headers
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+        // Handle Preflight
         if (req.method === 'OPTIONS') {
             res.writeHead(204);
             res.end();
@@ -150,26 +161,44 @@ const startServer = (port) => {
             return new Promise((resolve) => {
                 let body = '';
                 req.on('data', chunk => body += chunk.toString());
-                req.on('end', () => resolve(body ? JSON.parse(body) : {}));
+                req.on('end', () => {
+                    try {
+                        resolve(body ? JSON.parse(body) : {});
+                    } catch (e) {
+                        console.error("❌ Invalid JSON body");
+                        resolve({});
+                    }
+                });
                 req.on('error', () => resolve({}));
             });
         };
 
         try {
-            // Robust URL parsing
             const host = req.headers.host || 'localhost';
             const parsedUrl = new URL(req.url, `http://${host}`);
-            const pathname = parsedUrl.pathname;
+            
+            // Normalize path: remove trailing slash if present (and not root)
+            let pathname = parsedUrl.pathname;
+            if (pathname.length > 1 && pathname.endsWith('/')) {
+                pathname = pathname.slice(0, -1);
+            }
 
             // --- API ROUTES ---
             if (pathname.startsWith('/api')) {
+                res.setHeader('Content-Type', 'application/json');
                 
                 // 1. Send Verification Code
                 if (pathname === '/api/auth/send-code' && req.method === 'POST') {
                     const { email } = await getBody();
-                    const code = Math.floor(1000 + Math.random() * 9000).toString();
+                    
+                    if (!email) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({ error: "Email required" }));
+                        return;
+                    }
 
-                    console.log(`📨 [Auth] Verification requested for: ${email}, Code: ${code}`);
+                    const code = Math.floor(1000 + Math.random() * 9000).toString();
+                    console.log(`📨 [Auth] Sending verification to: ${email}, Code: ${code}`);
 
                     const emailSent = await sendEmail(
                         email,
@@ -183,12 +212,20 @@ const startServer = (port) => {
                          </div>`
                     );
 
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ 
-                        success: true, 
-                        message: emailSent ? 'Code sent via Email.' : 'SMTP Error. Check server console.',
-                        debugCode: code 
-                    }));
+                    if (emailSent) {
+                        res.writeHead(200);
+                        res.end(JSON.stringify({ 
+                            success: true, 
+                            message: 'Code sent via Email.',
+                            debugCode: code 
+                        }));
+                    } else {
+                        res.writeHead(500);
+                        res.end(JSON.stringify({ 
+                            success: false, 
+                            error: 'Failed to send email. Check server logs.' 
+                        }));
+                    }
                     return;
                 }
 
@@ -197,16 +234,15 @@ const startServer = (port) => {
                     const { username, password, email, tagline } = await getBody();
                     
                     if (!username || !password || !email) {
-                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.writeHead(400);
                         res.end(JSON.stringify({ error: "Missing fields" }));
                         return;
                     }
 
                     const db = getDb();
                     
-                    // Check duplicates
                     if (db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.writeHead(400);
                         res.end(JSON.stringify({ error: "USERNAME TAKEN" }));
                         return;
                     }
@@ -227,7 +263,6 @@ const startServer = (port) => {
 
                     console.log(`👤 [Auth] New user registered: ${username}`);
 
-                    // Send Credentials Email
                     await sendEmail(
                         email,
                         "NeoArchive: Учетные данные",
@@ -243,84 +278,66 @@ const startServer = (port) => {
                          </div>`
                     );
 
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.writeHead(200);
                     res.end(JSON.stringify({ success: true, user: newUser }));
                     return;
                 }
 
-                // 3. Get DB (Read-Only/Initial Load)
+                // 3. Get DB
                 if (pathname === '/api/db' && req.method === 'GET') {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.writeHead(200);
                     res.end(JSON.stringify(getDb()));
                     return;
                 }
 
-                // 4. Granular CRUD Operations (The "Real" Storage Logic)
+                // 4. Data Management
                 if (pathname === '/api/data/manage' && req.method === 'POST') {
                     const { action, collection, item, id } = await getBody();
-                    
-                    if (!action || !collection) {
-                         res.writeHead(400, { 'Content-Type': 'application/json' });
-                         res.end(JSON.stringify({ error: "Missing action or collection" }));
-                         return;
-                    }
-
                     const db = getDb();
-                    // Ensure collection exists
                     if (!db[collection]) db[collection] = [];
 
                     if (action === 'create') {
-                        // Prepend for exhibits/notifications (LIFO), append for others if needed
-                        if (['exhibits', 'notifications'].includes(collection)) {
-                            db[collection].unshift(item);
-                        } else {
-                            db[collection].push(item);
-                        }
+                        ['exhibits', 'notifications'].includes(collection) ? db[collection].unshift(item) : db[collection].push(item);
                     } 
                     else if (action === 'update') {
-                        // Find by ID or Username (for users)
                         const key = collection === 'users' ? 'username' : 'id';
                         const val = collection === 'users' ? item.username : item.id;
-                        
                         const index = db[collection].findIndex(i => i[key] === val);
-                        if (index !== -1) {
-                            db[collection][index] = item;
-                        }
+                        if (index !== -1) db[collection][index] = item;
                     } 
                     else if (action === 'delete') {
                         db[collection] = db[collection].filter(i => i.id !== id);
                     }
 
-                    saveDb(db); // Persist to Disk
-                    console.log(`💾 [DB] ${action.toUpperCase()} on ${collection}`);
-                    
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    saveDb(db);
+                    res.writeHead(200);
                     res.end(JSON.stringify({ success: true }));
                     return;
                 }
 
-                // 5. Bulk Sync (Legacy/Fallback)
+                // 5. Sync (Legacy)
                 if (pathname === '/api/sync' && req.method === 'POST') {
                     const { key, data } = await getBody();
+                    const db = getDb();
                     if (key && data) {
-                        const db = getDb();
                         db[key] = data;
                         saveDb(db);
                     }
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.writeHead(200);
                     res.end(JSON.stringify({ success: true }));
                     return;
                 }
 
-                // 6. Reset DB
+                // 6. Reset
                 if (pathname === '/api/reset' && req.method === 'POST') {
                     saveDb(INITIAL_DB_STATE);
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.writeHead(200);
                     res.end(JSON.stringify({ success: true }));
                     return;
                 }
 
-                res.writeHead(404, { 'Content-Type': 'application/json' });
+                console.log(`⚠️ [API] 404 Not Found: ${pathname} (${req.method})`);
+                res.writeHead(404);
                 res.end(JSON.stringify({ error: 'API Endpoint Not Found' }));
                 return;
             }
@@ -349,7 +366,7 @@ const startServer = (port) => {
                                 res.end(content2);
                             } else {
                                 res.writeHead(500, { 'Content-Type': 'text/plain' });
-                                res.end('Server Error: Build missing.');
+                                res.end('Server Error: Build missing. Run "npm run build".');
                             }
                         });
                     } else {

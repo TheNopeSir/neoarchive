@@ -84,7 +84,24 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                body: JSON.stringify({ email })
            });
 
-           const data = await response.json();
+           // Catch parsing errors (often means 404/500 HTML returned instead of JSON)
+           let data;
+           try {
+               const text = await response.text();
+               try {
+                   data = JSON.parse(text);
+               } catch {
+                   if (text.trim().startsWith('<')) {
+                       // HTML returned - likely Nginx error or wrong server config
+                       throw new Error(`СЕРВЕР НЕДОСТУПЕН (${response.status}). ПРОВЕРЬТЕ КОНСОЛЬ.`);
+                   }
+                   throw new Error('INVALID RESPONSE');
+               }
+           } catch (parseErr: any) {
+               console.error("Failed to parse API response", parseErr);
+               throw new Error(parseErr.message || `API ERROR ${response.status}`);
+           }
+
            setIsLoading(false);
 
            if (response.ok && data.success) {
@@ -92,330 +109,289 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                alert(`[СИСТЕМА NEO_ARCHIVE]\n\nКод подтверждения отправлен на ${email}.\nПроверьте входящие (и спам).`);
                setStep('REGISTER_VERIFY');
            } else {
-               setError('ОШИБКА ОТПРАВКИ ПИСЬМА');
+               setError(data.error || 'ОШИБКА ОТПРАВКИ ПИСЬМА');
            }
-      } catch (err) {
-           setError('ОШИБКА СЕТИ');
+      } catch (err: any) {
+           setError(err.message || 'ОШИБКА СЕТИ');
            setIsLoading(false);
       }
   };
 
   const handleVerificationSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setIsLoading(true);
-      setError('');
-
-      // Simulate Code Verification
-      setTimeout(() => {
-          if (verificationCode === generatedCode || verificationCode === '0000') {
-              setIsLoading(false);
-              setStep('REGISTER_SETUP');
-          } else {
-              setError('НЕВЕРНЫЙ КОД');
-              setIsLoading(false);
-          }
-      }, 1000);
+    e.preventDefault();
+    if (verificationCode !== generatedCode) {
+        setError('НЕВЕРНЫЙ КОД');
+        return;
+    }
+    setStep('REGISTER_SETUP');
+    setError('');
   };
 
-  const handleRegisterComplete = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!username || !password) {
-          setError('ЗАПОЛНИТЕ ВСЕ ПОЛЯ');
-          return;
-      }
-      setIsLoading(true);
-      setError('');
-
-      try {
-          const user = await db.registerUser(username, password, tagline, email);
-          onLogin(user, true);
-      } catch (err: any) {
-          setError(err.message || "ОШИБКА РЕГИСТРАЦИИ");
-          setIsLoading(false);
-      }
+  const handleSetupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username || !password || !tagline) {
+        setError('ЗАПОЛНИТЕ ВСЕ ПОЛЯ');
+        return;
+    }
+    setIsLoading(true);
+    
+    try {
+        const user = await db.registerUser(username, password, tagline, email);
+        alert(`РЕГИСТРАЦИЯ УСПЕШНА.\n\nВАШИ ДАННЫЕ ОТПРАВЛЕНЫ НА ${email}`);
+        onLogin(user, rememberMe);
+    } catch (err: any) {
+        setError(err.message || "ОШИБКА РЕГИСТРАЦИИ");
+    } finally {
+        setIsLoading(false);
+    }
   };
 
-  const renderEntry = () => (
-      <div 
-        className="flex flex-col items-center justify-center cursor-pointer min-h-[50vh] animate-in fade-in"
-        onClick={() => setStep('LOGIN')}
-      >
-          <h1 
-            className={`text-6xl md:text-9xl font-pixel font-bold mb-4 tracking-tighter relative select-none ${theme === 'dark' ? 'text-white' : 'text-black'}`}
-            style={{ 
-                textShadow: glitchIntensity > 0.8 ? '4px 0px 0px red, -4px 0px 0px cyan' : 'none',
-                transform: glitchIntensity > 0.9 ? 'skewX(20deg)' : 'none'
-            }}
-          >
-              ВХОД
-          </h1>
-          <p className="font-mono text-xs animate-pulse opacity-70">[ НАЖМИТЕ ДЛЯ АВТОРИЗАЦИИ ]</p>
-      </div>
-  );
+  const renderContent = () => {
+    if (step === 'ENTRY') {
+        return (
+            <div className="flex flex-col gap-4 w-full">
+                <button 
+                  onClick={() => setStep('LOGIN')}
+                  className={`py-4 px-6 border-2 font-pixel text-lg uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${
+                      theme === 'dark' ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'
+                  }`}
+                >
+                    <span>ВХОД</span>
+                    <Terminal size={24} className="group-hover:animate-pulse" />
+                </button>
+                <button 
+                  onClick={() => setStep('REGISTER_EMAIL')}
+                  className={`py-4 px-6 border-2 font-pixel text-lg uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${
+                      theme === 'dark' ? 'border-dark-dim text-dark-dim hover:border-white hover:text-white' : 'border-light-dim text-light-dim hover:border-black hover:text-black'
+                  }`}
+                >
+                    <span>РЕГИСТРАЦИЯ</span>
+                    <UserPlus size={24} />
+                </button>
+            </div>
+        )
+    }
 
-  const renderLogin = () => (
-      <div className="w-full max-w-sm animate-in slide-in-from-right-10">
-           <h2 className="text-xl font-pixel mb-6 flex items-center gap-2 uppercase">
-               <Lock size={24} /> Авторизация
-           </h2>
-           
-           {/* Tabs */}
-           <div className="flex mb-8 border-b border-opacity-30 border-current">
-               <button 
-                  className={`flex-1 pb-2 font-pixel text-xs border-b-2 ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}
-               >
-                   EMAIL ВХОД
-               </button>
-               <button 
-                  onClick={() => { resetForm(); setStep('REGISTER_EMAIL'); }}
-                  className="flex-1 pb-2 font-pixel text-xs opacity-50 hover:opacity-100 transition-opacity"
-               >
-                   РЕГИСТРАЦИЯ
-               </button>
-           </div>
+    if (step === 'LOGIN') {
+        return (
+            <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-pixel uppercase opacity-70">EMAIL</label>
+                    <div className="flex items-center gap-2 border-b-2 p-2 border-current focus-within:opacity-100 opacity-70 transition-opacity">
+                        <Mail size={18} />
+                        <input 
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            type="email"
+                            className="bg-transparent w-full focus:outline-none font-mono text-sm"
+                            placeholder="user@example.com"
+                        />
+                    </div>
+                 </div>
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ</label>
+                    <div className="flex items-center gap-2 border-b-2 p-2 border-current focus-within:opacity-100 opacity-70 transition-opacity">
+                        <Lock size={18} />
+                        <input 
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            type="password"
+                            className="bg-transparent w-full focus:outline-none font-mono text-sm"
+                            placeholder="******"
+                        />
+                    </div>
+                 </div>
+                 
+                 {error && <div className="text-red-500 font-bold text-xs font-mono text-center animate-pulse">{error}</div>}
 
-           <form onSubmit={handleLoginSubmit} className="space-y-6">
-              <div className="space-y-1">
-                   <label className="text-[10px] font-pixel uppercase opacity-60">EMAIL АДРЕС</label>
-                   <div className={`flex items-center border-b-2 py-2 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                       <Mail size={16} className="opacity-50 mr-2" />
-                       <input 
-                         autoFocus
-                         type="email"
-                         value={email}
-                         onChange={(e) => setEmail(e.target.value)}
-                         className="w-full bg-transparent outline-none font-mono text-sm"
-                         placeholder="neo@matrix.com"
-                       />
-                   </div>
-              </div>
-
-              <div className="space-y-1">
-                   <label className="text-[10px] font-pixel uppercase opacity-60">ПАРОЛЬ</label>
-                   <div className={`flex items-center border-b-2 py-2 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                       <Lock size={16} className="opacity-50 mr-2" />
-                       <input 
-                         type="password"
-                         value={password}
-                         onChange={(e) => setPassword(e.target.value)}
-                         className="w-full bg-transparent outline-none font-mono text-sm"
-                         placeholder="******"
-                       />
-                   </div>
-              </div>
-
-              <button 
-                disabled={isLoading}
-                className={`w-full py-4 font-bold font-pixel uppercase tracking-widest flex items-center justify-center gap-2 ${
-                    theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
-                }`}
-              >
-                 {isLoading ? 'ПРОТОКОЛ СВЯЗИ...' : 'ВОЙТИ'} 
-              </button>
-           </form>
-
-           {error && <div className="mt-4 text-red-500 font-mono text-xs text-center border border-red-500 p-2 bg-red-500/10">{error}</div>}
-      </div>
-  );
-
-  const renderRegisterEmail = () => (
-      <div className="w-full max-w-sm animate-in slide-in-from-right-10">
-           <h2 className="text-xl font-pixel mb-6 flex items-center gap-2 uppercase">
-               <UserPlus size={24} /> Регистрация
-           </h2>
-           
-           <div className="flex mb-8 border-b border-opacity-30 border-current">
-               <button 
-                  onClick={() => { resetForm(); setStep('LOGIN'); }}
-                  className="flex-1 pb-2 font-pixel text-xs opacity-50 hover:opacity-100 transition-opacity"
-               >
-                   ВХОД
-               </button>
-               <button 
-                  className={`flex-1 pb-2 font-pixel text-xs border-b-2 ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}
-               >
-                   РЕГИСТРАЦИЯ
-               </button>
-           </div>
-
-           <p className="font-mono text-xs opacity-70 mb-6 text-justify">
-               Внимание: Для создания учетной записи требуется верификация через почтовый шлюз. 
-               <br/><br/>
-               <span className={theme === 'dark' ? 'text-green-500' : 'text-green-700'}>
-                   Должно прийти письмо с кодом подтверждения.
-               </span>
-           </p>
-
-           <form onSubmit={handleRegisterEmailSubmit} className="space-y-6">
-              <div className="space-y-1">
-                   <label className="text-[10px] font-pixel uppercase opacity-60">EMAIL</label>
-                   <div className={`flex items-center border-b-2 py-2 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                       <Mail size={16} className="opacity-50 mr-2" />
-                       <input 
-                         autoFocus
-                         type="email"
-                         value={email}
-                         onChange={(e) => setEmail(e.target.value)}
-                         className="w-full bg-transparent outline-none font-mono text-sm"
-                         placeholder="mail@example.com"
-                       />
-                   </div>
-              </div>
-
-              <button 
-                disabled={isLoading}
-                className={`w-full py-4 font-bold font-pixel uppercase tracking-widest flex items-center justify-center gap-2 ${
-                    theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
-                }`}
-              >
-                 {isLoading ? 'ОТПРАВКА...' : 'ПОЛУЧИТЬ ПИСЬМО'} <ArrowRight size={16} />
-              </button>
-           </form>
-           
-           {error && <div className="mt-4 text-red-500 font-mono text-xs text-center border border-red-500 p-2 bg-red-500/10">{error}</div>}
-      </div>
-  );
-
-  const renderVerify = () => (
-      <div className="w-full max-w-sm animate-in slide-in-from-right-10">
-           <h2 className="text-xl font-pixel mb-6 flex items-center gap-2 uppercase">
-               <Shield size={24} /> Верификация
-           </h2>
-           
-           <div className={`p-4 border rounded mb-6 flex items-start gap-3 ${theme === 'dark' ? 'bg-white/5 border-dark-dim' : 'bg-black/5 border-light-dim'}`}>
-               <Mail size={20} className="mt-1 opacity-70 text-green-500"/>
-               <div>
-                   <p className="font-mono text-xs opacity-70">Письмо отправлено на:</p>
-                   <p className="font-bold font-mono text-sm break-all">{email}</p>
-                   <p className="text-[10px] mt-2 opacity-50 uppercase animate-pulse">ОЖИДАНИЕ ВВОДА КОДА...</p>
-               </div>
-           </div>
-
-           <form onSubmit={handleVerificationSubmit} className="space-y-6">
-              <div className="space-y-1">
-                   <label className="text-[10px] font-pixel uppercase opacity-60">КОД ИЗ ПИСЬМА</label>
-                   <input 
-                     autoFocus
-                     type="text"
-                     value={verificationCode}
-                     onChange={(e) => setVerificationCode(e.target.value)}
-                     className={`w-full bg-transparent border-2 text-center text-3xl font-mono py-4 outline-none tracking-[0.5em] rounded ${
-                         theme === 'dark' ? 'border-dark-dim focus:border-dark-primary text-white' : 'border-light-dim focus:border-light-accent text-black'
+                 <button 
+                     disabled={isLoading}
+                     className={`mt-4 py-3 font-bold font-pixel uppercase ${
+                         theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
                      }`}
-                     placeholder="_ _ _ _"
-                     maxLength={4}
-                   />
-              </div>
+                 >
+                     {isLoading ? '...' : 'ВОЙТИ В СЕТЬ'}
+                 </button>
+                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline">НАЗАД</button>
+            </form>
+        )
+    }
 
-              <button 
-                disabled={isLoading}
-                className={`w-full py-4 font-bold font-pixel uppercase tracking-widest flex items-center justify-center gap-2 ${
-                    theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
-                }`}
-              >
-                 {isLoading ? 'ПРОВЕРКА...' : 'ПОДТВЕРДИТЬ'} 
-              </button>
+    if (step === 'REGISTER_EMAIL') {
+         return (
+             <form onSubmit={handleRegisterEmailSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
+                 <div className="text-xs font-mono opacity-70 mb-2">
+                     Внимание: Для создания учетной записи требуется верификация через почтовый шлюз.
+                     <br/><br/>
+                     <span className={theme === 'dark' ? 'text-green-500' : 'text-green-700'}>
+                         Должно прийти письмо с кодом подтверждения.
+                     </span>
+                 </div>
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-pixel uppercase opacity-70">EMAIL</label>
+                    <div className="flex items-center gap-2 border-b-2 p-2 border-current focus-within:opacity-100 opacity-70 transition-opacity">
+                        <Mail size={18} />
+                        <input 
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            type="email"
+                            className="bg-transparent w-full focus:outline-none font-mono text-sm"
+                            placeholder="user@example.com"
+                        />
+                    </div>
+                 </div>
 
-              <button 
-                 type="button" 
-                 onClick={handleRegisterEmailSubmit}
-                 className="w-full text-center text-[10px] font-mono opacity-50 hover:opacity-100 hover:underline"
-              >
-                  [ ОТПРАВИТЬ ПОВТОРНО ]
-              </button>
-           </form>
-           
-           {error && <div className="mt-4 text-red-500 font-mono text-xs text-center border border-red-500 p-2 bg-red-500/10">{error}</div>}
-      </div>
-  );
+                 {error && <div className="text-red-500 font-bold text-xs font-mono text-center border border-red-500 p-2">{error}</div>}
 
-  const renderSetup = () => (
-      <div className="w-full max-w-sm animate-in slide-in-from-right-10">
-           <h2 className="text-xl font-pixel mb-6 flex items-center gap-2 uppercase">
-               <Terminal size={24} /> Создание профиля
-           </h2>
-           <p className="font-mono text-xs opacity-70 mb-6 flex items-center gap-2 text-green-500">
-               <CheckCircle size={14} /> Личность подтверждена
-           </p>
-
-           <form onSubmit={handleRegisterComplete} className="space-y-6">
-              <div className="space-y-1">
-                   <label className="text-[10px] font-pixel uppercase opacity-60">ИМЯ ПОЛЬЗОВАТЕЛЯ</label>
-                   <input 
-                     autoFocus
-                     type="text"
-                     value={username}
-                     onChange={(e) => setUsername(e.target.value)}
-                     className={`w-full bg-transparent border-b-2 py-2 outline-none font-mono ${
-                         theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
+                 <button 
+                     disabled={isLoading}
+                     className={`mt-4 py-3 font-bold font-pixel uppercase flex items-center justify-center gap-2 ${
+                         theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
                      }`}
-                     placeholder="Neo_User_X"
-                   />
-              </div>
+                 >
+                     {isLoading ? 'ОТПРАВКА...' : <>ПОЛУЧИТЬ ПИСЬМО <ArrowRight size={16} /></>}
+                 </button>
+                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline">НА ГЛАВНУЮ</button>
+             </form>
+         )
+    }
 
-              <div className="space-y-1">
-                   <label className="text-[10px] font-pixel uppercase opacity-60">СОЗДАТЬ ПАРОЛЬ</label>
-                   <input 
-                     type="password"
-                     value={password}
-                     onChange={(e) => setPassword(e.target.value)}
-                     className={`w-full bg-transparent border-b-2 py-2 outline-none font-mono ${
-                         theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
+    if (step === 'REGISTER_VERIFY') {
+        return (
+            <form onSubmit={handleVerificationSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
+                <div className="text-center mb-4">
+                    <Shield size={32} className={`mx-auto mb-2 ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`} />
+                    <p className="text-xs font-mono">Введите код из письма, отправленного на <br/><b>{email}</b></p>
+                </div>
+
+                <div className="flex justify-center">
+                    <input 
+                        value={verificationCode}
+                        onChange={e => setVerificationCode(e.target.value.slice(0, 4))}
+                        className={`text-center text-3xl font-pixel tracking-[10px] w-48 bg-transparent border-b-4 focus:outline-none ${
+                            theme === 'dark' ? 'border-dark-primary text-white' : 'border-light-accent text-black'
+                        }`}
+                        placeholder="____"
+                        maxLength={4}
+                    />
+                </div>
+
+                {error && <div className="text-red-500 font-bold text-xs font-mono text-center mt-2">{error}</div>}
+
+                <button 
+                     disabled={verificationCode.length < 4}
+                     className={`mt-4 py-3 font-bold font-pixel uppercase ${
+                         verificationCode.length === 4 
+                         ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white')
+                         : 'bg-gray-500 cursor-not-allowed opacity-50'
                      }`}
-                     placeholder="******"
-                   />
-              </div>
+                 >
+                     ПОДТВЕРДИТЬ
+                 </button>
+                 <button type="button" onClick={() => setStep('REGISTER_EMAIL')} className="text-xs font-mono opacity-50 hover:underline">ИЗМЕНИТЬ EMAIL</button>
+            </form>
+        )
+    }
 
-              <div className="space-y-1">
-                   <label className="text-[10px] font-pixel uppercase opacity-60">СТАТУС</label>
-                   <input 
-                     type="text"
-                     value={tagline}
-                     onChange={(e) => setTagline(e.target.value)}
-                     className={`w-full bg-transparent border-b-2 py-2 outline-none font-mono ${
-                         theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
+    if (step === 'REGISTER_SETUP') {
+        return (
+            <form onSubmit={handleSetupSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-pixel uppercase opacity-70">НИКНЕЙМ</label>
+                    <div className="flex items-center gap-2 border-b-2 p-2 border-current">
+                        <User size={18} />
+                        <input 
+                            value={username}
+                            onChange={e => setUsername(e.target.value)}
+                            className="bg-transparent w-full focus:outline-none font-mono text-sm"
+                            placeholder="Neo"
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-1">
+                    <label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ</label>
+                    <div className="flex items-center gap-2 border-b-2 p-2 border-current">
+                        <Lock size={18} />
+                        <input 
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            type="password"
+                            className="bg-transparent w-full focus:outline-none font-mono text-sm"
+                            placeholder="******"
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-1">
+                    <label className="text-[10px] font-pixel uppercase opacity-70">СТАТУС (TAGLINE)</label>
+                    <div className="flex items-center gap-2 border-b-2 p-2 border-current">
+                        <Terminal size={18} />
+                        <input 
+                            value={tagline}
+                            onChange={e => setTagline(e.target.value)}
+                            className="bg-transparent w-full focus:outline-none font-mono text-sm"
+                            placeholder="Wake up..."
+                        />
+                    </div>
+                </div>
+
+                {error && <div className="text-red-500 font-bold text-xs font-mono text-center">{error}</div>}
+
+                <button 
+                     disabled={isLoading}
+                     className={`mt-4 py-3 font-bold font-pixel uppercase ${
+                         theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
                      }`}
-                     placeholder="Wake up, Neo..."
-                   />
-              </div>
-
-              <button 
-                disabled={isLoading}
-                className={`w-full py-4 font-bold font-pixel uppercase tracking-widest flex items-center justify-center gap-2 ${
-                    theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
-                }`}
-              >
-                 {isLoading ? 'СОЗДАНИЕ...' : 'ЗАВЕРШИТЬ'} 
-              </button>
-           </form>
-           
-           {error && <div className="mt-4 text-red-500 font-mono text-xs text-center border border-red-500 p-2 bg-red-500/10">{error}</div>}
-      </div>
-  );
+                 >
+                     {isLoading ? 'СОЗДАНИЕ...' : 'ЗАВЕРШИТЬ'}
+                 </button>
+            </form>
+        )
+    }
+  };
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-6 relative z-20 overflow-y-auto ${
-        theme === 'dark' ? 'bg-black/90' : 'bg-white/90'
-    }`}>
-        {/* Decorative Grid */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,0,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,0,0.03)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center p-4 relative z-20">
+      <div className={`w-full max-w-md border-2 p-8 rounded-lg shadow-2xl relative transition-all duration-300 ${
+        theme === 'dark' 
+          ? 'bg-black/90 border-dark-primary shadow-[0_0_30px_rgba(74,222,128,0.2)]' 
+          : 'bg-white/95 border-light-accent shadow-xl'
+      }`}>
+         {/* Header */}
+         <div className="flex justify-between items-start mb-8 border-b-2 border-dashed pb-4 border-current opacity-70">
+             <div className="flex items-center gap-2">
+                 <Terminal size={20} />
+                 <span className="font-pixel text-sm">NEO_AUTH v2.4</span>
+             </div>
+             <div className="flex gap-1">
+                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                 <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse delay-75"></div>
+                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse delay-150"></div>
+             </div>
+         </div>
 
-        <div className="relative z-10 w-full flex justify-center py-10">
-            {step === 'ENTRY' && renderEntry()}
-            {step === 'LOGIN' && renderLogin()}
-            {step === 'REGISTER_EMAIL' && renderRegisterEmail()}
-            {step === 'REGISTER_VERIFY' && renderVerify()}
-            {step === 'REGISTER_SETUP' && renderSetup()}
-        </div>
+         {/* Title */}
+         <div className="mb-8 relative overflow-hidden">
+             <h2 className={`text-3xl font-pixel font-bold uppercase ${glitchIntensity > 0.5 ? 'translate-x-1 text-red-500' : ''}`}>
+                 {step === 'ENTRY' ? 'ИДЕНТИФИКАЦИЯ' : 
+                  step === 'LOGIN' ? 'АВТОРИЗАЦИЯ' : 'РЕГИСТРАЦИЯ'}
+             </h2>
+             {glitchIntensity > 0.8 && (
+                 <div className="absolute top-0 left-0 text-3xl font-pixel font-bold uppercase text-blue-500 opacity-50 -translate-x-1">
+                     SYSTEM FAILURE
+                 </div>
+             )}
+         </div>
 
-        {step !== 'ENTRY' && (
-            <button 
-                onClick={() => setStep('ENTRY')}
-                className="mt-8 font-mono text-xs opacity-50 hover:opacity-100 hover:underline relative z-30"
-            >
-                [ НА ГЛАВНУЮ ]
-            </button>
-        )}
+         {renderContent()}
+
+         {/* Footer */}
+         <div className="mt-8 text-center opacity-40 font-mono text-[10px]">
+             SECURE CONNECTION ESTABLISHED<br/>
+             ENCRYPTION: AES-256
+         </div>
+      </div>
     </div>
   );
 };
