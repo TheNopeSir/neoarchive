@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, 
@@ -1675,9 +1673,9 @@ export default function App() {
                 exhibit={selectedExhibit}
                 theme={theme}
                 onBack={handleBack}
-                onShare={(id) => alert(`Share ${id}`)}
-                onFavorite={(id) => toggleFavorite(id)}
-                onLike={(id) => toggleLike(id)}
+                onShare={(id: string) => alert(`Share ${id}`)}
+                onFavorite={(id: string) => toggleFavorite(id)}
+                onLike={(id: string) => toggleLike(id)}
                 isFavorited={false}
                 isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
                 onPostComment={handlePostComment}

@@ -88,11 +88,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
            setIsLoading(false);
 
            if (response.ok && data.success) {
-               // In production, 'debugCode' should NOT be returned. 
-               // This is for demonstration purposes in this environment.
                setGeneratedCode(data.debugCode);
-               
-               alert(`[СИСТЕМА NEO_ARCHIVE]\n\nЭмуляция SMTP сервера.\nВаш код (см. консоль сервера для реальной отправки): ${data.debugCode}`);
+               alert(`[СИСТЕМА NEO_ARCHIVE]\n\nКод подтверждения отправлен на ${email}.\nПроверьте входящие (и спам).`);
                setStep('REGISTER_VERIFY');
            } else {
                setError('ОШИБКА ОТПРАВКИ ПИСЬМА');

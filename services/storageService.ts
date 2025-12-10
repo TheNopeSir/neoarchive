@@ -1,8 +1,3 @@
-
-
-
-
-
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { INITIAL_EXHIBITS, MOCK_COLLECTIONS, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_USER } from '../constants';
 
@@ -151,28 +146,23 @@ export const restoreDatabase = (jsonData: string) => {
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
     await initializeDatabase(); 
     
-    // Check Email Uniqueness
-    const existingEmail = cache.users.find(u => u.email && u.email.toLowerCase() === email.toLowerCase());
-    if (existingEmail) throw new Error("EMAIL УЖЕ ЗАРЕГИСТРИРОВАН");
+    // Call server API for registration (which handles email sending)
+    const response = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, email, tagline })
+    });
 
-    // Check Username Uniqueness
-    const existingUser = cache.users.find(u => u.username.toLowerCase() === username.toLowerCase());
-    if (existingUser) throw new Error("USERNAME УЖЕ ЗАНЯТ");
+    const data = await response.json();
 
-    const newUser: UserProfile = {
-        username: username,
-        email: email,
-        tagline: tagline || "Новый пользователь",
-        avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random`,
-        joinedDate: new Date().toLocaleDateString('ru-RU'),
-        following: [],
-        password: password,
-        isAdmin: false
-    };
+    if (!response.ok) {
+        throw new Error(data.error || "ОШИБКА РЕГИСТРАЦИИ");
+    }
 
-    cache.users.push(newUser);
-    await syncWithServer('users', cache.users);
-    return newUser;
+    // Update local cache with new user
+    cache.users.push(data.user);
+    
+    return data.user;
 };
 
 export const loginUser = async (login: string, password: string): Promise<UserProfile> => {

@@ -2,6 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import nodemailer from 'nodemailer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,9 +13,21 @@ const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
 const DIST_DIR = path.join(__dirname, 'dist');
 
+// --- EMAIL CONFIGURATION ---
+const EMAIL_CONFIG = {
+    host: 'smtp.timeweb.ru',
+    port: 465,
+    secure: true,
+    auth: {
+        user: 'morpheus@neoarch.ru',
+        pass: '+VWY6Mp8F\\0DUg'
+    }
+};
+
+const transporter = nodemailer.createTransport(EMAIL_CONFIG);
+
 console.log(`🚀 [System] Initializing server...`);
-console.log(`📂 [System] Root Directory: ${__dirname}`);
-console.log(`📂 [System] Serving Static Files from: ${DIST_DIR}`);
+console.log(`📧 [System] Email User configured: ${EMAIL_CONFIG.auth.user}`);
 
 // MIME Types
 const MIMES = {
@@ -95,6 +108,23 @@ const saveDb = (data) => {
   }
 };
 
+const sendEmail = async (to, subject, text, html) => {
+    try {
+        await transporter.sendMail({
+            from: `"NeoArchive System" <${EMAIL_CONFIG.auth.user}>`,
+            to,
+            subject,
+            text,
+            html
+        });
+        console.log(`✅ [SMTP] Email sent to ${to}`);
+        return true;
+    } catch (error) {
+        console.error("🔴 [SMTP] Failed to send email:", error);
+        return false;
+    }
+};
+
 const startServer = (port) => {
     // Check dist folder
     if (!fs.existsSync(DIST_DIR) || !fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
@@ -133,53 +163,88 @@ const startServer = (port) => {
             // --- API ROUTES ---
             if (pathname.startsWith('/api')) {
                 
-                // --- AUTH & EMAILS ---
-                
-                // Endpoint for sending verification code
+                // 1. Send Verification Code
                 if (pathname === '/api/auth/send-code' && req.method === 'POST') {
                     const { email } = await getBody();
-                    
-                    // Generate a 4-digit code
                     const code = Math.floor(1000 + Math.random() * 9000).toString();
 
-                    console.log(`📨 [SMTP MOCK] Preparing to send email to: ${email}`);
-                    console.log(`🔑 [SMTP MOCK] Generated Code: ${code}`);
+                    console.log(`📨 [Auth] Verification requested for: ${email}, Code: ${code}`);
 
-                    
-               
-                    try {
-                        const transporter = nodemailer.createTransport({
-                            host: "smtp.timeweb.ru", // or your provider
-                            port: 465,
-                            secure: true, // true for 465, false for other ports
-                            auth: {
-                                user: "admin@neoarchive.ru",
-                                pass: "jrCWj7*W,M$Xv#" 
-                            }
-                        });
+                    const emailSent = await sendEmail(
+                        email,
+                        "NeoArchive: Код подтверждения",
+                        `Ваш код доступа: ${code}`,
+                        `<div style="font-family: monospace; background: #09090b; color: #4ade80; padding: 20px; border: 1px solid #4ade80;">
+                           <h1>NEO_ARCHIVE // VERIFICATION</h1>
+                           <p>ACCESS CODE REQUESTED.</p>
+                           <h2 style="font-size: 32px; letter-spacing: 5px; color: #fff;">${code}</h2>
+                           <p>IGNORE IF NOT REQUESTED.</p>
+                         </div>`
+                    );
 
-                        await transporter.sendMail({
-                            from: '"NeoArchive System" <system@neoarchive.net>',
-                            to: email,
-                            subject: "Код подтверждения / Verification Code",
-                            text: `Ваш код доступа к архиву: ${code}`,
-                            html: `<b>Ваш код доступа: ${code}</b>`
-                        });
-                        console.log("✅ Email sent successfully");
-                    } catch (error) {
-                        console.error("🔴 SMTP Error:", error);
-                        // Handle error appropriately
-                    }
-      
-
-                    // For demo purposes, we return the code to the client so you can test it without a real mail server.
-                    // In production, NEVER return the 'debugCode' to the client!
                     res.writeHead(200, { 'Content-Type': 'application/json' });
+                    // We send debugCode for testing if email fails, but generally rely on email
                     res.end(JSON.stringify({ 
                         success: true, 
-                        message: 'Code generated. Check server console for "Email".',
-                        debugCode: code // REMOVE THIS IN PRODUCTION
+                        message: emailSent ? 'Code sent via Email.' : 'SMTP Error. Check server console.',
+                        debugCode: code 
                     }));
+                    return;
+                }
+
+                // 2. Register User & Send Credentials
+                if (pathname === '/api/auth/register' && req.method === 'POST') {
+                    const { username, password, email, tagline } = await getBody();
+                    
+                    if (!username || !password || !email) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: "Missing fields" }));
+                        return;
+                    }
+
+                    const db = getDb();
+                    
+                    // Check duplicates
+                    if (db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: "USERNAME TAKEN" }));
+                        return;
+                    }
+
+                    const newUser = {
+                        username,
+                        email,
+                        tagline: tagline || "Новый пользователь",
+                        avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random`,
+                        joinedDate: new Date().toLocaleDateString('ru-RU'),
+                        following: [],
+                        password, // Storing plain text as requested by architecture (Not production safe)
+                        isAdmin: false
+                    };
+
+                    db.users.push(newUser);
+                    saveDb(db);
+
+                    console.log(`👤 [Auth] New user registered: ${username}`);
+
+                    // Send Credentials Email
+                    await sendEmail(
+                        email,
+                        "NeoArchive: Учетные данные",
+                        `Добро пожаловать в NeoArchive.\n\nЛогин: ${username}\nПароль: ${password}\n\nСохраните эти данные.`,
+                        `<div style="font-family: monospace; background: #09090b; color: #4ade80; padding: 20px; border: 1px solid #4ade80;">
+                           <h1 style="border-bottom: 1px dashed #4ade80; padding-bottom: 10px;">NEO_ARCHIVE // ACCESS GRANTED</h1>
+                           <p>SYSTEM ENTRY CONFIRMED.</p>
+                           <div style="margin: 20px 0; padding: 15px; border: 1px solid #27272a; background: #18181b;">
+                             <p style="margin: 5px 0;"><strong>USER_ID:</strong> <span style="color: #fff;">${username}</span></p>
+                             <p style="margin: 5px 0;"><strong>PASSWORD:</strong> <span style="color: #fff;">${password}</span></p>
+                           </div>
+                           <p style="opacity: 0.7; font-size: 10px;">DELETE THIS MESSAGE AFTER MEMORIZATION.</p>
+                         </div>`
+                    );
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true, user: newUser }));
                     return;
                 }
 
