@@ -2,6 +2,7 @@ import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry
 
 // API Base URL - определяем автоматически
 const API_BASE = window.location.origin;
+console.log('🔗 API_BASE:', API_BASE);
 
 // Internal Cache
 let cache = {
