@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -10,7 +9,6 @@ import os from 'os';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Explicitly load .env from root
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
@@ -21,19 +19,19 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// --- DATABASE CONFIGURATION (MySQL/Timeweb) ---
-// Using credentials provided by user
+// --- DATABASE CONFIGURATION (MySQL with SSL) ---
 const dbConfig = {
     host: process.env.MYSQL_HOST || 'eac945a9e201d3657964fcb9.twc1.net',
     port: parseInt(process.env.MYSQL_PORT || '3306'),
     user: process.env.MYSQL_USER || 'gen_user',
-    password: process.env.MYSQL_PASSWORD || '6l3RE-<@Ge4D3W',
-    database: process.env.MYSQL_DBNAME || 'NeoBD',
+    database: process.env.MYSQL_DATABASE || 'NeoBD',
+    password: process.env.MYSQL_PASSWORD || '',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    // Enable multiple statements for initialization if needed, but best to separate them
-    multipleStatements: true 
+    ssl: {
+        rejectUnauthorized: false
+    }
 };
 
 console.log("🐬 [Server] DB Config Host:", dbConfig.host);
