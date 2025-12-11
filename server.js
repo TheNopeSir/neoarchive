@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import pg from 'pg';
+import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import os from 'os';
 
@@ -22,138 +22,54 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// --- DATABASE CONFIGURATION (Supabase PostgreSQL via Pooler) ---
+// --- SUPABASE CONFIGURATION (HTTPS MODE) ---
+// Using the SDK avoids TCP connection issues (ENETUNREACH) inside Docker
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+// IMPORTANT: Use the SERVICE_ROLE key for the server to bypass RLS and manage data
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
-// Using the transaction pooler credentials provided
-const SUPABASE_DB_HOST = process.env.POSTGRES_HOST || 'aws-1-eu-west-1.pooler.supabase.com';
-const SUPABASE_DB_PORT = parseInt(process.env.POSTGRES_PORT || '6543');
-const SUPABASE_DB_USER = process.env.POSTGRES_USER || 'postgres.kovcgjtqbvmuzhsrcktd';
-const SUPABASE_DB_PASS = process.env.POSTGRES_PASSWORD || 'ivKzfKVe$W7-AQ9';
-const SUPABASE_DB_NAME = process.env.POSTGRES_DB || 'postgres';
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    console.error("🔴 [Server] Missing Supabase URL or Key in .env");
+    console.error("   Ensure VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.");
+}
 
-console.log("🐘 [Server] DB Configuration (Supabase Pooler):");
-console.log(`   > Host: ${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT}`);
-console.log(`   > User: ${SUPABASE_DB_USER}`);
-console.log(`   > Database: ${SUPABASE_DB_NAME}`);
-
-const { Pool } = pg;
-
-const pool = new Pool({
-    host: SUPABASE_DB_HOST,
-    port: SUPABASE_DB_PORT,
-    user: SUPABASE_DB_USER,
-    password: SUPABASE_DB_PASS,
-    database: SUPABASE_DB_NAME,
-    ssl: {
-        rejectUnauthorized: false // Required for Supabase connections
-    },
-    max: 20, // Connection pool limit
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000, // Fail fast if connection hangs
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
 });
 
-// Safe query helper
-const safeQuery = async (text, params) => {
-    let client;
-    try {
-        client = await pool.connect();
-        const res = await client.query(text, params);
-        return { rows: res.rows }; 
-    } catch (e) {
-        console.error(`🔴 [DB Error] Query failed: ${text.substring(0, 50)}...`);
-        console.error(`   > Message: ${e.message}`);
-        // Log detailed network error if present
-        if (e.code === 'ENETUNREACH' || e.code === 'ECONNREFUSED') {
-            console.error(`   > Network Error: Check hostname ${SUPABASE_DB_HOST} and port ${SUPABASE_DB_PORT}`);
-        }
-        throw e;
-    } finally {
-        if (client) client.release();
-    }
-};
-
-// Init DB Tables on Startup
-const initDB = async () => {
-    try {
-        console.log("🐘 [Server] Connecting to Supabase PostgreSQL...");
-        
-        // Test connection
-        const start = Date.now();
-        await safeQuery('SELECT NOW()');
-        console.log(`✅ [Server] DB Connection established successfully! (${Date.now() - start}ms)`);
-        
-        // Ensure tables exist (PostgreSQL syntax)
-        // Note: Using JSONB for better performance than JSON
-        const tables = [
-            `CREATE TABLE IF NOT EXISTS users (
-                username VARCHAR(255) PRIMARY KEY,
-                data JSONB
-            )`,
-            `CREATE TABLE IF NOT EXISTS exhibits (
-                id VARCHAR(255) PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )`,
-            `CREATE TABLE IF NOT EXISTS collections (
-                id VARCHAR(255) PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )`,
-            `CREATE TABLE IF NOT EXISTS notifications (
-                id VARCHAR(255) PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )`,
-            `CREATE TABLE IF NOT EXISTS messages (
-                id VARCHAR(255) PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )`,
-            `CREATE TABLE IF NOT EXISTS guestbook (
-                id VARCHAR(255) PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )`
-        ];
-
-        for (const sql of tables) {
-            await safeQuery(sql);
-        }
-        
-        console.log("✅ [Server] Database schema ensured.");
-    } catch (err) {
-        console.error("⚠️ [Server] DB Initialization failed:", err.message);
-        console.error("   Please check your internet connection and Supabase credentials.");
-    }
-};
-
-// Start DB Init
-initDB();
+console.log("⚡ [Server] Initialized Supabase Client (HTTPS Mode)");
 
 // --- API ROUTES ---
 
 // Health Check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', engine: 'postgres-pooler', timestamp: new Date() });
+    res.json({ status: 'ok', engine: 'supabase-http', timestamp: new Date() });
 });
 
 // 1. GLOBAL SYNC
 app.get('/api/sync', async (req, res) => {
     try {
-        const { rows: users } = await safeQuery('SELECT data FROM users');
-        const { rows: exhibits } = await safeQuery('SELECT data FROM exhibits ORDER BY timestamp DESC');
-        const { rows: collections } = await safeQuery('SELECT data FROM collections ORDER BY timestamp DESC');
-        const { rows: notifs } = await safeQuery('SELECT data FROM notifications ORDER BY timestamp DESC');
-        const { rows: msgs } = await safeQuery('SELECT data FROM messages ORDER BY timestamp ASC');
-        const { rows: gb } = await safeQuery('SELECT data FROM guestbook ORDER BY timestamp DESC');
+        const { data: users, error: uErr } = await supabase.from('users').select('data');
+        const { data: exhibits, error: eErr } = await supabase.from('exhibits').select('data').order('timestamp', { ascending: false });
+        const { data: collections, error: cErr } = await supabase.from('collections').select('data').order('timestamp', { ascending: false });
+        const { data: notifs, error: nErr } = await supabase.from('notifications').select('data').order('timestamp', { ascending: false });
+        const { data: msgs, error: mErr } = await supabase.from('messages').select('data').order('timestamp', { ascending: true });
+        const { data: gb, error: gErr } = await supabase.from('guestbook').select('data').order('timestamp', { ascending: false });
+
+        if (uErr || eErr || cErr || nErr || mErr || gErr) {
+            throw new Error("Supabase Fetch Error: " + (uErr?.message || eErr?.message));
+        }
         
         res.json({
-            users: users.map(r => r.data),
-            exhibits: exhibits.map(r => r.data),
-            collections: collections.map(r => r.data),
-            notifications: notifs.map(r => r.data),
-            messages: msgs.map(r => r.data),
-            guestbook: gb.map(r => r.data),
+            users: users ? users.map(r => r.data) : [],
+            exhibits: exhibits ? exhibits.map(r => r.data) : [],
+            collections: collections ? collections.map(r => r.data) : [],
+            notifications: notifs ? notifs.map(r => r.data) : [],
+            messages: msgs ? msgs.map(r => r.data) : [],
+            guestbook: gb ? gb.map(r => r.data) : [],
         });
     } catch (e) {
         console.error("Sync Error:", e.message);
@@ -164,14 +80,14 @@ app.get('/api/sync', async (req, res) => {
 // 2. USER PROFILE SYNC
 app.post('/api/users/update', async (req, res) => {
     try {
-        // Postgres UPSERT syntax
-        await safeQuery(
-            `INSERT INTO users (username, data) VALUES ($1, $2) 
-             ON CONFLICT (username) DO UPDATE SET data = EXCLUDED.data`,
-            [req.body.username, JSON.stringify(req.body)]
-        );
+        const { error } = await supabase
+            .from('users')
+            .upsert({ username: req.body.username, data: req.body }, { onConflict: 'username' });
+
+        if (error) throw error;
         res.json({ success: true });
     } catch (e) { 
+        console.error("User Update Error:", e.message);
         res.status(500).json({ error: e.message }); 
     }
 });
@@ -180,22 +96,32 @@ app.post('/api/users/update', async (req, res) => {
 const createCrudRoutes = (resourceName) => {
     app.post(`/api/${resourceName}`, async (req, res) => {
         try {
-            // Postgres UPSERT syntax
-            await safeQuery(
-                `INSERT INTO ${resourceName} (id, data, timestamp) VALUES ($1, $2, NOW()) 
-                 ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, timestamp = NOW()`,
-                [req.body.id, JSON.stringify(req.body)]
-            );
+            const payload = {
+                id: req.body.id,
+                data: req.body,
+                timestamp: new Date().toISOString()
+            };
+            
+            const { error } = await supabase
+                .from(resourceName)
+                .upsert(payload, { onConflict: 'id' });
+
+            if (error) throw error;
             res.json({ success: true });
         } catch (e) { 
+            console.error(`${resourceName} Update Error:`, e.message);
             res.status(500).json({ error: e.message }); 
         }
     });
 
     app.delete(`/api/${resourceName}/:id`, async (req, res) => {
         try {
-            // Postgres DELETE syntax (Standard SQL)
-            await safeQuery(`DELETE FROM ${resourceName} WHERE id = $1`, [req.params.id]);
+            const { error } = await supabase
+                .from(resourceName)
+                .delete()
+                .eq('id', req.params.id);
+
+            if (error) throw error;
             res.json({ success: true });
         } catch (e) { 
             res.status(500).json({ error: e.message }); 
@@ -235,6 +161,7 @@ function getLocalIp() {
 app.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIp();
     console.log(`\n🚀 NeoArchive Server running!`);
+    console.log(`   > Backend Mode: Supabase HTTPS (No TCP issues)`);
     console.log(`   > Local:   http://localhost:${PORT}`);
     console.log(`   > Network: http://${ip}:${PORT}`);
 });
