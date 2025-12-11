@@ -22,17 +22,17 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// --- DATABASE CONFIGURATION (Supabase PostgreSQL) ---
+// --- DATABASE CONFIGURATION (Supabase PostgreSQL via Pooler) ---
 
-// Provided credentials
-const SUPABASE_DB_HOST = process.env.POSTGRES_HOST || 'db.kovcgjtqbvmuzhsrcktd.supabase.co';
-const SUPABASE_DB_NAME = process.env.POSTGRES_DB || 'postgres';
-const SUPABASE_DB_USER = process.env.POSTGRES_USER || 'postgres';
+// Using the transaction pooler credentials provided
+const SUPABASE_DB_HOST = process.env.POSTGRES_HOST || 'aws-1-eu-west-1.pooler.supabase.com';
+const SUPABASE_DB_PORT = parseInt(process.env.POSTGRES_PORT || '6543');
+const SUPABASE_DB_USER = process.env.POSTGRES_USER || 'postgres.kovcgjtqbvmuzhsrcktd';
 const SUPABASE_DB_PASS = process.env.POSTGRES_PASSWORD || 'ivKzfKVe$W7-AQ9';
-const SUPABASE_DB_PORT = parseInt(process.env.POSTGRES_PORT || '5432');
+const SUPABASE_DB_NAME = process.env.POSTGRES_DB || 'postgres';
 
-console.log("🐘 [Server] DB Configuration (PostgreSQL/Supabase):");
-console.log(`   > Host: ${SUPABASE_DB_HOST}`);
+console.log("🐘 [Server] DB Configuration (Supabase Pooler):");
+console.log(`   > Host: ${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT}`);
 console.log(`   > User: ${SUPABASE_DB_USER}`);
 console.log(`   > Database: ${SUPABASE_DB_NAME}`);
 
@@ -47,21 +47,28 @@ const pool = new Pool({
     ssl: {
         rejectUnauthorized: false // Required for Supabase connections
     },
-    max: 10, // Connection pool limit
-    idleTimeoutMillis: 30000
+    max: 20, // Connection pool limit
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000, // Fail fast if connection hangs
 });
 
 // Safe query helper
 const safeQuery = async (text, params) => {
-    const client = await pool.connect();
+    let client;
     try {
+        client = await pool.connect();
         const res = await client.query(text, params);
         return { rows: res.rows }; 
     } catch (e) {
-        console.error(`🔴 [DB Error] Query failed: ${text.substring(0, 50)}...`, e.message);
+        console.error(`🔴 [DB Error] Query failed: ${text.substring(0, 50)}...`);
+        console.error(`   > Message: ${e.message}`);
+        // Log detailed network error if present
+        if (e.code === 'ENETUNREACH' || e.code === 'ECONNREFUSED') {
+            console.error(`   > Network Error: Check hostname ${SUPABASE_DB_HOST} and port ${SUPABASE_DB_PORT}`);
+        }
         throw e;
     } finally {
-        client.release();
+        if (client) client.release();
     }
 };
 
@@ -71,8 +78,9 @@ const initDB = async () => {
         console.log("🐘 [Server] Connecting to Supabase PostgreSQL...");
         
         // Test connection
+        const start = Date.now();
         await safeQuery('SELECT NOW()');
-        console.log("✅ [Server] DB Connection established successfully!");
+        console.log(`✅ [Server] DB Connection established successfully! (${Date.now() - start}ms)`);
         
         // Ensure tables exist (PostgreSQL syntax)
         // Note: Using JSONB for better performance than JSON
@@ -126,7 +134,7 @@ initDB();
 
 // Health Check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', engine: 'postgres', timestamp: new Date() });
+    res.json({ status: 'ok', engine: 'postgres-pooler', timestamp: new Date() });
 });
 
 // 1. GLOBAL SYNC
