@@ -198,18 +198,21 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
     if (!username) throw new Error("User profile corrupted");
 
     // Sync profile check
+    // Explicitly define type to allow for undefined initially
     let userProfile: UserProfile | undefined = cache.users.find(u => u.username === username);
 
     if (!userProfile) {
         // Try fetch specifically in case global sync missed it
         const { data: userData } = await supabase.from('users').select('data').eq('username', username).single();
         if (userData && userData.data) {
-            userProfile = userData.data as UserProfile;
-            cache.users.push(userProfile as UserProfile);
+            // Explicit cast
+            const fetchedProfile = userData.data as UserProfile;
+            cache.users.push(fetchedProfile);
             saveToLocalCache();
+            userProfile = fetchedProfile;
         } else {
              // Fallback: create default profile if missing from DB
-            userProfile = {
+             const newProfile: UserProfile = {
                 username,
                 email: data.user.email || email,
                 tagline: 'Welcome back',
@@ -218,10 +221,11 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
                 following: [],
                 achievements: []
             };
-            await supabase.from('users').upsert({ username, data: userProfile });
+            await supabase.from('users').upsert({ username, data: newProfile });
             // Add fallback profile to cache to avoid re-creation
-            cache.users.push(userProfile as UserProfile);
+            cache.users.push(newProfile);
             saveToLocalCache();
+            userProfile = newProfile;
         }
     }
 
