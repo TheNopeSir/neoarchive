@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import pg from 'pg';
+import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import os from 'os';
 
@@ -21,30 +21,31 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// --- DATABASE CONFIGURATION (Timeweb) ---
-const { Pool } = pg;
-
-// Use provided credentials or fallback to hardcoded ones (for this specific user request)
+// --- DATABASE CONFIGURATION (MySQL/Timeweb) ---
+// Using credentials provided by user
 const dbConfig = {
-    host: process.env.POSTGRESQL_HOST || 'a584c7ff2ab7c4ced51afbdd.twc1.net',
-    port: parseInt(process.env.POSTGRESQL_PORT || '5432'),
-    user: process.env.POSTGRESQL_USER || 'gen_user',
-    database: process.env.POSTGRESQL_DBNAME || 'NeoBD',
-    password: process.env.POSTGRESQL_PASSWORD || 'txO%AY~q4d8W%a',
-    ssl: { rejectUnauthorized: false }, 
-    connectionTimeoutMillis: 5000 
+    host: process.env.MYSQL_HOST || 'eac945a9e201d3657964fcb9.twc1.net',
+    port: parseInt(process.env.MYSQL_PORT || '3306'),
+    user: process.env.MYSQL_USER || 'gen_user',
+    password: process.env.MYSQL_PASSWORD || '6l3RE-<@Ge4D3W',
+    database: process.env.MYSQL_DBNAME || 'NeoBD',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    // Enable multiple statements for initialization if needed, but best to separate them
+    multipleStatements: true 
 };
 
-console.log("🐘 [Server] DB Config Host:", dbConfig.host);
-console.log("🐘 [Server] DB Config Database:", dbConfig.database);
+console.log("🐬 [Server] DB Config Host:", dbConfig.host);
+console.log("🐬 [Server] DB Config Database:", dbConfig.database);
 
-const pool = new Pool(dbConfig);
+const pool = mysql.createPool(dbConfig);
 
 // Safe query helper
 const safeQuery = async (text, params) => {
     try {
-        const res = await pool.query(text, params);
-        return res;
+        const [rows, fields] = await pool.execute(text, params);
+        return { rows }; 
     } catch (e) {
         console.error(`🔴 [DB Error] Query failed: ${text.substring(0, 50)}...`, e.message);
         throw e;
@@ -53,49 +54,56 @@ const safeQuery = async (text, params) => {
 
 // Init DB Tables on Startup (Non-blocking)
 const initDB = async () => {
-    let client;
+    let connection;
     try {
-        console.log("🐘 [Server] Attempting to connect to Timeweb PostgreSQL...");
-        client = await pool.connect();
+        console.log("🐬 [Server] Attempting to connect to Timeweb MySQL...");
+        connection = await pool.getConnection();
         console.log("✅ [Server] DB Connection established successfully!");
         
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                username TEXT PRIMARY KEY,
-                data JSONB
-            );
-            CREATE TABLE IF NOT EXISTS exhibits (
-                id TEXT PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS collections (
-                id TEXT PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS notifications (
-                id TEXT PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS messages (
-                id TEXT PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS guestbook (
-                id TEXT PRIMARY KEY,
-                data JSONB,
-                timestamp TIMESTAMPTZ DEFAULT NOW()
-            );
-        `);
+        // Ensure tables exist using MySQL syntax
+        // JSON type is supported in MySQL 5.7+
+        const tables = [
+            `CREATE TABLE IF NOT EXISTS users (
+                username VARCHAR(255) PRIMARY KEY,
+                data JSON
+            )`,
+            `CREATE TABLE IF NOT EXISTS exhibits (
+                id VARCHAR(255) PRIMARY KEY,
+                data JSON,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS collections (
+                id VARCHAR(255) PRIMARY KEY,
+                data JSON,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS notifications (
+                id VARCHAR(255) PRIMARY KEY,
+                data JSON,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS messages (
+                id VARCHAR(255) PRIMARY KEY,
+                data JSON,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS guestbook (
+                id VARCHAR(255) PRIMARY KEY,
+                data JSON,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`
+        ];
+
+        for (const sql of tables) {
+            await connection.query(sql);
+        }
+        
         console.log("✅ [Server] Database schema ensured.");
     } catch (err) {
         console.error("⚠️ [Server] DB Initialization failed (Offline Mode Active):", err.message);
         console.error("   Ensure 'NeoBD' exists in Timeweb dashboard or check .env credentials.");
     } finally {
-        if (client) client.release();
+        if (connection) connection.release();
     }
 };
 
@@ -112,22 +120,21 @@ app.get('/api/health', (req, res) => {
 // 1. GLOBAL SYNC
 app.get('/api/sync', async (req, res) => {
     try {
-        const [users, exhibits, collections, notifs, msgs, gb] = await Promise.all([
-            safeQuery('SELECT data FROM users'),
-            safeQuery('SELECT data FROM exhibits ORDER BY timestamp DESC'),
-            safeQuery('SELECT data FROM collections ORDER BY timestamp DESC'),
-            safeQuery('SELECT data FROM notifications ORDER BY timestamp DESC'),
-            safeQuery('SELECT data FROM messages ORDER BY timestamp ASC'),
-            safeQuery('SELECT data FROM guestbook ORDER BY timestamp DESC')
-        ]);
+        const [users] = await pool.query('SELECT data FROM users');
+        const [exhibits] = await pool.query('SELECT data FROM exhibits ORDER BY timestamp DESC');
+        const [collections] = await pool.query('SELECT data FROM collections ORDER BY timestamp DESC');
+        const [notifs] = await pool.query('SELECT data FROM notifications ORDER BY timestamp DESC');
+        const [msgs] = await pool.query('SELECT data FROM messages ORDER BY timestamp ASC');
+        const [gb] = await pool.query('SELECT data FROM guestbook ORDER BY timestamp DESC');
         
+        // MySQL JSON columns are returned as objects automatically, no parsing needed usually
         res.json({
-            users: users.rows.map(r => r.data),
-            exhibits: exhibits.rows.map(r => r.data),
-            collections: collections.rows.map(r => r.data),
-            notifications: notifs.rows.map(r => r.data),
-            messages: msgs.rows.map(r => r.data),
-            guestbook: gb.rows.map(r => r.data),
+            users: users.map(r => r.data),
+            exhibits: exhibits.map(r => r.data),
+            collections: collections.map(r => r.data),
+            notifications: notifs.map(r => r.data),
+            messages: msgs.map(r => r.data),
+            guestbook: gb.map(r => r.data),
         });
     } catch (e) {
         console.error("Sync Error:", e.message);
@@ -138,10 +145,11 @@ app.get('/api/sync', async (req, res) => {
 // 2. USER PROFILE SYNC
 app.post('/api/users/update', async (req, res) => {
     try {
+        // MySQL UPSERT syntax
         await safeQuery(
-            `INSERT INTO users (username, data) VALUES ($1, $2) 
-             ON CONFLICT (username) DO UPDATE SET data = $2`,
-            [req.body.username, req.body]
+            `INSERT INTO users (username, data) VALUES (?, ?) 
+             ON DUPLICATE KEY UPDATE data = VALUES(data)`,
+            [req.body.username, JSON.stringify(req.body)]
         );
         res.json({ success: true });
     } catch (e) { 
@@ -154,9 +162,9 @@ const createCrudRoutes = (resourceName) => {
     app.post(`/api/${resourceName}`, async (req, res) => {
         try {
             await safeQuery(
-                `INSERT INTO ${resourceName} (id, data, timestamp) VALUES ($1, $2, NOW()) 
-                 ON CONFLICT (id) DO UPDATE SET data = $2`,
-                [req.body.id, req.body]
+                `INSERT INTO ${resourceName} (id, data, timestamp) VALUES (?, ?, NOW()) 
+                 ON DUPLICATE KEY UPDATE data = VALUES(data)`,
+                [req.body.id, JSON.stringify(req.body)]
             );
             res.json({ success: true });
         } catch (e) { 
@@ -166,7 +174,7 @@ const createCrudRoutes = (resourceName) => {
 
     app.delete(`/api/${resourceName}/:id`, async (req, res) => {
         try {
-            await safeQuery(`DELETE FROM ${resourceName} WHERE id = $1`, [req.params.id]);
+            await safeQuery(`DELETE FROM ${resourceName} WHERE id = ?`, [req.params.id]);
             res.json({ success: true });
         } catch (e) { 
             res.status(500).json({ error: e.message }); 
