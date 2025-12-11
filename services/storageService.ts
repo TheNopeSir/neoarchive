@@ -205,7 +205,7 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
         const { data: userData } = await supabase.from('users').select('data').eq('username', username).single();
         if (userData && userData.data) {
             userProfile = userData.data as UserProfile;
-            cache.users.push(userProfile);
+            cache.users.push(userProfile as UserProfile);
             saveToLocalCache();
         } else {
              // Fallback: create default profile if missing from DB
@@ -220,7 +220,7 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
             };
             await supabase.from('users').upsert({ username, data: userProfile });
             // Add fallback profile to cache to avoid re-creation
-            cache.users.push(userProfile);
+            cache.users.push(userProfile as UserProfile);
             saveToLocalCache();
         }
     }

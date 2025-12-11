@@ -10,13 +10,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ==========================================
-// ⚙️ НАСТРОЙКИ СЕРВЕРА (БЕЗ .ENV)
+// ⚙️ НАСТРОЙКИ СЕРВЕРА
 // ==========================================
 
 // 1. Ссылка на проект
 const SUPABASE_URL = "https://kovcgjtqbvmuzhsrcktd.supabase.co";
 
-// 2. ВАЖНО: Вставьте сюда ваш SERVICE_ROLE ключ
+// 2. SERVICE_ROLE ключ
 const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTM2MTYyMCwiZXhwIjoyMDgwOTM3NjIwfQ.9dGlbb7TV9SRDnYQULdDMDpZrI4r5XO1FgTCoKqrpf4";
 
 const PORT = 3000;
@@ -42,7 +42,7 @@ let isOfflineMode = false;
 // Initialization
 console.log("🚀 [Server] Initializing Direct Connection...");
 
-if (SUPABASE_SERVICE_ROLE_KEY.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTM2MTYyMCwiZXhwIjoyMDgwOTM3NjIwfQ.9dGlbb7TV9SRDnYQULdDMDpZrI4r5XO1FgTCoKqrpf4") || !SUPABASE_SERVICE_ROLE_KEY) {
+if (SUPABASE_SERVICE_ROLE_KEY.includes("ВСТАВЬТЕ_СЮДА") || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("\n❌ ОШИБКА: Вы не вставили SERVICE_ROLE ключ в файл server.js!");
     console.warn("   Сервер запущен в ОФФЛАЙН режиме. Данные не будут сохраняться.");
     isOfflineMode = true;
