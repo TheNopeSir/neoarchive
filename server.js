@@ -36,6 +36,7 @@ const dbConfig = {
 };
 
 console.log("🐘 [Server] DB Config Host:", dbConfig.host);
+console.log("🐘 [Server] DB Config Database:", dbConfig.database);
 
 const pool = new Pool(dbConfig);
 
@@ -92,7 +93,7 @@ const initDB = async () => {
         console.log("✅ [Server] Database schema ensured.");
     } catch (err) {
         console.error("⚠️ [Server] DB Initialization failed (Offline Mode Active):", err.message);
-        console.error("   Ensure 'default_db' exists in Timeweb dashboard or check .env credentials.");
+        console.error("   Ensure 'NeoBD' exists in Timeweb dashboard or check .env credentials.");
     } finally {
         if (client) client.release();
     }
