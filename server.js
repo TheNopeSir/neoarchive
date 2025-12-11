@@ -1,26 +1,18 @@
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import mysql from 'mysql2/promise';
+import pg from 'pg';
 import dotenv from 'dotenv';
 import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Загрузка .env
-dotenv.config();
-
-// 🔍 ДОБАВЬТЕ ЭТИ СТРОКИ ДЛЯ ОТЛАДКИ:
-console.log("====== ENV VARIABLES DEBUG ======");
-console.log("📂 .env path:", path.join(__dirname, '.env'));
-console.log("🔑 MYSQL_PASSWORD exists:", !!process.env.MYSQL_PASSWORD);
-console.log("🔑 MYSQL_PASSWORD value:", process.env.MYSQL_PASSWORD); // Уберите после проверки!
-console.log("👤 MYSQL_USER:", process.env.MYSQL_USER);
-console.log("🏠 MYSQL_HOST:", process.env.MYSQL_HOST);
-console.log("🗄️  MYSQL_DATABASE:", process.env.MYSQL_DATABASE);
-console.log("=================================\n");
+// Explicitly load .env from root
+const envPath = path.join(__dirname, '.env');
+dotenv.config({ path: envPath });
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -30,89 +22,100 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// --- DATABASE CONFIGURATION (MySQL with SSL) ---
-const dbConfig = {
-    host: process.env.MYSQL_HOST || 'eac945a9e201d3657964fcb9.twc1.net',
-    port: parseInt(process.env.MYSQL_PORT || '3306'),
-    user: process.env.MYSQL_USER || 'gen_user',
-    database: process.env.MYSQL_DATABASE || 'NeoBD',
-    password: process.env.MYSQL_PASSWORD || '',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
+// --- DATABASE CONFIGURATION (Supabase PostgreSQL) ---
+
+// Provided credentials
+const SUPABASE_DB_HOST = process.env.POSTGRES_HOST || 'db.kovcgjtqbvmuzhsrcktd.supabase.co';
+const SUPABASE_DB_NAME = process.env.POSTGRES_DB || 'postgres';
+const SUPABASE_DB_USER = process.env.POSTGRES_USER || 'postgres';
+const SUPABASE_DB_PASS = process.env.POSTGRES_PASSWORD || 'ivKzfKVe$W7-AQ9';
+const SUPABASE_DB_PORT = parseInt(process.env.POSTGRES_PORT || '5432');
+
+console.log("🐘 [Server] DB Configuration (PostgreSQL/Supabase):");
+console.log(`   > Host: ${SUPABASE_DB_HOST}`);
+console.log(`   > User: ${SUPABASE_DB_USER}`);
+console.log(`   > Database: ${SUPABASE_DB_NAME}`);
+
+const { Pool } = pg;
+
+const pool = new Pool({
+    host: SUPABASE_DB_HOST,
+    port: SUPABASE_DB_PORT,
+    user: SUPABASE_DB_USER,
+    password: SUPABASE_DB_PASS,
+    database: SUPABASE_DB_NAME,
     ssl: {
-        rejectUnauthorized: false
-    }
-};
-
-console.log("🐬 [Server] DB Config Host:", dbConfig.host);
-console.log("🐬 [Server] DB Config Database:", dbConfig.database);
-
-const pool = mysql.createPool(dbConfig);
+        rejectUnauthorized: false // Required for Supabase connections
+    },
+    max: 10, // Connection pool limit
+    idleTimeoutMillis: 30000
+});
 
 // Safe query helper
 const safeQuery = async (text, params) => {
+    const client = await pool.connect();
     try {
-        const [rows, fields] = await pool.execute(text, params);
-        return { rows }; 
+        const res = await client.query(text, params);
+        return { rows: res.rows }; 
     } catch (e) {
         console.error(`🔴 [DB Error] Query failed: ${text.substring(0, 50)}...`, e.message);
         throw e;
+    } finally {
+        client.release();
     }
 };
 
-// Init DB Tables on Startup (Non-blocking)
+// Init DB Tables on Startup
 const initDB = async () => {
-    let connection;
     try {
-        console.log("🐬 [Server] Attempting to connect to Timeweb MySQL...");
-        connection = await pool.getConnection();
+        console.log("🐘 [Server] Connecting to Supabase PostgreSQL...");
+        
+        // Test connection
+        await safeQuery('SELECT NOW()');
         console.log("✅ [Server] DB Connection established successfully!");
         
-        // Ensure tables exist using MySQL syntax
-        // JSON type is supported in MySQL 5.7+
+        // Ensure tables exist (PostgreSQL syntax)
+        // Note: Using JSONB for better performance than JSON
         const tables = [
             `CREATE TABLE IF NOT EXISTS users (
                 username VARCHAR(255) PRIMARY KEY,
-                data JSON
+                data JSONB
             )`,
             `CREATE TABLE IF NOT EXISTS exhibits (
                 id VARCHAR(255) PRIMARY KEY,
-                data JSON,
+                data JSONB,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
             `CREATE TABLE IF NOT EXISTS collections (
                 id VARCHAR(255) PRIMARY KEY,
-                data JSON,
+                data JSONB,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
             `CREATE TABLE IF NOT EXISTS notifications (
                 id VARCHAR(255) PRIMARY KEY,
-                data JSON,
+                data JSONB,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
             `CREATE TABLE IF NOT EXISTS messages (
                 id VARCHAR(255) PRIMARY KEY,
-                data JSON,
+                data JSONB,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
             `CREATE TABLE IF NOT EXISTS guestbook (
                 id VARCHAR(255) PRIMARY KEY,
-                data JSON,
+                data JSONB,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`
         ];
 
         for (const sql of tables) {
-            await connection.query(sql);
+            await safeQuery(sql);
         }
         
         console.log("✅ [Server] Database schema ensured.");
     } catch (err) {
-        console.error("⚠️ [Server] DB Initialization failed (Offline Mode Active):", err.message);
-        console.error("   Ensure 'NeoBD' exists in Timeweb dashboard or check .env credentials.");
-    } finally {
-        if (connection) connection.release();
+        console.error("⚠️ [Server] DB Initialization failed:", err.message);
+        console.error("   Please check your internet connection and Supabase credentials.");
     }
 };
 
@@ -123,20 +126,19 @@ initDB();
 
 // Health Check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date() });
+    res.json({ status: 'ok', engine: 'postgres', timestamp: new Date() });
 });
 
 // 1. GLOBAL SYNC
 app.get('/api/sync', async (req, res) => {
     try {
-        const [users] = await pool.query('SELECT data FROM users');
-        const [exhibits] = await pool.query('SELECT data FROM exhibits ORDER BY timestamp DESC');
-        const [collections] = await pool.query('SELECT data FROM collections ORDER BY timestamp DESC');
-        const [notifs] = await pool.query('SELECT data FROM notifications ORDER BY timestamp DESC');
-        const [msgs] = await pool.query('SELECT data FROM messages ORDER BY timestamp ASC');
-        const [gb] = await pool.query('SELECT data FROM guestbook ORDER BY timestamp DESC');
+        const { rows: users } = await safeQuery('SELECT data FROM users');
+        const { rows: exhibits } = await safeQuery('SELECT data FROM exhibits ORDER BY timestamp DESC');
+        const { rows: collections } = await safeQuery('SELECT data FROM collections ORDER BY timestamp DESC');
+        const { rows: notifs } = await safeQuery('SELECT data FROM notifications ORDER BY timestamp DESC');
+        const { rows: msgs } = await safeQuery('SELECT data FROM messages ORDER BY timestamp ASC');
+        const { rows: gb } = await safeQuery('SELECT data FROM guestbook ORDER BY timestamp DESC');
         
-        // MySQL JSON columns are returned as objects automatically, no parsing needed usually
         res.json({
             users: users.map(r => r.data),
             exhibits: exhibits.map(r => r.data),
@@ -154,10 +156,10 @@ app.get('/api/sync', async (req, res) => {
 // 2. USER PROFILE SYNC
 app.post('/api/users/update', async (req, res) => {
     try {
-        // MySQL UPSERT syntax
+        // Postgres UPSERT syntax
         await safeQuery(
-            `INSERT INTO users (username, data) VALUES (?, ?) 
-             ON DUPLICATE KEY UPDATE data = VALUES(data)`,
+            `INSERT INTO users (username, data) VALUES ($1, $2) 
+             ON CONFLICT (username) DO UPDATE SET data = EXCLUDED.data`,
             [req.body.username, JSON.stringify(req.body)]
         );
         res.json({ success: true });
@@ -170,9 +172,10 @@ app.post('/api/users/update', async (req, res) => {
 const createCrudRoutes = (resourceName) => {
     app.post(`/api/${resourceName}`, async (req, res) => {
         try {
+            // Postgres UPSERT syntax
             await safeQuery(
-                `INSERT INTO ${resourceName} (id, data, timestamp) VALUES (?, ?, NOW()) 
-                 ON DUPLICATE KEY UPDATE data = VALUES(data)`,
+                `INSERT INTO ${resourceName} (id, data, timestamp) VALUES ($1, $2, NOW()) 
+                 ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, timestamp = NOW()`,
                 [req.body.id, JSON.stringify(req.body)]
             );
             res.json({ success: true });
@@ -183,7 +186,8 @@ const createCrudRoutes = (resourceName) => {
 
     app.delete(`/api/${resourceName}/:id`, async (req, res) => {
         try {
-            await safeQuery(`DELETE FROM ${resourceName} WHERE id = ?`, [req.params.id]);
+            // Postgres DELETE syntax (Standard SQL)
+            await safeQuery(`DELETE FROM ${resourceName} WHERE id = $1`, [req.params.id]);
             res.json({ success: true });
         } catch (e) { 
             res.status(500).json({ error: e.message }); 
@@ -197,12 +201,12 @@ createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
 
-// Handle 404 for API routes specifically (return JSON, not HTML)
+// Handle 404 for API routes specifically
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });
 
-// Fallback for SPA (Serve index.html for all other routes)
+// Fallback for SPA
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
@@ -225,5 +229,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 NeoArchive Server running!`);
     console.log(`   > Local:   http://localhost:${PORT}`);
     console.log(`   > Network: http://${ip}:${PORT}`);
-    console.log(`   (Note: If accessing from mobile, ensure Firewall allows Node.js)\n`);
 });
