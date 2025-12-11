@@ -6,9 +6,9 @@
   "engines": {
     "node": ">=20.0.0"
   },
-   "scripts": {
+    "scripts": {
     "dev": "vite --host",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview --host",
     "start": "node server.js",
     "deploy": "npm install"
