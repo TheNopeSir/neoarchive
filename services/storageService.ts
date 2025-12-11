@@ -145,7 +145,8 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
                 tagline: 'Restored Session',
                 avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
                 joinedDate: new Date().toLocaleDateString(),
-                following: []
+                following: [],
+                achievements: []
             };
         }
     }
@@ -197,12 +198,13 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
     if (!username) throw new Error("User profile corrupted");
 
     // Sync profile check
-    let userProfile = cache.users.find(u => u.username === username);
+    let userProfile: UserProfile | undefined = cache.users.find(u => u.username === username);
+
     if (!userProfile) {
         // Try fetch specifically in case global sync missed it
         const { data: userData } = await supabase.from('users').select('data').eq('username', username).single();
-        if (userData) {
-            userProfile = userData.data;
+        if (userData && userData.data) {
+            userProfile = userData.data as UserProfile;
             cache.users.push(userProfile);
             saveToLocalCache();
         } else {
@@ -217,8 +219,16 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
                 achievements: []
             };
             await supabase.from('users').upsert({ username, data: userProfile });
+            // Add fallback profile to cache to avoid re-creation
+            cache.users.push(userProfile);
+            saveToLocalCache();
         }
     }
+
+    if (!userProfile) {
+        throw new Error("Unable to load user profile after login.");
+    }
+    
     return userProfile;
 };
 
