@@ -3,58 +3,61 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
 import os from 'os';
-import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Explicitly load .env from root if it exists
-const envPath = path.join(__dirname, '.env');
-if (fs.existsSync(envPath)) {
-    console.log("📄 [Server] Loading .env configuration...");
-    dotenv.config({ path: envPath });
-} else {
-    console.warn("⚠️ [Server] No .env file found. Relying on system environment variables.");
-}
+// ==========================================
+// ⚙️ НАСТРОЙКИ СЕРВЕРА (БЕЗ .ENV)
+// ==========================================
+
+// 1. Ссылка на проект (взята из вашего connection string)
+const SUPABASE_URL = "https://kovcgjtqbvmuzhsrcktd.supabase.co";
+
+// 2. ВАЖНО: Вставьте сюда ваш SERVICE_ROLE ключ (Settings -> API -> service_role secret)
+// Он начинается на "ey..." и он длинный. Не путать с anon key!
+const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTM2MTYyMCwiZXhwIjoyMDgwOTM3NjIwfQ.9dGlbb7TV9SRDnYQULdDMDpZrI4r5XO1FgTCoKqrpf4";
+
+const PORT = 3000;
+
+// ==========================================
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
 
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// --- SUPABASE CONFIGURATION ---
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-
 let supabase = null;
 let isOfflineMode = false;
 
-// Robust Initialization
-try {
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || SUPABASE_URL === 'undefined') {
-        throw new Error("Credentials missing or invalid");
-    }
-    
-    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-        auth: {
-            autoRefreshToken: false,
-            persistSession: false
-        }
-    });
-    console.log("⚡ [Server] Supabase Client Connected via HTTPS");
+// Initialization
+console.log("🚀 [Server] Initializing Direct Connection...");
 
-} catch (err) {
-    console.warn(`⚠️ [Server] Failed to connect to Supabase: ${err.message}`);
-    console.warn("⚠️ [Server] Starting in OFFLINE/MOCK MODE. API endpoints will return empty data.");
-    
+if (SUPABASE_SERVICE_ROLE_KEY.includes("ВСТАВЬТЕ_СЮДА") || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("\n❌ ОШИБКА: Вы не вставили SERVICE_ROLE ключ в файл server.js!");
+    console.error("   Откройте server.js и замените заглушку на реальный ключ из Supabase.\n");
     isOfflineMode = true;
-    
-    // Mock Client to prevent crashes in API routes
+} else {
+    try {
+        supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        });
+        console.log("✅ [Server] Supabase Client Configured");
+    } catch (err) {
+        console.error("⚠️ [Server] Client Creation Error:", err.message);
+        isOfflineMode = true;
+    }
+}
+
+if (isOfflineMode) {
+    console.warn("⚠️ [Server] Running in OFFLINE/MOCK MODE. API will return empty data.");
+    // Mock Client
     const mockDb = {
         select: () => ({ order: () => ({ data: [], error: null }), data: [], error: null }),
         insert: () => ({ select: () => ({ single: () => ({ data: {}, error: null }) }), error: null }),
@@ -71,25 +74,11 @@ try {
             }
         }
     };
-    
-    console.log("   > VITE_SUPABASE_URL:", SUPABASE_URL ? "Set" : "MISSING");
-    console.log("   > SUPABASE_SERVICE_ROLE_KEY:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "Set" : "MISSING");
 }
 
 // --- API ROUTES ---
 
-// Health Check
-app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: isOfflineMode ? 'offline' : 'online', 
-        engine: 'supabase-http', 
-        timestamp: new Date() 
-    });
-});
-
 const ensureDb = (req, res, next) => {
-    // In offline mode, we allow requests to pass but they will likely return empty data from the mock
-    // This prevents the frontend from receiving 503s and crashing
     next();
 };
 
@@ -117,14 +106,13 @@ app.get('/api/sync', ensureDb, async (req, res) => {
         });
     } catch (e) {
         console.error("Sync Error:", e.message);
-        // Return empty structure instead of error to keep app alive
         res.json({ users: [], exhibits: [], collections: [], notifications: [], messages: [], guestbook: [] });
     }
 });
 
 // 2. USER PROFILE SYNC
 app.post('/api/users/update', ensureDb, async (req, res) => {
-    if (isOfflineMode) return res.json({ success: true, warning: "Offline Mode" });
+    if (isOfflineMode) return res.json({ success: true });
     try {
         await supabase
             .from('users')
@@ -132,14 +120,14 @@ app.post('/api/users/update', ensureDb, async (req, res) => {
         res.json({ success: true });
     } catch (e) { 
         console.error("User Update Error:", e.message);
-        res.status(200).json({ success: false, error: e.message }); // Return 200 to prevent frontend errors
+        res.status(200).json({ success: false, error: e.message });
     }
 });
 
-// 3. CRUD OPERATIONS GENERATOR
+// 3. CRUD OPERATIONS
 const createCrudRoutes = (resourceName) => {
     app.post(`/api/${resourceName}`, ensureDb, async (req, res) => {
-        if (isOfflineMode) return res.json({ success: true, warning: "Offline Mode" });
+        if (isOfflineMode) return res.json({ success: true });
         try {
             const payload = {
                 id: req.body.id,
@@ -159,7 +147,7 @@ const createCrudRoutes = (resourceName) => {
     });
 
     app.delete(`/api/${resourceName}/:id`, ensureDb, async (req, res) => {
-        if (isOfflineMode) return res.json({ success: true, warning: "Offline Mode" });
+        if (isOfflineMode) return res.json({ success: true });
         try {
             await supabase
                 .from(resourceName)
@@ -179,7 +167,7 @@ createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
 
-// Handle 404 for API routes specifically
+// Handle 404
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });
@@ -205,7 +193,8 @@ function getLocalIp() {
 app.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIp();
     console.log(`\n🚀 NeoArchive Server running!`);
-    console.log(`   > Mode: ${isOfflineMode ? 'OFFLINE (No DB Connection)' : 'ONLINE (Connected)'}`);
+    console.log(`   > URL: ${SUPABASE_URL}`);
+    console.log(`   > Key Status: ${isOfflineMode ? '❌ MISSING' : '✅ LOADED'}`);
     console.log(`   > Local:   http://localhost:${PORT}`);
     console.log(`   > Network: http://${ip}:${PORT}`);
 });
