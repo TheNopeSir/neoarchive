@@ -19,7 +19,7 @@ const SUPABASE_URL = "https://kovcgjtqbvmuzhsrcktd.supabase.co";
 // 2. SERVICE_ROLE ключ
 const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTM2MTYyMCwiZXhwIjoyMDgwOTM3NjIwfQ.9dGlbb7TV9SRDnYQULdDMDpZrI4r5XO1FgTCoKqrpf4";
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // ==========================================
 
@@ -28,7 +28,7 @@ const app = express();
 // Middleware
 // Enable CORS for ALL origins to fix mobile/external connection issues
 app.use(cors({
-    origin: true, // Reflect request origin
+    origin: '*', // Разрешить ВСЕ источники (для теста)
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
@@ -199,9 +199,9 @@ function getLocalIp() {
 app.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIp();
     console.log(`\n🚀 NeoArchive Server running!`);
+    console.log(`   > Port: ${PORT}`);
     console.log(`   > URL: ${SUPABASE_URL}`);
     console.log(`   > Status: ${isOfflineMode ? '🟡 OFFLINE (KEYS MISSING)' : '🟢 ONLINE'}`);
     console.log(`   > Local:   http://localhost:${PORT}`);
-    console.log(`   > Network: http://${ip}:${PORT}`); // Use this URL on your phone
-    console.log(`\n   Для доступа с телефона, убедитесь, что устройства в одной сети`);
+    console.log(`   > Network: http://${ip}:${PORT}`);
 });
