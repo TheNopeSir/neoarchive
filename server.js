@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -6,13 +5,19 @@ import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import os from 'os';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Explicitly load .env from root
 const envPath = path.join(__dirname, '.env');
-dotenv.config({ path: envPath });
+if (fs.existsSync(envPath)) {
+    console.log("📄 [Server] Found .env file at:", envPath);
+    dotenv.config({ path: envPath });
+} else {
+    console.warn("⚠️ [Server] .env file not found at:", envPath);
+}
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -23,34 +28,51 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // --- SUPABASE CONFIGURATION (HTTPS MODE) ---
-// Using the SDK avoids TCP connection issues (ENETUNREACH) inside Docker
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-// IMPORTANT: Use the SERVICE_ROLE key for the server to bypass RLS and manage data
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
+let supabase = null;
+
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    console.error("🔴 [Server] Missing Supabase URL or Key in .env");
-    console.error("   Ensure VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.");
+    console.error("🔴 [Server] CRITICAL: Missing Supabase URL or Key.");
+    console.log("   Debugging Environment Variables:");
+    console.log("   > VITE_SUPABASE_URL:", SUPABASE_URL ? "Set (OK)" : "MISSING");
+    console.log("   > SUPABASE_SERVICE_ROLE_KEY:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "Set (OK)" : "MISSING");
+    console.log("   > VITE_SUPABASE_ANON_KEY:", process.env.VITE_SUPABASE_ANON_KEY ? "Set (OK)" : "MISSING");
+} else {
+    try {
+        supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        });
+        console.log("⚡ [Server] Initialized Supabase Client (HTTPS Mode)");
+    } catch (err) {
+        console.error("🔴 [Server] Failed to initialize Supabase client:", err.message);
+    }
 }
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-});
-
-console.log("⚡ [Server] Initialized Supabase Client (HTTPS Mode)");
 
 // --- API ROUTES ---
 
 // Health Check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', engine: 'supabase-http', timestamp: new Date() });
+    res.json({ 
+        status: supabase ? 'ok' : 'misconfigured', 
+        engine: 'supabase-http', 
+        timestamp: new Date() 
+    });
 });
 
+const ensureDb = (req, res, next) => {
+    if (!supabase) {
+        return res.status(503).json({ error: "Server misconfigured: Database connection missing" });
+    }
+    next();
+};
+
 // 1. GLOBAL SYNC
-app.get('/api/sync', async (req, res) => {
+app.get('/api/sync', ensureDb, async (req, res) => {
     try {
         const { data: users, error: uErr } = await supabase.from('users').select('data');
         const { data: exhibits, error: eErr } = await supabase.from('exhibits').select('data').order('timestamp', { ascending: false });
@@ -60,7 +82,8 @@ app.get('/api/sync', async (req, res) => {
         const { data: gb, error: gErr } = await supabase.from('guestbook').select('data').order('timestamp', { ascending: false });
 
         if (uErr || eErr || cErr || nErr || mErr || gErr) {
-            throw new Error("Supabase Fetch Error: " + (uErr?.message || eErr?.message));
+            const err = uErr || eErr || cErr || nErr || mErr || gErr;
+            throw new Error("Supabase Fetch Error: " + err.message);
         }
         
         res.json({
@@ -78,7 +101,7 @@ app.get('/api/sync', async (req, res) => {
 });
 
 // 2. USER PROFILE SYNC
-app.post('/api/users/update', async (req, res) => {
+app.post('/api/users/update', ensureDb, async (req, res) => {
     try {
         const { error } = await supabase
             .from('users')
@@ -94,7 +117,7 @@ app.post('/api/users/update', async (req, res) => {
 
 // 3. CRUD OPERATIONS GENERATOR
 const createCrudRoutes = (resourceName) => {
-    app.post(`/api/${resourceName}`, async (req, res) => {
+    app.post(`/api/${resourceName}`, ensureDb, async (req, res) => {
         try {
             const payload = {
                 id: req.body.id,
@@ -114,7 +137,7 @@ const createCrudRoutes = (resourceName) => {
         }
     });
 
-    app.delete(`/api/${resourceName}/:id`, async (req, res) => {
+    app.delete(`/api/${resourceName}/:id`, ensureDb, async (req, res) => {
         try {
             const { error } = await supabase
                 .from(resourceName)
@@ -161,7 +184,8 @@ function getLocalIp() {
 app.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIp();
     console.log(`\n🚀 NeoArchive Server running!`);
-    console.log(`   > Backend Mode: Supabase HTTPS (No TCP issues)`);
+    console.log(`   > Backend Mode: Supabase HTTPS`);
+    console.log(`   > Status: ${supabase ? 'CONNECTED' : 'OFFLINE (MISSING KEYS)'}`);
     console.log(`   > Local:   http://localhost:${PORT}`);
     console.log(`   > Network: http://${ip}:${PORT}`);
 });
