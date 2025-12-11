@@ -33,6 +33,11 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
+app.use((req, res, next) => {
+    console.log(`📨 ${req.method} ${req.url} from ${req.ip}`);
+    next();
+});
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
