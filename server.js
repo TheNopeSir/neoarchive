@@ -194,7 +194,18 @@ function getLocalIp() {
     }
     return '0.0.0.0';
 }
+// Health Check для TimeWeb App Platform
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
 
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
 // Listen on 0.0.0.0 is crucial for external access
 app.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIp();
