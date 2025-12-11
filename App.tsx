@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
@@ -50,7 +51,7 @@ const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null 
                     NEO_ARCHIVE
                 </h1>
                 <p className={`font-mono text-xs md:text-sm max-w-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Цифровой ковчег для сохранения артефактов прошлого в облачной вечности.
+                    Это веб-приложение для публичных коллекций, в котором люди могут создавать, обсуждать и сохранять историю цифрового мира.
                 </p>
             </div>
         </div>
@@ -911,7 +912,7 @@ export default function App() {
                        <div className="animate-in fade-in slide-in-from-bottom-2">
                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                {collections
-                                  .filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                                  .filter(c => !searchQuery || c.title?.toLowerCase().includes(searchQuery.toLowerCase()))
                                   .map(renderCollectionCard)
                                }
                            </div>
@@ -950,7 +951,7 @@ export default function App() {
 
                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                {(searchQuery 
-                                 ? exhibits.filter(ex => ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))
+                                 ? exhibits.filter(ex => ex.title?.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description?.toLowerCase().includes(searchQuery.toLowerCase()))
                                  : exhibits.sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)
                                ).map(item => (
                                     <ExhibitCard 

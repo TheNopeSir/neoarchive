@@ -76,24 +76,38 @@ const toDbPayload = (item: any) => {
     return {
         id: item.id,
         data: item,
+        // We still send timestamp for future use, but won't rely on it for sorting in SQL query
         timestamp: new Date().toISOString()
     };
 };
 
-// Helper to fetch and unwrap data
+// Helper to fetch and unwrap data with IN-MEMORY sorting
 const fetchTable = async <T>(tableName: string): Promise<T[]> => {
+    // We removed .order('timestamp') because the column might not exist on the table schema.
+    // We will sort in JavaScript instead.
     const { data, error } = await supabase
         .from(tableName)
-        .select('data')
-        .order('timestamp', { ascending: false });
+        .select('data');
 
     if (error) {
         console.warn(`[Sync] Warning fetching ${tableName}:`, error.message);
+        // Return empty array on error so Promise.all doesn't fail for one table
         return [];
     }
 
-    // Unwrap the 'data' column
-    return (data || []).map((row: any) => row.data);
+    // Unwrap the 'data' column and Filter nulls
+    const items = (data || [])
+        .map((row: any) => row.data)
+        .filter((item: any) => item !== null && item !== undefined);
+
+    // Sort by timestamp descending (Newest first) if timestamp exists in the JSON data
+    items.sort((a: any, b: any) => {
+        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tB - tA; 
+    });
+
+    return items;
 };
 
 // --- INITIALIZATION ---
@@ -200,6 +214,7 @@ export const registerUser = async (username: string, password: string, tagline: 
     // 3. Update Cache & Persist
     cache.users.push(userProfile);
     saveToLocalCache();
+    // 'users' table usually has 'username' as PK and 'data' as JSONB
     await supabase.from('users').upsert({ username, data: userProfile });
     
     return userProfile;
