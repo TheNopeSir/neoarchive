@@ -1,4 +1,3 @@
-
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -14,7 +13,6 @@ let cache = {
 };
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
-const API_URL = '/api';
 
 // --- SLUG GENERATOR ---
 const slugify = (text: string): string => {
@@ -41,39 +39,20 @@ const loadFromLocalCache = (): boolean => {
     if (json) {
         try {
             const data = JSON.parse(json);
-            cache = { ...cache, ...data, isLoaded: true };
+            // Ensure arrays exist
+            cache = {
+                exhibits: data.exhibits || [],
+                collections: data.collections || [],
+                notifications: data.notifications || [],
+                messages: data.messages || [],
+                users: data.users || [],
+                guestbook: data.guestbook || [],
+                isLoaded: true
+            };
             return true;
         } catch (e) { return false; }
     }
     return false;
-};
-
-// --- API COMMUNICATIONS (Robust) ---
-const apiCall = async (endpoint: string, method: string, data?: any) => {
-    try {
-        const res = await fetch(`${API_URL}${endpoint}`, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: data ? JSON.stringify(data) : undefined
-        });
-        
-        // If 503 or 502, server is down, handle gracefully
-        if (res.status === 503 || res.status === 502 || res.status === 504) {
-            throw new Error("Server Unavailable");
-        }
-
-        if (!res.ok) {
-            const errBody = await res.json().catch(() => ({}));
-            // If 404, it might be an old endpoint, just ignore
-            if (res.status === 404) throw new Error(`Endpoint ${endpoint} not found`);
-            throw new Error(errBody.error || `API Error: ${res.statusText}`);
-        }
-        return await res.json();
-    } catch (e) {
-        // Log but do not crash the app logic unless critical
-        console.warn(`⚠️ API Call Failed [${endpoint}] (using cache):`, e);
-        throw e;
-    }
 };
 
 export const fileToBase64 = (file: File): Promise<string> => {
@@ -85,80 +64,109 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+// --- CLOUD SYNC HELPERS ---
+
+// Helper to wrap object for JSONB storage pattern used in this app
+const toDbPayload = (item: any) => {
+    return {
+        id: item.id,
+        data: item,
+        timestamp: new Date().toISOString()
+    };
+};
+
+// Helper to fetch and unwrap data
+const fetchTable = async <T>(tableName: string): Promise<T[]> => {
+    const { data, error } = await supabase
+        .from(tableName)
+        .select('data')
+        .order('timestamp', { ascending: false });
+
+    if (error) {
+        console.error(`Error fetching ${tableName}:`, error);
+        return [];
+    }
+
+    // Unwrap the 'data' column
+    return (data || []).map((row: any) => row.data);
+};
+
 // --- INITIALIZATION ---
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
-  // 1. Load optimistic cache first (Fastest)
-  loadFromLocalCache();
+    // 1. Load optimistic cache first (Fastest visual load)
+    loadFromLocalCache();
 
-  // 2. Sync Data from Timeweb (Async, don't block auth on failure)
-  try {
-      const serverData = await apiCall('/sync', 'GET');
-      if (serverData) {
-          cache.exhibits = serverData.exhibits || [];
-          cache.collections = serverData.collections || [];
-          cache.notifications = serverData.notifications || [];
-          cache.messages = serverData.messages || [];
-          cache.guestbook = serverData.guestbook || [];
-          cache.users = serverData.users || [];
-          cache.isLoaded = true;
-          saveToLocalCache();
-          console.log("✅ [Sync] Data synchronized with Timeweb");
-      }
-  } catch (e) {
-      console.warn("⚠️ [Sync] Timeweb server unreachable, running in cached/offline mode");
-  }
+    // 2. Direct Cloud Sync (Supabase)
+    try {
+        console.log("☁️ [Sync] Connecting to NeoArchive Cloud...");
+        const [users, exhibits, collections, notifications, messages, guestbook] = await Promise.all([
+            fetchTable<UserProfile>('users'),
+            fetchTable<Exhibit>('exhibits'),
+            fetchTable<Collection>('collections'),
+            fetchTable<Notification>('notifications'),
+            fetchTable<Message>('messages'),
+            fetchTable<GuestbookEntry>('guestbook')
+        ]);
 
-  // 3. Check Supabase Session (Restore User)
-  const { data: { session } } = await supabase.auth.getSession();
+        // Merge logic: prefer cloud data.
+        if (users.length > 0) cache.users = users;
+        if (exhibits.length > 0) cache.exhibits = exhibits;
+        if (collections.length > 0) cache.collections = collections;
+        if (notifications.length > 0) cache.notifications = notifications;
+        if (messages.length > 0) cache.messages = messages.sort((a,b) => a.timestamp.localeCompare(b.timestamp)); 
+        if (guestbook.length > 0) cache.guestbook = guestbook;
+        
+        cache.isLoaded = true;
+        saveToLocalCache();
+        console.log("✅ [Sync] Cloud synchronization complete.");
+    } catch (e) {
+        console.warn("⚠️ [Sync] Cloud unavailable or network error, running in offline mode:", e);
+    }
+
+    // 3. Restore Session
+    let session = null;
+    try {
+        const { data } = await supabase.auth.getSession();
+        session = data?.session;
+    } catch (err) {
+        console.warn("⚠️ [Auth] Failed to restore session", err);
+    }
   
-  if (session?.user) {
-      const username = session.user.user_metadata?.username;
-      if (username) {
-          // Try to find full profile in our Timeweb data
-          const userProfile = cache.users.find(u => u.username === username);
-          if (userProfile) return userProfile;
-          
-          // Fallback if profile missing in Timeweb but exists in Supabase
-          return {
-              username: username,
-              email: session.user.email || '',
-              tagline: 'Restored Session',
-              avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
-              joinedDate: new Date().toLocaleDateString(),
-              following: []
-          };
-      }
-  }
-  return null;
+    if (session?.user) {
+        // Just use metadata if available, or find in synced users
+        const username = session.user.user_metadata?.username;
+        if (username) {
+            const userProfile = cache.users.find(u => u.username === username);
+            if (userProfile) return userProfile;
+            
+            return {
+                username: username,
+                email: session.user.email || '',
+                tagline: 'Restored Session',
+                avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
+                joinedDate: new Date().toLocaleDateString(),
+                following: []
+            };
+        }
+    }
+    return null;
 };
 
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
-// --- AUTH (SUPABASE + TIMEWEB SYNC) ---
+// --- AUTH ---
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    console.log("📝 [Auth] Registering with Supabase...");
-    
-    // 1. Create User in Supabase (Primary Source of Truth for Auth)
+    // 1. Auth with Supabase
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-            data: { username } // Store username in Supabase metadata
-        }
+        options: { data: { username } }
     });
 
-    if (error) {
-        console.error("🔴 [Auth] Supabase Error:", error);
-        throw new Error(error.message);
-    }
-    
-    // Note: Supabase might require email confirmation, data.user might be null if autoconfirm is off
-    if (!data.user && !error) {
-        throw new Error("Подтвердите email для завершения регистрации");
-    }
-
-    if (!data.user) throw new Error("Registration failed - No user data returned");
+    if (error) throw new Error(error.message);
+    // Note: Supabase often requires email confirmation. 
+    if (!data.user) throw new Error("Подтвердите email для завершения регистрации");
 
     // 2. Create Profile Object
     const userProfile: UserProfile = {
@@ -172,79 +180,61 @@ export const registerUser = async (username: string, password: string, tagline: 
         isAdmin: false
     };
 
-    // 3. Save to local cache immediately (Optimistic UI)
+    // 3. Update Cache & Persist
     cache.users.push(userProfile);
     saveToLocalCache();
-
-    // 4. Try to sync profile to Timeweb (Backend)
-    // We swallow errors here so the user can still proceed even if backend is flaky
-    try {
-        await apiCall('/users/update', 'POST', userProfile);
-        console.log("✅ [Auth] Profile synced to Timeweb");
-    } catch (e) {
-        console.warn("⚠️ [Auth] Failed to sync profile to Timeweb (Offline mode active)");
-    }
+    await supabase.from('users').upsert({ username, data: userProfile });
     
     return userProfile;
 };
 
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
-    console.log("🔐 [Auth] Logging in via Supabase...");
-    
-    // 1. Auth with Supabase
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-    });
-
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
     if (!data.user) throw new Error("Login failed");
 
     const username = data.user.user_metadata?.username;
-    
-    if (!username) throw new Error("User profile corrupted (no username in metadata)");
+    if (!username) throw new Error("User profile corrupted");
 
-    // 2. Fetch/Sync Profile from Cache
+    // Sync profile check
     let userProfile = cache.users.find(u => u.username === username);
-
     if (!userProfile) {
-        // Fallback: create a local profile if not found in DB
-        userProfile = {
-            username,
-            email: data.user.email || email,
-            tagline: 'Welcome back',
-            avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
-            joinedDate: new Date().toLocaleString('ru-RU'),
-            following: [],
-            achievements: []
-        };
-        
-        // Try to sync restoration
-        try {
-            await apiCall('/users/update', 'POST', userProfile);
-        } catch (e) {
-            console.warn("⚠️ [Auth] Failed to sync restored profile");
+        // Try fetch specifically in case global sync missed it
+        const { data: userData } = await supabase.from('users').select('data').eq('username', username).single();
+        if (userData) {
+            userProfile = userData.data;
+            cache.users.push(userProfile);
+            saveToLocalCache();
+        } else {
+             // Fallback: create default profile if missing from DB
+            userProfile = {
+                username,
+                email: data.user.email || email,
+                tagline: 'Welcome back',
+                avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
+                joinedDate: new Date().toLocaleString('ru-RU'),
+                following: [],
+                achievements: []
+            };
+            await supabase.from('users').upsert({ username, data: userProfile });
         }
     }
-
     return userProfile;
 };
 
 export const logoutUser = async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem('neo_user'); // Legacy cleanup
+    localStorage.removeItem('neo_user');
 };
 
 export const updateUserProfile = async (user: UserProfile) => {
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
     saveToLocalCache();
-    // Fire and forget update
-    apiCall('/users/update', 'POST', user).catch(e => console.warn("Background sync failed:", e));
+    await supabase.from('users').upsert({ username: user.username, data: user });
 };
 
-// --- CRUD OPERATIONS (TIMEWEB) ---
-// All operations update local cache FIRST (Optimistic), then try to sync.
+// --- DATA METHODS (Direct Cloud) ---
 
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
@@ -252,7 +242,7 @@ export const saveExhibit = async (exhibit: Exhibit) => {
   exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
   cache.exhibits.unshift(exhibit);
   saveToLocalCache();
-  await apiCall('/exhibits', 'POST', exhibit).catch(e => console.warn("Sync failed:", e));
+  await supabase.from('exhibits').upsert(toDbPayload(exhibit));
 };
 
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
@@ -260,14 +250,14 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
     saveToLocalCache();
-    await apiCall('/exhibits', 'POST', updatedExhibit).catch(e => console.warn("Sync failed:", e));
+    await supabase.from('exhibits').upsert(toDbPayload(updatedExhibit));
   }
 };
 
 export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
   saveToLocalCache();
-  await apiCall(`/exhibits/${id}`, 'DELETE').catch(e => console.warn("Sync failed:", e));
+  await supabase.from('exhibits').delete().eq('id', id);
 };
 
 export const getCollections = (): Collection[] => cache.collections;
@@ -276,7 +266,7 @@ export const saveCollection = async (collection: Collection) => {
     collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
     cache.collections.unshift(collection);
     saveToLocalCache();
-    await apiCall('/collections', 'POST', collection).catch(e => console.warn("Sync failed:", e));
+    await supabase.from('collections').upsert(toDbPayload(collection));
 };
 
 export const updateCollection = async (updatedCollection: Collection) => {
@@ -284,14 +274,14 @@ export const updateCollection = async (updatedCollection: Collection) => {
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
         saveToLocalCache();
-        await apiCall('/collections', 'POST', updatedCollection).catch(e => console.warn("Sync failed:", e));
+        await supabase.from('collections').upsert(toDbPayload(updatedCollection));
     }
 };
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
     saveToLocalCache();
-    await apiCall(`/collections/${id}`, 'DELETE').catch(e => console.warn("Sync failed:", e));
+    await supabase.from('collections').delete().eq('id', id);
 };
 
 export const getNotifications = (): Notification[] => cache.notifications;
@@ -299,7 +289,7 @@ export const getNotifications = (): Notification[] => cache.notifications;
 export const saveNotification = async (notif: Notification) => {
     cache.notifications.unshift(notif);
     saveToLocalCache();
-    await apiCall('/notifications', 'POST', notif).catch(e => console.warn("Sync failed:", e));
+    await supabase.from('notifications').upsert(toDbPayload(notif));
 };
 
 export const markNotificationsRead = async (recipient: string) => {
@@ -311,7 +301,11 @@ export const markNotificationsRead = async (recipient: string) => {
         }
     });
     saveToLocalCache();
-    toUpdate.forEach(n => apiCall('/notifications', 'POST', n).catch(e => console.warn("Sync failed:", e)));
+    // Batch upsert
+    if (toUpdate.length > 0) {
+        const payload = toUpdate.map(n => toDbPayload(n));
+        await supabase.from('notifications').upsert(payload);
+    }
 };
 
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
@@ -319,7 +313,7 @@ export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
     saveToLocalCache();
-    await apiCall('/guestbook', 'POST', entry).catch(e => console.warn("Sync failed:", e));
+    await supabase.from('guestbook').upsert(toDbPayload(entry));
 };
 
 export const getMessages = (): Message[] => cache.messages;
@@ -327,10 +321,10 @@ export const getMessages = (): Message[] => cache.messages;
 export const saveMessage = async (msg: Message) => {
     cache.messages.push(msg);
     saveToLocalCache();
-    await apiCall('/messages', 'POST', msg).catch(e => console.warn("Sync failed:", e));
+    await supabase.from('messages').upsert(toDbPayload(msg));
 };
 
-export const markMessagesRead = (sender: string, receiver: string) => {
+export const markMessagesRead = async (sender: string, receiver: string) => {
     const toUpdate: Message[] = [];
     cache.messages.forEach(m => {
         if (m.sender === sender && m.receiver === receiver && !m.isRead) {
@@ -339,5 +333,8 @@ export const markMessagesRead = (sender: string, receiver: string) => {
         }
     });
     saveToLocalCache();
-    toUpdate.forEach(m => apiCall('/messages', 'POST', m).catch(e => console.warn("Sync failed:", e)));
+    if (toUpdate.length > 0) {
+        const payload = toUpdate.map(m => toDbPayload(m));
+        await supabase.from('messages').upsert(payload);
+    }
 };

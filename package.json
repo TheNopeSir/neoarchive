@@ -6,10 +6,10 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "scripts": {
+   "scripts": {
     "dev": "vite --host",
     "build": "tsc && vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --host",
     "start": "node server.js",
     "deploy": "npm install"
   },

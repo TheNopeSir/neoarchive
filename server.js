@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -12,11 +13,10 @@ const __dirname = path.dirname(__filename);
 // ⚙️ НАСТРОЙКИ СЕРВЕРА (БЕЗ .ENV)
 // ==========================================
 
-// 1. Ссылка на проект (взята из вашего connection string)
+// 1. Ссылка на проект
 const SUPABASE_URL = "https://kovcgjtqbvmuzhsrcktd.supabase.co";
 
-// 2. ВАЖНО: Вставьте сюда ваш SERVICE_ROLE ключ (Settings -> API -> service_role secret)
-// Он начинается на "ey..." и он длинный. Не путать с anon key!
+// 2. ВАЖНО: Вставьте сюда ваш SERVICE_ROLE ключ
 const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTM2MTYyMCwiZXhwIjoyMDgwOTM3NjIwfQ.9dGlbb7TV9SRDnYQULdDMDpZrI4r5XO1FgTCoKqrpf4";
 
 const PORT = 3000;
@@ -26,7 +26,13 @@ const PORT = 3000;
 const app = express();
 
 // Middleware
-app.use(cors());
+// Enable CORS for ALL origins to fix mobile/external connection issues
+app.use(cors({
+    origin: true, // Reflect request origin
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -36,9 +42,9 @@ let isOfflineMode = false;
 // Initialization
 console.log("🚀 [Server] Initializing Direct Connection...");
 
-if (SUPABASE_SERVICE_ROLE_KEY.includes("ВСТАВЬТЕ_СЮДА") || !SUPABASE_SERVICE_ROLE_KEY) {
+if (SUPABASE_SERVICE_ROLE_KEY.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTM2MTYyMCwiZXhwIjoyMDgwOTM3NjIwfQ.9dGlbb7TV9SRDnYQULdDMDpZrI4r5XO1FgTCoKqrpf4") || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("\n❌ ОШИБКА: Вы не вставили SERVICE_ROLE ключ в файл server.js!");
-    console.error("   Откройте server.js и замените заглушку на реальный ключ из Supabase.\n");
+    console.warn("   Сервер запущен в ОФФЛАЙН режиме. Данные не будут сохраняться.");
     isOfflineMode = true;
 } else {
     try {
@@ -56,8 +62,7 @@ if (SUPABASE_SERVICE_ROLE_KEY.includes("ВСТАВЬТЕ_СЮДА") || !SUPABASE
 }
 
 if (isOfflineMode) {
-    console.warn("⚠️ [Server] Running in OFFLINE/MOCK MODE. API will return empty data.");
-    // Mock Client
+    // Mock Client for stability
     const mockDb = {
         select: () => ({ order: () => ({ data: [], error: null }), data: [], error: null }),
         insert: () => ({ select: () => ({ single: () => ({ data: {}, error: null }) }), error: null }),
@@ -167,17 +172,17 @@ createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
 
-// Handle 404
+// Handle 404 for API
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });
 
-// Fallback for SPA
+// Fallback for SPA (Must be last)
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Helper to find local IP
+// Helper to find local IP for display
 function getLocalIp() {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
@@ -190,11 +195,13 @@ function getLocalIp() {
     return '0.0.0.0';
 }
 
+// Listen on 0.0.0.0 is crucial for external access
 app.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIp();
     console.log(`\n🚀 NeoArchive Server running!`);
     console.log(`   > URL: ${SUPABASE_URL}`);
-    console.log(`   > Key Status: ${isOfflineMode ? '❌ MISSING' : '✅ LOADED'}`);
+    console.log(`   > Status: ${isOfflineMode ? '🟡 OFFLINE (KEYS MISSING)' : '🟢 ONLINE'}`);
     console.log(`   > Local:   http://localhost:${PORT}`);
-    console.log(`   > Network: http://${ip}:${PORT}`);
+    console.log(`   > Network: http://${ip}:${PORT}`); // Use this URL on your phone
+    console.log(`\n   Для доступа с телефона, убедитесь, что устройства в одной сети`);
 });

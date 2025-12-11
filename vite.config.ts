@@ -50,21 +50,18 @@ export default defineConfig({
     })
   ],
   server: {
-    host: true, // Listen on all local IPs
+    host: '0.0.0.0', // Listen on all network interfaces
     port: 3000,
+    strictPort: false, // Try next port if 3000 is taken (avoids collision with server.js)
+    cors: true, // Allow CORS
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3000',
+        target: 'http://127.0.0.1:3000', // Assuming server.js runs on 3000 locally
         changeOrigin: true,
         secure: false,
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
             console.log('🔴 Proxy Error (Server likely down):', err);
-          });
-          proxy.on('proxyRes', (proxyRes, req, _res) => {
-             if(proxyRes.statusCode >= 500) {
-                 console.log('🔴 Server Error:', proxyRes.statusCode, req.url);
-             }
           });
         },
       }
@@ -73,5 +70,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    target: 'esnext' // Modern browsers support
   }
 })
