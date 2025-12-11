@@ -2,6 +2,8 @@
 // ⚙️ НАСТРОЙКИ КЛИЕНТА
 // ==========================================
 
+import { createClient } from '@supabase/supabase-js';
+
 // 1. Ссылка на проект
 const SUPABASE_URL = "https://kovcgjtqbvmuzhsrcktd.supabase.co";
 
@@ -10,7 +12,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // ==========================================
 
-if (SUPABASE_KEY.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNjE2MjAsImV4cCI6MjA4MDkzNzYyMH0.xvbQ2YPaG529KgH9oS2K8Psv3hrOYGml21IHxNny6PQ")) {
+if (!SUPABASE_KEY || SUPABASE_KEY.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNjE2MjAsImV4cCI6MjA4MDkzNzYyMH0.xvbQ2YPaG529KgH9oS2K8Psv3hrOYGml21IHxNny6PQ")) {
     console.warn("🔴 [Client] Supabase Key is missing in services/supabaseClient.ts");
 }
 
