@@ -9,7 +9,18 @@ import os from 'os';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Загрузка .env
 dotenv.config({ path: path.join(__dirname, '.env') });
+
+// 🔍 ДОБАВЬТЕ ЭТИ СТРОКИ ДЛЯ ОТЛАДКИ:
+console.log("====== ENV VARIABLES DEBUG ======");
+console.log("📂 .env path:", path.join(__dirname, '.env'));
+console.log("🔑 MYSQL_PASSWORD exists:", !!process.env.MYSQL_PASSWORD);
+console.log("🔑 MYSQL_PASSWORD value:", process.env.MYSQL_PASSWORD); // Уберите после проверки!
+console.log("👤 MYSQL_USER:", process.env.MYSQL_USER);
+console.log("🏠 MYSQL_HOST:", process.env.MYSQL_HOST);
+console.log("🗄️  MYSQL_DATABASE:", process.env.MYSQL_DATABASE);
+console.log("=================================\n");
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
