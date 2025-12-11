@@ -29,7 +29,7 @@ const dbConfig = {
     host: process.env.POSTGRESQL_HOST || 'a584c7ff2ab7c4ced51afbdd.twc1.net',
     port: parseInt(process.env.POSTGRESQL_PORT || '5432'),
     user: process.env.POSTGRESQL_USER || 'gen_user',
-    database: process.env.POSTGRESQL_DBNAME || 'default_db',
+    database: process.env.POSTGRESQL_DBNAME || 'NeoBD',
     password: process.env.POSTGRESQL_PASSWORD || 'txO%AY~q4d8W%a',
     ssl: { rejectUnauthorized: false }, 
     connectionTimeoutMillis: 5000 
