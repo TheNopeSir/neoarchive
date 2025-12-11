@@ -5,7 +5,7 @@ import {
   User, ArrowLeft, Shuffle, Trophy, Star, SlidersHorizontal, CheckCircle2, Bell, 
   MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
   Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
-  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon
+  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -19,7 +19,7 @@ import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Mes
 import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
-import { fileToBase64 } from './services/storageService';
+import { fileToBase64, isOffline } from './services/storageService';
 
 const POPULAR_CATEGORIES = [DefaultCategory.PHONES, DefaultCategory.GAMES, DefaultCategory.MAGAZINES, DefaultCategory.MUSIC];
 
@@ -212,6 +212,7 @@ export default function App() {
             }
         } catch (e) {
             console.error("Init failed", e);
+            // Don't crash, just show auth
             setView('AUTH');
         } finally {
             setIsInitializing(false);
@@ -1676,7 +1677,7 @@ export default function App() {
                 onFavorite={(id: string) => toggleFavorite(id)}
                 onLike={(id: string) => toggleLike(id)}
                 isFavorited={false}
-                isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
+                isLiked={selectedExhibit.likedBy?.includes((user?.username as string) || '') || false}
                 onPostComment={handlePostComment}
                 onAuthorClick={handleAuthorClick}
                 onFollow={handleFollow}
@@ -1831,6 +1832,13 @@ export default function App() {
     }`}>
       <MatrixRain theme={theme} />
       {theme === 'dark' && <CRTOverlay />}
+
+      {/* OFFLINE INDICATOR */}
+      {isOffline() && (
+          <div className="fixed bottom-4 right-4 z-[100] px-3 py-1 bg-red-500 text-white font-pixel text-[10px] rounded animate-pulse flex items-center gap-2 shadow-lg">
+              <WifiOff size={12} /> OFFLINE MODE
+          </div>
+      )}
       
       {view !== 'AUTH' && (
         <header className={`hidden md:flex sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>

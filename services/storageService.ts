@@ -1,8 +1,6 @@
-import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 
-// API Base URL - определяем автоматически
-const API_BASE = window.location.origin;
-console.log('🔗 API_BASE:', API_BASE);
+import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
+import { supabase } from './supabaseClient';
 
 // Internal Cache
 let cache = {
@@ -16,6 +14,10 @@ let cache = {
 };
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
+let isOfflineMode = false;
+
+// --- EXPORTS ---
+export const isOffline = () => isOfflineMode;
 
 // --- SLUG GENERATOR ---
 const slugify = (text: string): string => {
@@ -42,6 +44,7 @@ const loadFromLocalCache = (): boolean => {
     if (json) {
         try {
             const data = JSON.parse(json);
+            // Ensure arrays exist
             cache = {
                 exhibits: data.exhibits || [],
                 collections: data.collections || [],
@@ -66,67 +69,123 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-// --- API HELPERS ---
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-    try {
-        const response = await fetch(`${API_BASE}${endpoint}`, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers,
-            },
-        });
-        return await response.json();
-    } catch (error) {
-        console.error(`API Error [${endpoint}]:`, error);
-        throw error;
+// --- CLOUD SYNC HELPERS ---
+
+// Helper to wrap object for JSONB storage pattern used in this app
+const toDbPayload = (item: any) => {
+    return {
+        id: item.id,
+        data: item,
+        timestamp: new Date().toISOString()
+    };
+};
+
+// Helper to fetch and unwrap data
+const fetchTable = async <T>(tableName: string): Promise<T[]> => {
+    const { data, error } = await supabase
+        .from(tableName)
+        .select('data')
+        .order('timestamp', { ascending: false });
+
+    if (error) {
+        console.warn(`[Sync] Warning fetching ${tableName}:`, error.message);
+        return [];
     }
+
+    // Unwrap the 'data' column
+    return (data || []).map((row: any) => row.data);
 };
 
 // --- INITIALIZATION ---
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
-    // 1. Load optimistic cache first
+    // 1. Load optimistic cache first (Fastest visual load)
     loadFromLocalCache();
 
-    // 2. Sync with server
+    // 2. Direct Cloud Sync (Supabase)
     try {
-        console.log("☁️ [Sync] Connecting to server...");
-        const data = await apiCall('/api/sync');
+        console.log("☁️ [Sync] Connecting to NeoArchive Cloud (Supabase)...");
         
-        if (data.users) cache.users = data.users;
-        if (data.exhibits) cache.exhibits = data.exhibits;
-        if (data.collections) cache.collections = data.collections;
-        if (data.notifications) cache.notifications = data.notifications;
-        if (data.messages) cache.messages = data.messages.sort((a: Message, b: Message) => 
-            a.timestamp.localeCompare(b.timestamp)
+        // Timeout protection (5 seconds)
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Connection timed out')), 5000)
         );
-        if (data.guestbook) cache.guestbook = data.guestbook;
+
+        const syncPromise = Promise.all([
+            fetchTable<UserProfile>('users'),
+            fetchTable<Exhibit>('exhibits'),
+            fetchTable<Collection>('collections'),
+            fetchTable<Notification>('notifications'),
+            fetchTable<Message>('messages'),
+            fetchTable<GuestbookEntry>('guestbook')
+        ]);
+
+        const [users, exhibits, collections, notifications, messages, guestbook] = 
+            await Promise.race([syncPromise, timeoutPromise]) as [UserProfile[], Exhibit[], Collection[], Notification[], Message[], GuestbookEntry[]];
+
+        // Merge logic: prefer cloud data.
+        if (users.length > 0) cache.users = users;
+        if (exhibits.length > 0) cache.exhibits = exhibits;
+        if (collections.length > 0) cache.collections = collections;
+        if (notifications.length > 0) cache.notifications = notifications;
+        if (messages.length > 0) cache.messages = messages.sort((a,b) => a.timestamp.localeCompare(b.timestamp)); 
+        if (guestbook.length > 0) cache.guestbook = guestbook;
         
         cache.isLoaded = true;
+        isOfflineMode = false;
         saveToLocalCache();
-        console.log("✅ [Sync] Server synchronization complete.");
-    } catch (e) {
-        console.warn("⚠️ [Sync] Server unavailable, running in offline mode:", e);
+        console.log("✅ [Sync] Cloud synchronization complete.");
+    } catch (e: any) {
+        console.warn("⚠️ [Sync] Cloud unavailable, switching to OFFLINE MODE.", e.message);
+        isOfflineMode = true;
     }
 
-    // 3. Check for stored session
-    const storedUser = localStorage.getItem('neo_user');
-    if (storedUser) {
-        try {
-            return JSON.parse(storedUser);
-        } catch (e) {
-            localStorage.removeItem('neo_user');
+    // 3. Restore Session
+    let session = null;
+    try {
+        const { data } = await supabase.auth.getSession();
+        session = data?.session;
+    } catch (err) {
+        console.warn("⚠️ [Auth] Failed to restore session", err);
+    }
+  
+    if (session?.user) {
+        // Just use metadata if available, or find in synced users
+        const username = session.user.user_metadata?.username;
+        if (username) {
+            const userProfile = cache.users.find(u => u.username === username);
+            if (userProfile) return userProfile;
+            
+            return {
+                username: username,
+                email: session.user.email || '',
+                tagline: 'Restored Session',
+                avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
+                joinedDate: new Date().toLocaleDateString(),
+                following: [],
+                achievements: []
+            };
         }
     }
-    
     return null;
 };
 
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
 // --- AUTH ---
+
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    // Create profile
+    // 1. Auth with Supabase
+    const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { username } }
+    });
+
+    if (error) throw new Error(error.message);
+    // Note: Supabase often requires email confirmation. 
+    if (!data.user) throw new Error("Подтвердите email для завершения регистрации");
+
+    // 2. Create Profile Object
     const userProfile: UserProfile = {
         username,
         email,
@@ -138,36 +197,63 @@ export const registerUser = async (username: string, password: string, tagline: 
         isAdmin: false
     };
 
-    // Save to server
-    await apiCall('/api/users/update', {
-        method: 'POST',
-        body: JSON.stringify(userProfile)
-    });
-
-    // Update cache
+    // 3. Update Cache & Persist
     cache.users.push(userProfile);
     saveToLocalCache();
-    localStorage.setItem('neo_user', JSON.stringify(userProfile));
+    await supabase.from('users').upsert({ username, data: userProfile });
     
     return userProfile;
 };
 
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
-    // In this simplified version, we just check if user exists
-    // You might want to add actual password verification on the server
-    const username = email.split('@')[0]; // Simple username extraction
-    
-    let userProfile = cache.users.find(u => u.email === email || u.username === username);
-    
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
+    if (!data.user) throw new Error("Login failed");
+
+    const username = data.user.user_metadata?.username;
+    if (!username) throw new Error("User profile corrupted");
+
+    // Sync profile check
+    // Explicitly define type to allow for undefined initially
+    let userProfile: UserProfile | undefined = cache.users.find(u => u.username === username);
+
     if (!userProfile) {
-        throw new Error("Пользователь не найден. Пожалуйста, зарегистрируйтесь.");
+        // Try fetch specifically in case global sync missed it
+        const { data: userData } = await supabase.from('users').select('data').eq('username', username).single();
+        if (userData && userData.data) {
+            // Explicit cast
+            const fetchedProfile = userData.data as UserProfile;
+            cache.users.push(fetchedProfile);
+            saveToLocalCache();
+            userProfile = fetchedProfile;
+        } else {
+             // Fallback: create default profile if missing from DB
+             const newProfile: UserProfile = {
+                username,
+                email: data.user.email || email,
+                tagline: 'Welcome back',
+                avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
+                joinedDate: new Date().toLocaleString('ru-RU'),
+                following: [],
+                achievements: []
+            };
+            await supabase.from('users').upsert({ username, data: newProfile });
+            // Add fallback profile to cache to avoid re-creation
+            cache.users.push(newProfile);
+            saveToLocalCache();
+            userProfile = newProfile;
+        }
+    }
+
+    if (!userProfile) {
+        throw new Error("Unable to load user profile after login.");
     }
     
-    localStorage.setItem('neo_user', JSON.stringify(userProfile));
     return userProfile;
 };
 
 export const logoutUser = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem('neo_user');
 };
 
@@ -175,61 +261,42 @@ export const updateUserProfile = async (user: UserProfile) => {
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
     saveToLocalCache();
-    
-    await apiCall('/api/users/update', {
-        method: 'POST',
-        body: JSON.stringify(user)
-    });
+    await supabase.from('users').upsert({ username: user.username, data: user });
 };
 
-// --- EXHIBITS ---
+// --- DATA METHODS (Direct Cloud) ---
+
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
 export const saveExhibit = async (exhibit: Exhibit) => {
-    exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
-    cache.exhibits.unshift(exhibit);
-    saveToLocalCache();
-    
-    await apiCall('/api/exhibits', {
-        method: 'POST',
-        body: JSON.stringify(exhibit)
-    });
+  exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
+  cache.exhibits.unshift(exhibit);
+  saveToLocalCache();
+  await supabase.from('exhibits').upsert(toDbPayload(exhibit));
 };
 
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
-    const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
-    if (index !== -1) {
-        cache.exhibits[index] = updatedExhibit;
-        saveToLocalCache();
-        
-        await apiCall('/api/exhibits', {
-            method: 'POST',
-            body: JSON.stringify(updatedExhibit)
-        });
-    }
+  const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
+  if (index !== -1) {
+    cache.exhibits[index] = updatedExhibit;
+    saveToLocalCache();
+    await supabase.from('exhibits').upsert(toDbPayload(updatedExhibit));
+  }
 };
 
 export const deleteExhibit = async (id: string) => {
-    cache.exhibits = cache.exhibits.filter(e => e.id !== id);
-    saveToLocalCache();
-    
-    await apiCall(`/api/exhibits/${id}`, {
-        method: 'DELETE'
-    });
+  cache.exhibits = cache.exhibits.filter(e => e.id !== id);
+  saveToLocalCache();
+  await supabase.from('exhibits').delete().eq('id', id);
 };
 
-// --- COLLECTIONS ---
 export const getCollections = (): Collection[] => cache.collections;
 
 export const saveCollection = async (collection: Collection) => {
     collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
     cache.collections.unshift(collection);
     saveToLocalCache();
-    
-    await apiCall('/api/collections', {
-        method: 'POST',
-        body: JSON.stringify(collection)
-    });
+    await supabase.from('collections').upsert(toDbPayload(collection));
 };
 
 export const updateCollection = async (updatedCollection: Collection) => {
@@ -237,78 +304,54 @@ export const updateCollection = async (updatedCollection: Collection) => {
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
         saveToLocalCache();
-        
-        await apiCall('/api/collections', {
-            method: 'POST',
-            body: JSON.stringify(updatedCollection)
-        });
+        await supabase.from('collections').upsert(toDbPayload(updatedCollection));
     }
 };
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
     saveToLocalCache();
-    
-    await apiCall(`/api/collections/${id}`, {
-        method: 'DELETE'
-    });
+    await supabase.from('collections').delete().eq('id', id);
 };
 
-// --- NOTIFICATIONS ---
 export const getNotifications = (): Notification[] => cache.notifications;
 
 export const saveNotification = async (notif: Notification) => {
     cache.notifications.unshift(notif);
     saveToLocalCache();
-    
-    await apiCall('/api/notifications', {
-        method: 'POST',
-        body: JSON.stringify(notif)
-    });
+    await supabase.from('notifications').upsert(toDbPayload(notif));
 };
 
 export const markNotificationsRead = async (recipient: string) => {
     const toUpdate: Notification[] = [];
     cache.notifications.forEach(n => {
         if (n.recipient === recipient && !n.isRead) {
-            n.isRead = true;
-            toUpdate.push(n);
+             n.isRead = true;
+             toUpdate.push(n);
         }
     });
     saveToLocalCache();
-    
-    for (const n of toUpdate) {
-        await apiCall('/api/notifications', {
-            method: 'POST',
-            body: JSON.stringify(n)
-        });
+    // Batch upsert
+    if (toUpdate.length > 0) {
+        const payload = toUpdate.map(n => toDbPayload(n));
+        await supabase.from('notifications').upsert(payload);
     }
 };
 
-// --- GUESTBOOK ---
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 
 export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
     saveToLocalCache();
-    
-    await apiCall('/api/guestbook', {
-        method: 'POST',
-        body: JSON.stringify(entry)
-    });
+    await supabase.from('guestbook').upsert(toDbPayload(entry));
 };
 
-// --- MESSAGES ---
 export const getMessages = (): Message[] => cache.messages;
 
 export const saveMessage = async (msg: Message) => {
     cache.messages.push(msg);
     saveToLocalCache();
-    
-    await apiCall('/api/messages', {
-        method: 'POST',
-        body: JSON.stringify(msg)
-    });
+    await supabase.from('messages').upsert(toDbPayload(msg));
 };
 
 export const markMessagesRead = async (sender: string, receiver: string) => {
@@ -320,11 +363,8 @@ export const markMessagesRead = async (sender: string, receiver: string) => {
         }
     });
     saveToLocalCache();
-    
-    for (const m of toUpdate) {
-        await apiCall('/api/messages', {
-            method: 'POST',
-            body: JSON.stringify(m)
-        });
+    if (toUpdate.length > 0) {
+        const payload = toUpdate.map(m => toDbPayload(m));
+        await supabase.from('messages').upsert(payload);
     }
 };
