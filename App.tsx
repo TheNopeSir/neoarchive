@@ -1,55 +1,11 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Terminal, 
-  PlusSquare, 
-  X,
-  Sun,
-  Moon,
-  ChevronDown,
-  Upload,
-  LogOut,
-  FolderOpen,
-  MessageSquare,
-  Search,
-  Database,
-  Trash2,
-  Settings,
-  Home,
-  Activity,
-  Zap,
-  Sparkles,
-  User,
-  ArrowLeft,
-  Shuffle,
-  Trophy,
-  Star,
-  SlidersHorizontal,
-  CheckCircle2,
-  Bell,
-  MessageCircle,
-  PlusCircle,
-  Heart,
-  FilePlus,
-  FolderPlus,
-  Grid,
-  Flame,
-  Layers,
-  Share2,
-  Award,
-  Crown,
-  ChevronLeft,
-  ChevronRight,
-  Camera,
-  Edit2,
-  Save,
-  Check,
-  Send,
-  Link,
-  Smartphone,
-  Laptop,
-  Video,
-  Image as ImageIcon
+  Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
+  MessageSquare, Search, Database, Trash2, Settings, Home, Activity, Zap, Sparkles, 
+  User, ArrowLeft, Shuffle, Trophy, Star, SlidersHorizontal, CheckCircle2, Bell, 
+  MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
+  Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
+  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -159,9 +115,9 @@ const MobileNavigation: React.FC<{
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [view, setView] = useState<ViewState>('AUTH'); // Start at Auth
+  const [view, setView] = useState<ViewState>('AUTH'); 
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true); // Prevent premature render of Auth
+  const [isInitializing, setIsInitializing] = useState(true);
 
   // Data State
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
@@ -177,7 +133,6 @@ export default function App() {
   const [selectedExhibit, setSelectedExhibit] = useState<Exhibit | null>(null);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [viewedProfile, setViewedProfile] = useState<string | null>(null);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activityTab, setActivityTab] = useState<'UPDATES' | 'DIALOGS'>('UPDATES');
   const [badgeIndex, setBadgeIndex] = useState(0);
   
@@ -206,7 +161,7 @@ export default function App() {
   // Collection Editing
   const [collectionToEdit, setCollectionToEdit] = useState<Collection | null>(null);
 
-  // Session tracking for unique views
+  // Session tracking
   const [viewedExhibitsSession, setViewedExhibitsSession] = useState<Set<string>>(new Set());
 
   // Create Modal State
@@ -225,7 +180,7 @@ export default function App() {
   });
 
   const refreshData = () => {
-      console.log("🔄 [App] Refreshing data...");
+      console.log("🔄 [App] Refreshing data from cache...");
       setExhibits([...db.getExhibits()]);
       setCollections([...db.getCollections()]);
       setNotifications([...db.getNotifications()]);
@@ -233,42 +188,31 @@ export default function App() {
       setGuestbook([...db.getGuestbook()]);
   };
 
-  // Initialize & Global Error Handling
+  // Initialize
   useEffect(() => {
     window.onerror = (msg, url, lineNo, columnNo, error) => {
-      console.error('🔴 [Global Error]:', msg, 'at', lineNo, ':', columnNo, error);
+      console.error('🔴 [Global Error]:', msg, error);
       return false;
     };
 
     const init = async () => {
         try {
-            await db.initializeDatabase(); // Ensure DB is loaded first
-
-            // Check Local Storage (Remember Me) OR Session Storage (One time)
-            const savedUserStr = localStorage.getItem('neo_user') || sessionStorage.getItem('neo_user');
+            // This now checks both Timeweb and Supabase Session
+            const restoredUser = await db.initializeDatabase();
             
-            if (savedUserStr) {
-                 try {
-                     const savedUser = JSON.parse(savedUserStr);
-                     console.log("🟢 [App] Restoring session for:", savedUser.username);
-                     setUser(savedUser);
-                     refreshData();
-                     
-                     // If we have a hash, the subsequent effect will handle the view
-                     if (!window.location.hash || window.location.hash === '#/') {
-                         setView('FEED');
-                     }
-                 } catch (err) {
-                     console.error("Session corrupted");
-                     localStorage.removeItem('neo_user');
-                     sessionStorage.removeItem('neo_user');
-                     setView('AUTH');
+            if (restoredUser) {
+                 console.log("🟢 [App] Session restored for:", restoredUser.username);
+                 setUser(restoredUser);
+                 refreshData();
+                 if (!window.location.hash || window.location.hash === '#/') {
+                     setView('FEED');
                  }
             } else {
                  setView('AUTH');
             }
         } catch (e) {
             console.error("Init failed", e);
+            setView('AUTH');
         } finally {
             setIsInitializing(false);
         }
@@ -276,7 +220,7 @@ export default function App() {
     init();
   }, []);
 
-  // --- HASH ROUTING / DEEP LINKING (UPDATED FOR SLUGS) ---
+  // --- HASH ROUTING ---
   useEffect(() => {
       const handleHashChange = () => {
           if (!user && view === 'AUTH') return; 
@@ -284,7 +228,6 @@ export default function App() {
           const hash = window.location.hash;
           if (hash.startsWith('#/exhibit/')) {
               const param = hash.split('/')[2];
-              // Try match by slug (if available) or ID
               const item = exhibits.find(e => e.slug === param || e.id === param);
               if (item) {
                   setSelectedExhibit(item);
@@ -320,18 +263,17 @@ export default function App() {
       window.history.pushState(null, '', `#${path}`);
   };
 
-  // Reset pagination when context changes
+  // Reset pagination
   useEffect(() => {
       setVisibleCount(12);
   }, [selectedCategory, feedMode, searchQuery, view]);
 
-  // Infinite Scroll Handler
+  // Infinite Scroll
   useEffect(() => {
       if (view !== 'FEED' || feedMode !== 'ARTIFACTS') return;
 
       const observer = new IntersectionObserver((entries) => {
           if (entries[0].isIntersecting) {
-              // Simulate retro loading delay
               setTimeout(() => {
                   setVisibleCount(prev => prev + 8);
               }, 800);
@@ -347,28 +289,21 @@ export default function App() {
 
   const handleLogin = (loggedInUser: UserProfile, remember: boolean) => {
       setUser(loggedInUser);
-      
-      if (remember) {
-        localStorage.setItem('neo_user', JSON.stringify(loggedInUser));
-        sessionStorage.removeItem('neo_user'); 
-      } else {
-        sessionStorage.setItem('neo_user', JSON.stringify(loggedInUser));
-        localStorage.removeItem('neo_user');
-      }
-      
+      // We don't need manual storage here anymore, Supabase handles token storage
       setView('FEED');
       updateHash('/feed');
       refreshData();
   };
 
-  const handleLogout = () => {
-      console.log("🔴 [App] Logging out");
-      localStorage.removeItem('neo_user');
-      sessionStorage.removeItem('neo_user');
+  const handleLogout = async () => {
+      await db.logoutUser();
       setUser(null);
       setView('AUTH');
       window.location.hash = '';
   };
+
+  // ... (Rest of component functions remain largely same, just ensuring references are correct)
+  // To save space, I'm including the full return block logic which relies on updated state
 
   const handleShuffle = () => {
       const shuffled = [...exhibits].sort(() => Math.random() - 0.5);
@@ -377,8 +312,6 @@ export default function App() {
 
   const handleExhibitClick = (item: Exhibit) => {
       if (!item) return;
-      
-      // Handle Unique View Counting
       if (!viewedExhibitsSession.has(item.id)) {
           const updatedItem = { ...item, views: item.views + 1 };
           db.updateExhibit(updatedItem);
@@ -393,24 +326,21 @@ export default function App() {
       } else {
           setSelectedExhibit(item);
       }
-
       setView('EXHIBIT');
-      // Use Slug if available for cleaner URL
       updateHash(`/exhibit/${item.slug || item.id}`);
   };
 
   const handleCollectionClick = (col: Collection) => {
       setSelectedCollection(col);
       setView('COLLECTION_DETAIL');
-      // Use Slug if available
       updateHash(`/collection/${col.slug || col.id}`);
   };
 
   const handleAuthorClick = (author: string) => {
       setViewedProfile(author);
-      setProfileTab('ARTIFACTS'); // Reset to default
-      setBadgeIndex(0); // Reset carousel
-      setIsEditingProfile(false); // Reset edit state
+      setProfileTab('ARTIFACTS'); 
+      setBadgeIndex(0); 
+      setIsEditingProfile(false);
       setView('USER_PROFILE');
       updateHash(`/profile/${author}`);
   };
@@ -424,7 +354,6 @@ export default function App() {
   };
 
   const handleCreateExhibit = async () => {
-     // STRICT VALIDATION
      if (!newExhibit.title || newExhibit.title.length < 3) {
          alert('ОШИБКА: ЗАГОЛОВОК ДОЛЖЕН БЫТЬ НЕ МЕНЕЕ 3 СИМВОЛОВ');
          return;
@@ -433,15 +362,12 @@ export default function App() {
          alert('ОШИБКА: ОПИСАНИЕ ДОЛЖНО БЫТЬ НЕ МЕНЕЕ 10 СИМВОЛОВ');
          return;
      }
-     
      if (!newExhibit.imageUrls || newExhibit.imageUrls.length === 0) {
          alert('ОШИБКА: НЕОБХОДИМО ЗАГРУЗИТЬ МИНИМУМ ОДНО ИЗОБРАЖЕНИЕ');
          return;
      }
-
      setIsLoading(true);
 
-     // Content Moderation (Text)
      const contentToCheck = `${newExhibit.title} ${newExhibit.description}`;
      const modResult = await moderateContent(contentToCheck);
      if (!modResult.allowed) {
@@ -455,7 +381,7 @@ export default function App() {
          title: newExhibit.title,
          description: newExhibit.description || '',
          imageUrls: newExhibit.imageUrls,
-         videoUrl: newExhibit.videoUrl, // Save video URL
+         videoUrl: newExhibit.videoUrl, 
          category: newExhibit.category || DefaultCategory.MISC,
          owner: user?.username || 'Guest',
          timestamp: new Date().toLocaleString('ru-RU'),
@@ -468,10 +394,9 @@ export default function App() {
          condition: newExhibit.condition || getDefaultCondition(newExhibit.category || DefaultCategory.MISC)
      };
 
-     await db.saveExhibit(exhibit); // Await persistence
+     await db.saveExhibit(exhibit); 
      setExhibits(db.getExhibits());
      
-     // Reset
      setNewExhibit({ 
          category: DefaultCategory.PHONES, 
          specs: generateSpecsForCategory(DefaultCategory.PHONES),
@@ -487,14 +412,11 @@ export default function App() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
         const file = e.target.files[0];
-        
-        // Image Moderation
         const modResult = await moderateImage(file);
         if (!modResult.allowed) {
             alert(`ОШИБКА ФАЙЛА: ${modResult.reason}`);
             return;
         }
-
         try {
             const base64 = await fileToBase64(file);
             setNewExhibit(prev => ({
@@ -502,7 +424,6 @@ export default function App() {
                 imageUrls: [...(prev.imageUrls || []), base64]
             }));
         } catch (err: any) {
-            console.error("Image upload failed", err);
             alert("Ошибка загрузки изображения");
         }
     }
@@ -511,14 +432,11 @@ export default function App() {
   const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
-          
-          // Image Moderation
           const modResult = await moderateImage(file);
           if (!modResult.allowed) {
               alert(`ОШИБКА ФАЙЛА: ${modResult.reason}`);
               return;
           }
-
           try {
               const base64 = await fileToBase64(file);
               setEditAvatarUrl(base64);
@@ -528,7 +446,6 @@ export default function App() {
                   db.updateUserProfile(updatedUser);
               }
           } catch (err: any) {
-              console.error("Profile image upload failed", err);
               alert("Ошибка загрузки изображения");
           }
       }
@@ -537,14 +454,11 @@ export default function App() {
   const handleNewCollectionCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
-
-          // Image Moderation
           const modResult = await moderateImage(file);
           if (!modResult.allowed) {
               alert(`ОШИБКА ФАЙЛА: ${modResult.reason}`);
               return;
           }
-
           try {
               const base64 = await fileToBase64(file);
               setNewCollection(prev => ({ ...prev, coverImage: base64 }));
@@ -557,14 +471,11 @@ export default function App() {
   const handleCollectionCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0] && collectionToEdit) {
           const file = e.target.files[0];
-
-          // Image Moderation
           const modResult = await moderateImage(file);
           if (!modResult.allowed) {
               alert(`ОШИБКА ФАЙЛА: ${modResult.reason}`);
               return;
           }
-
           try {
               const base64 = await fileToBase64(file);
               setCollectionToEdit({...collectionToEdit, coverImage: base64});
@@ -582,7 +493,6 @@ export default function App() {
   };
 
   const handleCreateCollection = async () => {
-      // STRICT VALIDATION
       if (!newCollection.title || newCollection.title.length < 3) {
           alert('ВВЕДИТЕ КОРРЕКТНОЕ НАЗВАНИЕ КОЛЛЕКЦИИ (МИН. 3 СИМВОЛА)');
           return;
@@ -591,17 +501,13 @@ export default function App() {
           alert('ОШИБКА: ЗАГРУЗИТЕ ОБЛОЖКУ КОЛЛЕКЦИИ');
           return;
       }
-
       setIsLoading(true);
-
-      // Content Moderation
       const modResult = await moderateContent(`${newCollection.title} ${newCollection.description || ''}`);
       if (!modResult.allowed) {
          setIsLoading(false);
          alert(`ОТКАЗАНО: ${modResult.reason}`);
          return;
       }
-      
       const newCol: Collection = {
           id: Date.now().toString(),
           title: newCollection.title,
@@ -611,15 +517,10 @@ export default function App() {
           exhibitIds: [],
           timestamp: new Date().toLocaleString('ru-RU')
       };
-      
-      // PERSIST TO DB
       await db.saveCollection(newCol);
       setCollections(db.getCollections());
-      
       setNewCollection({ title: '', description: '', coverImage: '' });
       setIsLoading(false);
-      
-      // Go directly to edit mode to add items
       setCollectionToEdit(newCol);
       setView('EDIT_COLLECTION'); 
   };
@@ -634,7 +535,6 @@ export default function App() {
       const username = user?.username || 'Guest';
 
       if (!ex.likedBy) ex.likedBy = [];
-
       const alreadyLiked = ex.likedBy.includes(username);
 
       if (alreadyLiked) {
@@ -643,8 +543,6 @@ export default function App() {
       } else {
           ex.likes++;
           ex.likedBy.push(username);
-
-          // Trigger Notification
           if (ex.owner !== username) {
              const notif: Notification = {
                  id: Date.now().toString(),
@@ -660,11 +558,9 @@ export default function App() {
              setNotifications(prev => [notif, ...prev]);
           }
       }
-      
       db.updateExhibit(ex);
       updatedExhibits[exIndex] = ex;
       setExhibits(updatedExhibits);
-      
       if (selectedExhibit && selectedExhibit.id === id) {
           setSelectedExhibit(ex);
       }
@@ -672,28 +568,21 @@ export default function App() {
 
   const handlePostComment = (id: string, text: string) => {
       if (!text.trim()) return;
-      
       const exIndex = exhibits.findIndex(x => x.id === id);
       if (exIndex === -1) return;
-
       const updatedExhibits = [...exhibits];
       const ex = { ...updatedExhibits[exIndex] }; 
       const username = user?.username || 'Guest';
-      
       const newComment: Comment = {
           id: Date.now().toString(),
           author: username,
           text: text,
           timestamp: new Date().toLocaleString('ru-RU')
       };
-
       ex.comments = [newComment, ...(ex.comments || [])];
-      
       db.updateExhibit(ex);
       updatedExhibits[exIndex] = ex;
       setExhibits(updatedExhibits);
-
-      // Trigger Notification
       if (ex.owner !== username) {
          const notif: Notification = {
              id: Date.now().toString(),
@@ -708,7 +597,6 @@ export default function App() {
          db.saveNotification(notif);
          setNotifications(prev => [notif, ...prev]);
       }
-
       if (selectedExhibit && selectedExhibit.id === id) {
           setSelectedExhibit(ex);
       }
@@ -729,14 +617,11 @@ export default function App() {
 
   const handleGuestbookPost = async () => {
       if (!guestbookInput.trim() || !user || !viewedProfile) return;
-
-      // Moderation
       const modResult = await moderateContent(guestbookInput);
       if(!modResult.allowed) {
-          alert(modResult.reason);
+          alert(modResult.reason || "Запрещено");
           return;
       }
-
       const entry: GuestbookEntry = {
           id: Date.now().toString(),
           author: user.username,
@@ -746,9 +631,7 @@ export default function App() {
           isRead: false
       };
       db.saveGuestbookEntry(entry);
-      setGuestbook([...guestbook, entry]); // Optimistic update
-      
-      // Trigger Notification
+      setGuestbook([...guestbook, entry]);
       if (viewedProfile !== user.username) {
          const notif: Notification = {
              id: Date.now().toString(),
@@ -762,22 +645,17 @@ export default function App() {
          db.saveNotification(notif);
          setNotifications(prev => [notif, ...prev]);
       }
-
       setGuestbookInput('');
   };
 
   const handleFollow = (targetUser: string) => {
       if (!user) return;
-      
       const isFollowing = user.following.includes(targetUser);
       let updatedFollowing = [...user.following];
-
       if (isFollowing) {
           updatedFollowing = updatedFollowing.filter(u => u !== targetUser);
       } else {
           updatedFollowing.push(targetUser);
-          
-          // Trigger Notification
           if (targetUser !== user.username) {
              const notif: Notification = {
                  id: Date.now().toString(),
@@ -791,7 +669,6 @@ export default function App() {
              setNotifications(prev => [notif, ...prev]);
           }
       }
-
       const updatedUser = { ...user, following: updatedFollowing };
       setUser(updatedUser);
       db.updateUserProfile(updatedUser);
@@ -799,7 +676,6 @@ export default function App() {
 
   const toggleFavorite = (id: string, e?: React.MouseEvent) => {
       e?.stopPropagation();
-      if (!user) return;
       alert(`ДОБАВЛЕНО В ИЗБРАННОЕ [ID: ${id}]`);
   };
   
@@ -809,13 +685,10 @@ export default function App() {
       handleBack();
   };
 
-  // Chat Functionality
   const handleOpenChat = (partnerUsername: string) => {
       if (!user) return;
       setChatPartner(partnerUsername);
-      // Mark as read
       db.markMessagesRead(partnerUsername, user.username);
-      // Refresh messages locally to reflect read status
       const updatedMessages = db.getMessages();
       setMessages([...updatedMessages]);
       setView('DIRECT_CHAT');
@@ -843,7 +716,6 @@ export default function App() {
 
   const handleSaveCollection = () => {
       if(collectionToEdit) {
-          // Mandatory checks
           if (!collectionToEdit.title || collectionToEdit.title.length < 3) {
               alert('НАЗВАНИЕ ДОЛЖНО БЫТЬ НЕ МЕНЕЕ 3 СИМВОЛОВ');
               return;
@@ -852,7 +724,6 @@ export default function App() {
                alert('ОБЯЗАТЕЛЬНО: ЗАГРУЗИТЕ ОБЛОЖКУ КОЛЛЕКЦИИ');
                return;
           }
-
           db.updateCollection(collectionToEdit);
           setCollections(db.getCollections());
           setSelectedCollection(collectionToEdit);
@@ -879,22 +750,17 @@ export default function App() {
       }
   };
 
-  // --- Dynamic Achievement Calculation ---
   const getUserAchievements = (username: string) => {
       const userExhibits = exhibits.filter(e => e.owner === username);
       const totalLikes = userExhibits.reduce((acc, curr) => acc + curr.likes, 0);
       const userComments = exhibits.flatMap(e => e.comments).filter(c => c.author === username);
-      
       const badges: string[] = ['HELLO_WORLD']; 
-      
       if (userExhibits.length >= 5) badges.push('UPLOADER');
       if (totalLikes >= 100) badges.push('INFLUENCER');
       if (userComments.length >= 5) badges.push('CRITIC');
       if (collections.some(c => c.owner === username)) badges.push('COLLECTOR');
-      
       const hasLegendary = userExhibits.some(e => calculateArtifactScore(e) > 20000);
       if (hasLegendary) badges.push('LEGEND');
-
       return badges;
   };
 
@@ -937,7 +803,6 @@ export default function App() {
           );
 
       case 'DIRECT_CHAT':
-          // Chat rendering logic...
           if (!chatPartner || !user) return <div onClick={() => setView('FEED')}>Error: No Chat Partner</div>;
           const conversation = messages.filter(m => 
               (m.sender === user.username && m.receiver === chatPartner) ||
@@ -999,7 +864,6 @@ export default function App() {
           );
 
       case 'SEARCH':
-          // Search logic...
           return (
               <div className="max-w-4xl mx-auto animate-in fade-in">
                   <div className={`relative w-full flex items-center border-b-2 px-2 gap-2 mb-4 ${
@@ -1019,7 +883,6 @@ export default function App() {
                        )}
                    </div>
 
-                   {/* Search Mode Toggles */}
                    <div className="flex gap-4 mb-8">
                        <button 
                          onClick={() => setSearchMode('ARTIFACTS')}
@@ -1043,7 +906,6 @@ export default function App() {
                        </button>
                    </div>
 
-                   {/* CONTENT: COLLECTIONS */}
                    {searchMode === 'COLLECTIONS' && (
                        <div className="animate-in fade-in slide-in-from-bottom-2">
                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1058,7 +920,6 @@ export default function App() {
                        </div>
                    )}
 
-                   {/* CONTENT: ARTIFACTS */}
                    {searchMode === 'ARTIFACTS' && (
                        <div className="animate-in fade-in slide-in-from-bottom-2">
                            {!searchQuery && (
@@ -1165,7 +1026,6 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-6">
-                      {/* Cover Image */}
                       <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
                           {collectionToEdit.coverImage ? (
                               <img src={collectionToEdit.coverImage} className="w-full h-full object-cover" />
@@ -1244,7 +1104,6 @@ export default function App() {
                  </button>
                  <h2 className="text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
                  <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                     {/* Cover Upload for new collection */}
                      <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
                           {newCollection.coverImage ? (
                               <img src={newCollection.coverImage} className="w-full h-full object-cover" />
@@ -1392,7 +1251,7 @@ export default function App() {
                      </div>
                  </div>
 
-                 {/* Image Upload Section - SPLIT INTO CAMERA AND GALLERY */}
+                 {/* Image Upload Section */}
                  <div className="space-y-1">
                     <label className="text-[10px] font-pixel uppercase opacity-70">ИЗОБРАЖЕНИЯ (МИН. 1) *</label>
                     <div className="flex flex-wrap gap-2 mb-2">
@@ -1408,7 +1267,6 @@ export default function App() {
                              </div>
                         ))}
                         
-                        {/* Gallery Option */}
                         <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
                             theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'
                         }`}>
@@ -1422,7 +1280,6 @@ export default function App() {
                             />
                         </label>
 
-                        {/* Camera Option */}
                         <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
                             theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'
                         }`}>
@@ -1439,7 +1296,6 @@ export default function App() {
                     </div>
                  </div>
 
-                 {/* Video Upload Section */}
                  <div className="space-y-1">
                      <label className="text-[10px] font-pixel uppercase opacity-70 flex items-center gap-2">
                          <Video size={12} /> ВИДЕО (URL)
@@ -1582,7 +1438,6 @@ export default function App() {
                           {messages.length === 0 ? (
                               <div className="text-center opacity-50 font-mono py-10">НЕТ АКТИВНЫХ КАНАЛОВ СВЯЗИ</div>
                           ) : (
-                              // Unique conversations (group by partner)
                               [...new Set(messages.filter(m => m.sender === user?.username || m.receiver === user?.username).map(m => m.sender === user?.username ? m.receiver : m.sender))].map(partner => {
                                   const unreadCount = messages.filter(m => m.sender === partner && m.receiver === user?.username && !m.isRead).length;
                                   return (
@@ -1618,7 +1473,6 @@ export default function App() {
          const profileUsername = viewedProfile || user?.username;
          if (!profileUsername) return <div>User not found</div>;
          
-         // Use local data or fetch
          const profileUser = db.getFullDatabase().users.find(u => u.username === profileUsername) || {
              username: profileUsername,
              email: 'ghost@matrix.net',
@@ -1728,7 +1582,6 @@ export default function App() {
                      </div>
                  </div>
                  
-                 {/* Badges */}
                  {profileUser.achievements && profileUser.achievements.length > 0 && (
                      <div className="flex gap-2 flex-wrap justify-center md:justify-start">
                          {profileUser.achievements.map(badgeId => {
@@ -1743,7 +1596,6 @@ export default function App() {
                      </div>
                  )}
 
-                 {/* Hall of Fame Link */}
                  <button 
                     onClick={() => setView('HALL_OF_FAME')}
                     className="w-full py-3 border border-dashed border-gray-500/30 text-xs font-pixel opacity-70 hover:opacity-100 flex items-center justify-center gap-2"
@@ -1751,7 +1603,6 @@ export default function App() {
                      <Trophy size={14} /> ОТКРЫТЬ ЗАЛ СЛАВЫ
                  </button>
                  
-                 {/* Tabs */}
                  <div className="flex gap-4 border-b border-gray-500/30">
                      <button 
                          onClick={() => setProfileTab('ARTIFACTS')}
@@ -1767,7 +1618,6 @@ export default function App() {
                      </button>
                  </div>
 
-                 {/* Content */}
                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                      {profileTab === 'ARTIFACTS' && profileArtifacts.map(item => (
                          <ExhibitCard 
@@ -1786,7 +1636,6 @@ export default function App() {
                      {profileTab === 'COLLECTIONS' && profileCollections.map(renderCollectionCard)}
                  </div>
                  
-                 {/* Guestbook */}
                  <div className="pt-8 border-t border-dashed border-gray-500/30">
                      <h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
                      <div className="space-y-4 mb-4">
@@ -1886,7 +1735,6 @@ export default function App() {
       default:
          return (
              <div className="max-w-7xl mx-auto animate-in fade-in">
-                 {/* Feed Toggle */}
                  <div className="flex items-center justify-center gap-4 mb-8">
                      <button 
                          onClick={() => setFeedMode('ARTIFACTS')}
@@ -1912,7 +1760,6 @@ export default function App() {
 
                  {feedMode === 'ARTIFACTS' && (
                      <>
-                        {/* Categories - Mobile Friendly Scroll */}
                         <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 md:justify-center">
                             <button 
                                 onClick={() => { setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
@@ -1960,7 +1807,6 @@ export default function App() {
                              }
                         </div>
                         
-                        {/* Load More trigger */}
                         <div ref={loadMoreRef} className="h-20 w-full flex items-center justify-center mt-8">
                              {exhibits.length > visibleCount && <RetroLoader />}
                         </div>
@@ -1986,7 +1832,6 @@ export default function App() {
       <MatrixRain theme={theme} />
       {theme === 'dark' && <CRTOverlay />}
       
-      {/* Header / Navbar (Desktop Only) */}
       {view !== 'AUTH' && (
         <header className={`hidden md:flex sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
             <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between w-full">
@@ -2056,13 +1901,11 @@ export default function App() {
         </header>
       )}
       
-      {/* Main Content */}
       <main className="relative z-10 max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
          {view === 'FEED' && <HeroSection theme={theme} user={user} />}
          {renderContentArea()}
       </main>
 
-      {/* Mobile Navigation */}
       {view !== 'AUTH' && user && (
           <MobileNavigation 
               theme={theme}
@@ -2080,7 +1923,6 @@ export default function App() {
           />
       )}
 
-      {/* Footer (Desktop Only) */}
       {view !== 'AUTH' && (
           <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
               <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2023</p>
