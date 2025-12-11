@@ -326,3 +326,15 @@ export const markMessagesRead = async (sender: string, receiver: string) => {
         });
     }
 };
+
+export const isOffline = () => {
+    return !cache.isLoaded;
+};
+
+export const getUserByUsername = (username: string): UserProfile | undefined => {
+    return cache.users.find(u => u.username === username);
+};
+
+export const getAllUsers = (): UserProfile[] => {
+    return cache.users;
+};
