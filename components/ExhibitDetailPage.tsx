@@ -107,6 +107,8 @@ export default function ExhibitDetailPage({
   };
 
   const isOwner = currentUser === exhibit.owner;
+  // Allow delete if owner OR admin
+  const canDelete = isOwner || isAdmin;
 
   // Video Embed Helper
   const getEmbedUrl = (url: string) => {
@@ -131,8 +133,8 @@ export default function ExhibitDetailPage({
         </button>
         
         <div className="flex gap-4">
-          {isOwner && onDelete && (
-             <button onClick={() => onDelete(exhibit.id)} className="text-red-500 hover:text-red-400">
+          {canDelete && onDelete && (
+             <button onClick={() => onDelete(exhibit.id)} className="text-red-500 hover:text-red-400" title={isAdmin ? "ADMIN DELETE" : "DELETE"}>
                 <Trash2 size={18} />
              </button>
           )}
@@ -234,19 +236,19 @@ export default function ExhibitDetailPage({
             <div className="flex items-start justify-between">
                <div className="flex-1 mr-2 min-w-0">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <div className={`inline-block px-2 py-0.5 text-[9px] font-pixel rounded border ${
+                      <div className={`inline-block px-2 py-0.5 text-[8px] md:text-[9px] font-pixel rounded border ${
                           theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent'
                       }`}>
                           {exhibit.category}
                       </div>
                       
                       {/* Tier Badge */}
-                      <div className={`inline-block px-2 py-0.5 text-[9px] font-bold font-pixel rounded border flex items-center gap-1 ${tier.bgColor} border-current ${tier.color}`}>
+                      <div className={`inline-block px-2 py-0.5 text-[8px] md:text-[9px] font-bold font-pixel rounded border flex items-center gap-1 ${tier.bgColor} border-current ${tier.color}`}>
                           <TierIcon size={10} /> {tier.name}
                       </div>
                   </div>
                   {/* Title with overflow protection - ADJUSTED SIZE */}
-                  <h1 className="text-xl md:text-2xl lg:text-3xl font-bold font-pixel mb-2 leading-tight break-words">
+                  <h1 className="text-sm md:text-2xl lg:text-3xl font-bold font-pixel mb-2 leading-tight break-words">
                     {exhibit.title}
                   </h1>
                </div>
@@ -281,14 +283,14 @@ export default function ExhibitDetailPage({
                      <img src={`https://ui-avatars.com/api/?name=${exhibit.owner}&background=random`} alt="avatar" />
                   </div>
                   <div className="overflow-hidden">
-                     <div className="font-bold font-pixel text-xs truncate">@{exhibit.owner}</div>
-                     <div className="text-[10px] opacity-50 font-mono">{exhibit.timestamp}</div>
+                     <div className="font-bold font-pixel text-[10px] md:text-xs truncate">@{exhibit.owner}</div>
+                     <div className="text-[9px] opacity-50 font-mono">{exhibit.timestamp}</div>
                   </div>
                </div>
                {!isOwner && (
                  <button 
                    onClick={() => onFollow(exhibit.owner)}
-                   className={`px-3 py-1 text-[10px] font-bold border rounded hover:opacity-80 transition-opacity font-pixel whitespace-nowrap ${
+                   className={`px-3 py-1 text-[9px] md:text-[10px] font-bold border rounded hover:opacity-80 transition-opacity font-pixel whitespace-nowrap ${
                       isFollowing 
                         ? (theme === 'dark' ? 'bg-transparent border-dark-dim text-dark-dim' : 'bg-gray-200 border-gray-300 text-gray-500')
                         : (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent')
@@ -310,19 +312,19 @@ export default function ExhibitDetailPage({
             <div className="grid grid-cols-2 gap-3 mb-8">
                {Object.entries(specs).map(([key, val]) => (
                  <div key={key} className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
-                    <div className="text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">{key}</div>
-                    <div className="font-bold font-mono text-xs truncate">{val}</div>
+                    <div className="text-[8px] md:text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">{key}</div>
+                    <div className="font-bold font-mono text-[10px] md:text-xs truncate">{val as string}</div>
                  </div>
                ))}
                <div className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
-                    <div className="text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">СОСТОЯНИЕ</div>
-                    <div className="font-bold font-mono text-xs truncate">{exhibit.condition || 'НЕ УКАЗАНО'}</div>
+                    <div className="text-[8px] md:text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">СОСТОЯНИЕ</div>
+                    <div className="font-bold font-mono text-[10px] md:text-xs truncate">{exhibit.condition || 'НЕ УКАЗАНО'}</div>
                </div>
             </div>
 
             {/* Comments Section */}
             <div className="mt-auto pt-4 border-t border-dashed border-gray-500/30">
-               <h3 className="font-pixel text-sm mb-4 flex items-center gap-2">
+               <h3 className="font-pixel text-xs md:text-sm mb-4 flex items-center gap-2">
                  <MessageSquare size={14} /> КОММЕНТАРИИ ({comments.length})
                </h3>
                
@@ -335,11 +337,11 @@ export default function ExhibitDetailPage({
                          <div className="flex justify-between items-baseline mb-1">
                             <span 
                               onClick={() => onAuthorClick(comment.author)}
-                              className={`font-bold cursor-pointer hover:underline font-pixel text-[9px] ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
+                              className={`font-bold cursor-pointer hover:underline font-pixel text-[8px] md:text-[9px] ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
                             >
                               @{comment.author}
                             </span>
-                            <span className="text-[9px] opacity-40 font-mono">{comment.timestamp}</span>
+                            <span className="text-[8px] opacity-40 font-mono">{comment.timestamp}</span>
                          </div>
                          <p className="opacity-80 font-mono break-words">{comment.text}</p>
                       </div>

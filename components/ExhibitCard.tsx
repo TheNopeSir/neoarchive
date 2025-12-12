@@ -121,14 +121,14 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
       {/* 2. Compact Info Area */}
       <div className="p-2 md:p-3 flex flex-col flex-1 relative">
          <div className="flex justify-between items-start gap-3 mb-1">
-             {/* Title - clamped to 2 lines */}
-             <h3 className={`text-xs md:text-sm font-bold leading-tight line-clamp-2 ${theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}`}>
+             {/* Title - clamped to 2 lines - SMALLER FONT ON MOBILE */}
+             <h3 className={`text-[10px] md:text-sm font-bold leading-tight line-clamp-2 ${theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}`}>
                 {item.title}
              </h3>
          </div>
 
          {/* Price / Condition */}
-         <div className={`mt-1 font-mono text-[10px] md:text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>
+         <div className={`mt-1 font-mono text-[9px] md:text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>
              <span className="truncate">{displayValue}</span>
          </div>
 
@@ -148,7 +148,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
              {/* Use full width on mobile if author is hidden, otherwise auto */}
              <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
                  {/* View Counter */}
-                 <div className={`flex items-center gap-1 text-[10px] opacity-60 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                 <div className={`flex items-center gap-1 text-[9px] md:text-[10px] opacity-60 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                     <Eye size={12} />
                     <span>{item.views}</span>
                  </div>
@@ -170,7 +170,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
                      {/* Animated Number */}
                      <span 
                         key={item.likes}
-                        className={`text-[10px] font-bold transition-all duration-300 ${isLikeAnimating ? 'text-red-500 scale-110' : ''} animate-[spin_0.1s_ease-out_reverse]`}
+                        className={`text-[9px] md:text-[10px] font-bold transition-all duration-300 ${isLikeAnimating ? 'text-red-500 scale-110' : ''} animate-[spin_0.1s_ease-out_reverse]`}
                         style={{ animation: isLikeAnimating ? 'none' : undefined }}
                      >
                          {item.likes}
