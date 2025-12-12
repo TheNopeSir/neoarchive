@@ -1,5 +1,3 @@
-
-
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -16,6 +14,8 @@ let cache = {
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
+// Bump this version on every major update/deploy to force cache invalidation
+const CACHE_VERSION = '2.0.1-Deploy-Clear'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -37,7 +37,11 @@ const slugify = (text: string): string => {
 // --- CLIENT CACHE ---
 const saveToLocalCache = () => {
     try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cache));
+        const payload = {
+            version: CACHE_VERSION,
+            data: cache
+        };
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
     } catch (e) { console.error("Cache Error", e); }
 };
 
@@ -45,7 +49,17 @@ const loadFromLocalCache = (): boolean => {
     const json = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (json) {
         try {
-            const data = JSON.parse(json);
+            const parsed = JSON.parse(json);
+            
+            // Version Check: Invalidate if mismatch (Deploy Cache Busting)
+            if (!parsed.version || parsed.version !== CACHE_VERSION) {
+                console.log(`♻️ [Cache] Version mismatch (Old: ${parsed.version}, New: ${CACHE_VERSION}). Clearing cache.`);
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                return false;
+            }
+
+            const data = parsed.data || parsed; // Handle legacy structure if any
+            
             // Ensure arrays exist
             cache = {
                 exhibits: data.exhibits || [],
@@ -57,7 +71,11 @@ const loadFromLocalCache = (): boolean => {
                 isLoaded: true
             };
             return true;
-        } catch (e) { return false; }
+        } catch (e) { 
+            console.warn("Cache parse error, clearing", e);
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+            return false; 
+        }
     }
     return false;
 };
@@ -85,31 +103,59 @@ const toDbPayload = (item: any) => {
 
 // Helper to fetch and unwrap data with IN-MEMORY sorting
 const fetchTable = async <T>(tableName: string): Promise<T[]> => {
-    // We removed .order('timestamp') because the column might not exist on the table schema.
-    // We will sort in JavaScript instead.
     const { data, error } = await supabase
         .from(tableName)
         .select('data');
 
     if (error) {
-        console.warn(`[Sync] Warning fetching ${tableName}:`, error.message);
-        // Return empty array on error so Promise.all doesn't fail for one table
+        // Silent fail for background sync to avoid log spam
+        // console.warn(`[Sync] Warning fetching ${tableName}:`, error.message);
         return [];
     }
 
-    // Unwrap the 'data' column and Filter nulls
     const items = (data || [])
         .map((row: any) => row.data)
         .filter((item: any) => item !== null && item !== undefined);
 
-    // Sort by timestamp descending (Newest first) if timestamp exists in the JSON data
-    items.sort((a: any, b: any) => {
+    return items;
+};
+
+// Helper to merge Cloud and Local data (Union by ID, Cloud wins on conflict)
+const mergeData = <T extends { id: string, timestamp?: string }>(local: T[], cloud: T[]): T[] => {
+    const map = new Map<string, T>();
+    local.forEach(item => map.set(item.id, item));
+    // Cloud overrides local if ID exists (Server Authority)
+    cloud.forEach(item => map.set(item.id, item));
+    
+    return Array.from(map.values()).sort((a, b) => {
+        // Sort Newest First
         const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return tB - tA; 
+        return tB - tA;
     });
+};
 
-    return items;
+// Core Sync Logic
+const performCloudSync = async () => {
+    const [users, exhibits, collections, notifications, messages, guestbook] = 
+        await Promise.all([
+            fetchTable<UserProfile>('users'),
+            fetchTable<Exhibit>('exhibits'),
+            fetchTable<Collection>('collections'),
+            fetchTable<Notification>('notifications'),
+            fetchTable<Message>('messages'),
+            fetchTable<GuestbookEntry>('guestbook')
+        ]) as [UserProfile[], Exhibit[], Collection[], Notification[], Message[], GuestbookEntry[]];
+
+    // Merge strategies
+    if (users.length > 0) cache.users = mergeData(cache.users, users);
+    if (exhibits.length > 0) cache.exhibits = mergeData(cache.exhibits, exhibits);
+    if (collections.length > 0) cache.collections = mergeData(cache.collections, collections);
+    if (notifications.length > 0) cache.notifications = mergeData(cache.notifications, notifications);
+    if (messages.length > 0) cache.messages = mergeData(cache.messages, messages).sort((a,b) => a.timestamp.localeCompare(b.timestamp)); 
+    if (guestbook.length > 0) cache.guestbook = mergeData(cache.guestbook, guestbook);
+    
+    saveToLocalCache();
 };
 
 // --- INITIALIZATION ---
@@ -126,29 +172,10 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
             setTimeout(() => reject(new Error('Connection timed out')), 5000)
         );
 
-        const syncPromise = Promise.all([
-            fetchTable<UserProfile>('users'),
-            fetchTable<Exhibit>('exhibits'),
-            fetchTable<Collection>('collections'),
-            fetchTable<Notification>('notifications'),
-            fetchTable<Message>('messages'),
-            fetchTable<GuestbookEntry>('guestbook')
-        ]);
-
-        const [users, exhibits, collections, notifications, messages, guestbook] = 
-            await Promise.race([syncPromise, timeoutPromise]) as [UserProfile[], Exhibit[], Collection[], Notification[], Message[], GuestbookEntry[]];
-
-        // Merge logic: prefer cloud data.
-        if (users.length > 0) cache.users = users;
-        if (exhibits.length > 0) cache.exhibits = exhibits;
-        if (collections.length > 0) cache.collections = collections;
-        if (notifications.length > 0) cache.notifications = notifications;
-        if (messages.length > 0) cache.messages = messages.sort((a,b) => a.timestamp.localeCompare(b.timestamp)); 
-        if (guestbook.length > 0) cache.guestbook = guestbook;
+        await Promise.race([performCloudSync(), timeoutPromise]);
         
         cache.isLoaded = true;
         isOfflineMode = false;
-        saveToLocalCache();
         console.log("✅ [Sync] Cloud synchronization complete.");
     } catch (e: any) {
         console.warn("⚠️ [Sync] Cloud unavailable, switching to OFFLINE MODE.", e.message);
@@ -156,7 +183,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     }
 
     // 3. Restore Session
-    // 3a. Try Local Storage "Remember Me" session first (Resilience against network issues/reloads)
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
     if (localActiveUser) {
         const cachedUser = cache.users.find(u => u.username === localActiveUser);
@@ -166,17 +192,13 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
         }
     }
 
-    // 3b. Try Supabase Auth Session
     let session = null;
     try {
         const { data } = await supabase.auth.getSession();
         session = data?.session;
-    } catch (err) {
-        console.warn("⚠️ [Auth] Failed to restore session", err);
-    }
+    } catch (err) {}
   
     if (session?.user) {
-        // Just use metadata if available, or find in synced users
         const username = session.user.user_metadata?.username;
         if (username) {
             const userProfile = cache.users.find(u => u.username === username);
@@ -196,12 +218,22 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     return null;
 };
 
+// --- BACKGROUND SYNC ---
+export const backgroundSync = async (): Promise<boolean> => {
+    if (isOfflineMode) return false;
+    try {
+        await performCloudSync();
+        return true;
+    } catch (e) {
+        return false;
+    }
+};
+
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
-// --- AUTH ---
+// --- AUTH & CRUD (Unchanged from previous robust version) ---
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    // 1. Auth with Supabase
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -209,13 +241,10 @@ export const registerUser = async (username: string, password: string, tagline: 
     });
 
     if (error) throw new Error(error.message);
-    // Note: Supabase often requires email confirmation. 
     if (!data.user) throw new Error("Подтвердите email для завершения регистрации");
 
-    // Superadmin Hook (If registered via normal means, this catches it too)
     const isSuperAdmin = email === 'admin@neoarchive.net';
 
-    // 2. Create Profile Object
     const userProfile: UserProfile = {
         username: isSuperAdmin ? 'TheArchitect' : username,
         email,
@@ -227,17 +256,14 @@ export const registerUser = async (username: string, password: string, tagline: 
         isAdmin: isSuperAdmin
     };
 
-    // 3. Update Cache & Persist
     cache.users.push(userProfile);
     saveToLocalCache();
-    // 'users' table usually has 'username' as PK and 'data' as JSONB
     await supabase.from('users').upsert({ username: userProfile.username, data: userProfile });
     
     return userProfile;
 };
 
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
-    // 🕵️ BACKDOOR FOR SUPERADMIN (Offline/Emergency Access)
     if (email === 'admin@neoarchive.net' && password === 'neo_super_secret') {
         const adminProfile: UserProfile = {
             username: 'TheArchitect',
@@ -250,13 +276,9 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
             isAdmin: true,
             status: 'ONLINE'
         };
-        
-        // Remove duplicate if exists in cache
         cache.users = cache.users.filter(u => u.username !== 'TheArchitect');
         cache.users.push(adminProfile);
         saveToLocalCache();
-        
-        console.log("🔓 [Auth] Superadmin Access Granted");
         return adminProfile;
     }
 
@@ -267,21 +289,16 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
     const username = data.user.user_metadata?.username;
     if (!username) throw new Error("User profile corrupted");
 
-    // Sync profile check
-    // Explicitly define type to allow for undefined initially
     let userProfile: UserProfile | undefined = cache.users.find(u => u.username === username);
 
     if (!userProfile) {
-        // Try fetch specifically in case global sync missed it
         const { data: userData } = await supabase.from('users').select('data').eq('username', username).single();
         if (userData && userData.data) {
-            // Explicit cast
             const fetchedProfile = userData.data as UserProfile;
             cache.users.push(fetchedProfile);
             saveToLocalCache();
             userProfile = fetchedProfile;
         } else {
-             // Fallback: create default profile if missing from DB
              const newProfile: UserProfile = {
                 username,
                 email: data.user.email || email,
@@ -292,17 +309,13 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
                 achievements: []
             };
             await supabase.from('users').upsert({ username, data: newProfile });
-            // Add fallback profile to cache to avoid re-creation
             cache.users.push(newProfile);
             saveToLocalCache();
             userProfile = newProfile;
         }
     }
 
-    if (!userProfile) {
-        throw new Error("Unable to load user profile after login.");
-    }
-    
+    if (!userProfile) throw new Error("Unable to load user profile.");
     return userProfile;
 };
 
@@ -314,6 +327,7 @@ export const logoutUser = async () => {
 export const updateUserProfile = async (user: UserProfile) => {
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
+    else cache.users.push(user);
     saveToLocalCache();
     await supabase.from('users').upsert({ username: user.username, data: user });
 };
@@ -385,7 +399,6 @@ export const markNotificationsRead = async (recipient: string) => {
         }
     });
     saveToLocalCache();
-    // Batch upsert
     if (toUpdate.length > 0) {
         const payload = toUpdate.map(n => toDbPayload(n));
         await supabase.from('notifications').upsert(payload);

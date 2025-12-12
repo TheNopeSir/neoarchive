@@ -269,6 +269,20 @@ export default function App() {
       setGuestbook([...db.getGuestbook()]);
   };
 
+  // Background Sync Polling
+  useEffect(() => {
+      if (view === 'AUTH' || isOffline()) return;
+
+      const interval = setInterval(async () => {
+          const hasUpdates = await db.backgroundSync();
+          if (hasUpdates) {
+              refreshData();
+          }
+      }, 15000); // Poll every 15 seconds for updates
+
+      return () => clearInterval(interval);
+  }, [view]);
+
   // Initialize & PWA Install Listener
   useEffect(() => {
     window.onerror = (msg, url, lineNo, columnNo, error) => {
@@ -280,7 +294,15 @@ export default function App() {
     const handleBeforeInstallPrompt = (e: any) => {
         e.preventDefault();
         setDeferredPrompt(e);
-        setShowInstallBanner(true);
+        
+        // Show only if not dismissed and shown less than 2 times
+        const isDismissed = localStorage.getItem('pwa_dismissed') === 'true';
+        const showCount = parseInt(localStorage.getItem('pwa_show_count') || '0', 10);
+
+        if (!isDismissed && showCount < 2) {
+            setShowInstallBanner(true);
+            localStorage.setItem('pwa_show_count', (showCount + 1).toString());
+        }
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
@@ -319,7 +341,15 @@ export default function App() {
       if (outcome === 'accepted') {
           setDeferredPrompt(null);
           setShowInstallBanner(false);
+          // If user installs, consider it dismissed/handled
+          localStorage.setItem('pwa_dismissed', 'true');
       }
+  };
+
+  // Handle Dismiss Click (X)
+  const handleDismissInstall = () => {
+      setShowInstallBanner(false);
+      localStorage.setItem('pwa_dismissed', 'true');
   };
 
   // --- HASH ROUTING ---
@@ -572,7 +602,7 @@ export default function App() {
      };
 
      await db.saveExhibit(exhibit); 
-     setExhibits(db.getExhibits());
+     setExhibits([...db.getExhibits()]);
      
      setNewExhibit({ 
          category: DefaultCategory.PHONES, 
@@ -1684,8 +1714,6 @@ export default function App() {
          const profileCollections = collections.filter(c => c.owner === profileUsername);
          const isCurrentUser = user?.username === profileUsername;
          const isSubscribed = user?.following.includes(profileUsername) || false;
-         // Enable editing if owner or ADMIN
-         const canEditProfile = isCurrentUser || user?.isAdmin;
 
          return (
              <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32">
@@ -1698,7 +1726,7 @@ export default function App() {
                          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-gray-500">
                              <img src={profileUser.avatarUrl} alt={profileUser.username || ''} className="w-full h-full object-cover"/>
                          </div>
-                         {canEditProfile && (
+                         {isCurrentUser && (
                              <label className="absolute bottom-0 right-0 bg-gray-800 p-2 rounded-full cursor-pointer hover:bg-gray-700 text-white border border-gray-600">
                                  <Edit2 size={14} />
                                  <input type="file" accept="image/*" className="hidden" onChange={handleProfileImageUpload} />
@@ -1707,7 +1735,7 @@ export default function App() {
                      </div>
 
                      <div className="flex-1 text-center md:text-left space-y-2">
-                         {isEditingProfile && canEditProfile ? (
+                         {isEditingProfile && isCurrentUser ? (
                              <div className="space-y-2 max-w-sm">
                                  <input 
                                      value={editTagline}
@@ -1743,7 +1771,7 @@ export default function App() {
                                  <h2 className="text-xl md:text-2xl font-pixel font-bold">@{profileUser.username}</h2>
                                  <p className="font-mono text-xs md:text-sm opacity-70 flex items-center justify-center md:justify-start gap-2">
                                      {profileUser.tagline}
-                                     {canEditProfile && (
+                                     {isCurrentUser && (
                                          <button onClick={() => { 
                                              // Pre-fill with TARGET user data, not current user
                                              setEditTagline(profileUser.tagline || ''); 
@@ -1826,7 +1854,7 @@ export default function App() {
                  )}
 
                  <button 
-                    onClick={() => setView('HALL_OF_FAME')}
+                    onClick={() => { setView('HALL_OF_FAME'); updateHash('/hall-of-fame'); }}
                     className="w-full py-3 border border-dashed border-gray-500/30 text-xs font-pixel opacity-70 hover:opacity-100 flex items-center justify-center gap-2"
                  >
                      <Trophy size={14} /> ОТКРЫТЬ ЗАЛ СЛАВЫ
@@ -2070,8 +2098,15 @@ export default function App() {
           <InstallBanner 
               theme={theme} 
               onInstall={handleInstallClick} 
-              onClose={() => setShowInstallBanner(false)} 
+              onClose={handleDismissInstall} 
           />
+      )}
+
+      {/* OFFLINE INDICATOR */}
+      {isOffline() && (
+          <div className="fixed bottom-4 right-4 z-[100] px-3 py-1 bg-red-500 text-white font-pixel text-[10px] rounded animate-pulse flex items-center gap-2 shadow-lg">
+              <WifiOff size={12} /> OFFLINE MODE
+          </div>
       )}
       
       {view !== 'AUTH' && (
