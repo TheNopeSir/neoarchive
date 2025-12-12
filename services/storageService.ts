@@ -3,6 +3,10 @@ import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry
 // API Base URL - определяем автоматически
 const API_BASE = window.location.origin;
 
+// Cache TTL Configuration
+const CACHE_TTL = 5 * 60 * 1000; // 5 минут
+let lastSyncTime = 0;
+
 // Internal Cache
 let cache = {
     exhibits: [] as Exhibit[],
@@ -15,6 +19,7 @@ let cache = {
 };
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
+const LAST_SYNC_KEY = 'neo_archive_last_sync';
 
 // --- SLUG GENERATOR ---
 const slugify = (text: string): string => {
@@ -33,11 +38,20 @@ const slugify = (text: string): string => {
 const saveToLocalCache = () => {
     try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cache));
-    } catch (e) { console.error("Cache Error", e); }
+        localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
+    } catch (e) { 
+        console.error("Cache Error", e); 
+    }
 };
 
 const loadFromLocalCache = (): boolean => {
     const json = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const lastSync = localStorage.getItem(LAST_SYNC_KEY);
+    
+    if (lastSync) {
+        lastSyncTime = parseInt(lastSync, 10);
+    }
+    
     if (json) {
         try {
             const data = JSON.parse(json);
@@ -51,64 +65,124 @@ const loadFromLocalCache = (): boolean => {
                 isLoaded: true
             };
             return true;
-        } catch (e) { return false; }
+        } catch (e) { 
+            console.error("Failed to parse cache:", e);
+            return false; 
+        }
     }
     return false;
 };
 
 export const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = error => reject(error);
+    });
 };
 
-// --- API HELPERS ---
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-    try {
-        const response = await fetch(`${API_BASE}${endpoint}`, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers,
-            },
-        });
-        return await response.json();
-    } catch (error) {
-        console.error(`API Error [${endpoint}]:`, error);
-        throw error;
+// --- API HELPERS WITH RETRY LOGIC ---
+const apiCall = async (
+    endpoint: string, 
+    options: RequestInit = {}, 
+    retries = 3,
+    timeout = 30000 // 30 секунд
+) => {
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers,
+                },
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (error: any) {
+            console.error(`API Error [${endpoint}] attempt ${attempt + 1}/${retries}:`, error.message);
+            
+            // Если это последняя попытка - выбрасываем ошибку
+            if (attempt === retries - 1) {
+                throw error;
+            }
+            
+            // Exponential backoff: 1s, 2s, 4s
+            const delay = 1000 * Math.pow(2, attempt);
+            console.log(`⏳ Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
     }
+    
+    // Эта строка никогда не должна выполниться, но TypeScript требует return
+    throw new Error('Max retries exceeded');
 };
 
-// --- INITIALIZATION ---
+// --- INITIALIZATION WITH TTL ---
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
     // 1. Load optimistic cache first
-    loadFromLocalCache();
-
-    // 2. Sync with server
+    const cacheLoaded = loadFromLocalCache();
+    
+    // 2. Check if cache is fresh enough
+    const now = Date.now();
+    const cacheAge = now - lastSyncTime;
+    
+    if (cacheLoaded && cacheAge < CACHE_TTL) {
+        console.log(`⚡ Using cached data (${Math.round(cacheAge / 1000)}s old), skipping server sync`);
+        
+        // Restore session from localStorage
+        const storedUser = localStorage.getItem('neo_user');
+        if (storedUser) {
+            try {
+                return JSON.parse(storedUser);
+            } catch (e) {
+                localStorage.removeItem('neo_user');
+            }
+        }
+        return null;
+    }
+    
+    // 3. Sync with server (cache expired or doesn't exist)
     try {
         console.log("☁️ [Sync] Connecting to server API...");
-        const data = await apiCall('/api/sync');
+        const data = await apiCall('/api/sync', {}, 3, 30000);
         
         if (data.users) cache.users = data.users;
         if (data.exhibits) cache.exhibits = data.exhibits;
         if (data.collections) cache.collections = data.collections;
         if (data.notifications) cache.notifications = data.notifications;
-        if (data.messages) cache.messages = data.messages.sort((a: Message, b: Message) => 
-            a.timestamp.localeCompare(b.timestamp)
-        );
+        if (data.messages) {
+            cache.messages = data.messages.sort((a: Message, b: Message) => 
+                a.timestamp.localeCompare(b.timestamp)
+            );
+        }
         if (data.guestbook) cache.guestbook = data.guestbook;
         
         cache.isLoaded = true;
+        lastSyncTime = now;
         saveToLocalCache();
         console.log("✅ [Sync] Server synchronization complete.");
-    } catch (e) {
-        console.warn("⚠️ [Sync] Server unavailable, running in offline mode:", e);
+    } catch (e: any) {
+        console.warn("⚠️ [Sync] Server unavailable, running in offline mode:", e.message);
+        
+        // If we have cached data, use it even if expired
+        if (cacheLoaded) {
+            console.log("📦 Using stale cache as fallback");
+        }
     }
 
-    // 3. Check for stored session
+    // 4. Restore session
     const storedUser = localStorage.getItem('neo_user');
     if (storedUser) {
         try {
@@ -121,11 +195,21 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     return null;
 };
 
-export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
+// Force refresh (bypass cache)
+export const forceRefresh = async (): Promise<void> => {
+    console.log("🔄 Forcing data refresh...");
+    lastSyncTime = 0; // Reset TTL
+    await initializeDatabase();
+};
+
+export const getFullDatabase = () => ({ 
+    ...cache, 
+    timestamp: new Date().toISOString(),
+    lastSync: new Date(lastSyncTime).toISOString()
+});
 
 // --- AUTH ---
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    // Create profile
     const userProfile: UserProfile = {
         username,
         email,
@@ -137,11 +221,11 @@ export const registerUser = async (username: string, password: string, tagline: 
         isAdmin: false
     };
 
-    // Save to server
+    // Save to server with retry
     await apiCall('/api/users/update', {
         method: 'POST',
         body: JSON.stringify(userProfile)
-    });
+    }, 3, 15000);
 
     // Update cache
     cache.users.push(userProfile);
@@ -152,7 +236,6 @@ export const registerUser = async (username: string, password: string, tagline: 
 };
 
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
-    // In this simplified version, we just check if user exists
     const username = email.split('@')[0];
     
     let userProfile = cache.users.find(u => u.email === email || u.username === username);
@@ -177,7 +260,7 @@ export const updateUserProfile = async (user: UserProfile) => {
     await apiCall('/api/users/update', {
         method: 'POST',
         body: JSON.stringify(user)
-    });
+    }, 3, 15000);
 };
 
 // --- EXHIBITS ---
@@ -191,7 +274,7 @@ export const saveExhibit = async (exhibit: Exhibit) => {
     await apiCall('/api/exhibits', {
         method: 'POST',
         body: JSON.stringify(exhibit)
-    });
+    }, 3, 15000);
 };
 
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
@@ -203,7 +286,7 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
         await apiCall('/api/exhibits', {
             method: 'POST',
             body: JSON.stringify(updatedExhibit)
-        });
+        }, 3, 15000);
     }
 };
 
@@ -213,7 +296,7 @@ export const deleteExhibit = async (id: string) => {
     
     await apiCall(`/api/exhibits/${id}`, {
         method: 'DELETE'
-    });
+    }, 3, 15000);
 };
 
 // --- COLLECTIONS ---
@@ -227,7 +310,7 @@ export const saveCollection = async (collection: Collection) => {
     await apiCall('/api/collections', {
         method: 'POST',
         body: JSON.stringify(collection)
-    });
+    }, 3, 15000);
 };
 
 export const updateCollection = async (updatedCollection: Collection) => {
@@ -239,7 +322,7 @@ export const updateCollection = async (updatedCollection: Collection) => {
         await apiCall('/api/collections', {
             method: 'POST',
             body: JSON.stringify(updatedCollection)
-        });
+        }, 3, 15000);
     }
 };
 
@@ -249,7 +332,7 @@ export const deleteCollection = async (id: string) => {
     
     await apiCall(`/api/collections/${id}`, {
         method: 'DELETE'
-    });
+    }, 3, 15000);
 };
 
 // --- NOTIFICATIONS ---
@@ -262,7 +345,7 @@ export const saveNotification = async (notif: Notification) => {
     await apiCall('/api/notifications', {
         method: 'POST',
         body: JSON.stringify(notif)
-    });
+    }, 3, 10000);
 };
 
 export const markNotificationsRead = async (recipient: string) => {
@@ -275,10 +358,13 @@ export const markNotificationsRead = async (recipient: string) => {
     });
     saveToLocalCache();
     
+    // Update on server in parallel (fire and forget pattern for better UX)
     for (const n of toUpdate) {
-        await apiCall('/api/notifications', {
+        apiCall('/api/notifications', {
             method: 'POST',
             body: JSON.stringify(n)
+        }, 2, 10000).catch(err => {
+            console.warn('Failed to sync notification read status:', err);
         });
     }
 };
@@ -293,7 +379,7 @@ export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     await apiCall('/api/guestbook', {
         method: 'POST',
         body: JSON.stringify(entry)
-    });
+    }, 3, 15000);
 };
 
 // --- MESSAGES ---
@@ -306,7 +392,7 @@ export const saveMessage = async (msg: Message) => {
     await apiCall('/api/messages', {
         method: 'POST',
         body: JSON.stringify(msg)
-    });
+    }, 3, 15000);
 };
 
 export const markMessagesRead = async (sender: string, receiver: string) => {
@@ -319,14 +405,18 @@ export const markMessagesRead = async (sender: string, receiver: string) => {
     });
     saveToLocalCache();
     
+    // Update on server in parallel (fire and forget pattern)
     for (const m of toUpdate) {
-        await apiCall('/api/messages', {
+        apiCall('/api/messages', {
             method: 'POST',
             body: JSON.stringify(m)
+        }, 2, 10000).catch(err => {
+            console.warn('Failed to sync message read status:', err);
         });
     }
 };
 
+// --- UTILITY FUNCTIONS ---
 export const isOffline = () => {
     return !cache.isLoaded;
 };
@@ -337,4 +427,12 @@ export const getUserByUsername = (username: string): UserProfile | undefined => 
 
 export const getAllUsers = (): UserProfile[] => {
     return cache.users;
+};
+
+export const getCacheAge = (): number => {
+    return Date.now() - lastSyncTime;
+};
+
+export const isCacheFresh = (): boolean => {
+    return getCacheAge() < CACHE_TTL;
 };
