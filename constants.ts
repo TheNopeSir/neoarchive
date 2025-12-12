@@ -1,124 +1,188 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Box, Filter } from 'lucide-react';
-import { Exhibit, UserProfile } from '../types';
-import ExhibitCard from './ExhibitCard';
-import { DefaultCategory } from '../constants';
+import { Exhibit, UserProfile, Collection, Notification, Message } from './types';
+import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle } from 'lucide-react';
+import React from 'react';
 
-interface MyCollectionProps {
-    theme: 'dark' | 'light';
-    user: UserProfile;
-    exhibits: Exhibit[];
-    onBack: () => void;
-    onExhibitClick: (item: Exhibit) => void;
-}
+// Moved from types.ts to ensure runtime availability
+export const DefaultCategory = {
+  PHONES: 'ТЕЛЕФОНЫ',
+  GAMES: 'ИГРЫ',
+  MAGAZINES: 'ЖУРНАЛЫ',
+  MUSIC: 'МУЗЫКА',
+  VIDEO: 'ВИДЕО',
+  TOYS: 'ИГРУШКИ',
+  COMPUTERS: 'КОМПЬЮТЕРЫ',
+  CAMERAS: 'КАМЕРЫ',
+  MISC: 'ПРОЧЕЕ'
+} as const;
 
-const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, onBack, onExhibitClick }) => {
-    const [activeCategory, setActiveCategory] = useState<string>('ALL');
-
-    // Get categories that actually have items
-    const userCategories = [...new Set(exhibits.map(e => e.category))];
-    
-    const filteredExhibits = activeCategory === 'ALL' 
-        ? exhibits 
-        : exhibits.filter(e => e.category === activeCategory);
-
-    return (
-        <div className="min-h-screen animate-in fade-in pb-20">
-            {/* Header */}
-            <div className={`sticky top-14 z-30 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between ${
-                theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'
-            }`}>
-                <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="hover:opacity-70">
-                        <ArrowLeft size={20} />
-                    </button>
-                    <div>
-                        <h1 className="font-pixel text-sm md:text-lg font-bold">МОЯ ПОЛКА</h1>
-                        <p className="font-mono text-[9px] opacity-60">{exhibits.length} ПРЕДМЕТОВ</p>
-                    </div>
-                </div>
-                <div className="p-2 border rounded-full opacity-50">
-                    <Box size={20} />
-                </div>
-            </div>
-
-            <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row gap-6">
-                
-                {/* Sidebar / Top Navigation for Categories */}
-                <div className="w-full md:w-64 flex-shrink-0">
-                    <div className="flex overflow-x-auto md:flex-col gap-2 pb-2 md:pb-0 scrollbar-hide sticky top-32">
-                        <button
-                            onClick={() => setActiveCategory('ALL')}
-                            className={`px-4 py-2 rounded font-pixel text-[10px] text-left border transition-all whitespace-nowrap ${
-                                activeCategory === 'ALL'
-                                ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent')
-                                : 'border-transparent opacity-60 hover:opacity-100 hover:bg-gray-500/10'
-                            }`}
-                        >
-                            [ ВСЕ ПРЕДМЕТЫ ]
-                        </button>
-                        
-                        {Object.values(DefaultCategory).map(cat => {
-                            const count = exhibits.filter(e => e.category === cat).length;
-                            if (count === 0) return null; // Hide empty categories
-
-                            return (
-                                <button
-                                    key={cat}
-                                    onClick={() => setActiveCategory(cat)}
-                                    className={`px-4 py-2 rounded font-pixel text-[10px] text-left border transition-all whitespace-nowrap flex justify-between items-center ${
-                                        activeCategory === cat
-                                        ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
-                                        : 'border-transparent opacity-60 hover:opacity-100 hover:bg-gray-500/10'
-                                    }`}
-                                >
-                                    <span>{cat}</span>
-                                    <span className="font-mono opacity-50 ml-2">{count}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* Shelf Grid */}
-                <div className="flex-1">
-                    {filteredExhibits.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 opacity-30">
-                            <Box size={48} className="mb-4" />
-                            <p className="font-mono text-xs">ПОЛКА ПУСТА</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                            {filteredExhibits.map((item) => (
-                                <div key={item.id} className="relative group">
-                                    {/* Shelf Underline visual */}
-                                    <div className={`absolute bottom-0 left-[-10px] right-[-10px] h-3 z-0 rounded-sm transform translate-y-1/2 ${
-                                        theme === 'dark' 
-                                        ? 'bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 shadow-black shadow-lg' 
-                                        : 'bg-gradient-to-r from-gray-300 via-gray-200 to-gray-300 shadow-lg'
-                                    }`}></div>
-                                    
-                                    <div className="relative z-10 transform transition-transform duration-300 group-hover:-translate-y-2">
-                                        <ExhibitCard 
-                                            item={item}
-                                            similarExhibits={[]}
-                                            theme={theme}
-                                            onClick={onExhibitClick}
-                                            isLiked={false}
-                                            isFavorited={false}
-                                            onLike={(e) => { e.stopPropagation(); }}
-                                            onFavorite={(e) => { e.stopPropagation(); }}
-                                            onAuthorClick={() => {}}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
+// 2. Subcategories
+export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
+    [DefaultCategory.PHONES]: ['Смартфоны', 'Кнопочные телефоны', 'Раскладушки', 'Слайдеры'],
+    [DefaultCategory.GAMES]: ['Картриджи (Dendy, Sega, GB)', 'Диски (PS, Xbox, PC)', 'Кассеты', 'Цифровые коды'],
+    [DefaultCategory.MAGAZINES]: ['Игровые журналы', 'Компьютерные журналы', 'Технические журналы', 'Музыкальные журналы', 'Каталоги'],
+    [DefaultCategory.MUSIC]: ['Кассеты', 'Виниловые пластинки', 'CD диски', 'MiniDisc', 'Катушки'],
+    [DefaultCategory.VIDEO]: ['VHS кассеты', 'Betamax', 'Video CD (VCD)', 'DVD', 'Blu-ray', 'LaserDisc'],
+    [DefaultCategory.TOYS]: ['Фигурки', 'Модели', 'Конструкторы', 'Мягкие игрушки', 'Роботы/трансформеры', 'Настольные игры', 'Электроника'],
+    [DefaultCategory.COMPUTERS]: ['ПК (настольные)', 'Ноутбуки', 'Нетбуки', 'Моноблоки', 'Планшеты', 'КПК', 'Периферия', 'Комплектующие'],
+    [DefaultCategory.CAMERAS]: ['Пленочные фотоаппараты', 'Цифровые фотоаппараты', 'Видеокамеры', 'Мгновенные (Polaroid)', 'Объективы', 'Аксессуары'],
+    [DefaultCategory.MISC]: ['Часы', 'Калькуляторы', 'Плееры', 'Радиоприемники', 'Электроника СССР', 'Бытовая техника', 'Документация', 'Упаковки', 'Аксессуары']
 };
 
-export default MyCollection;
+// 3. Grades / Conditions
+export const CATEGORY_CONDITIONS: Record<string, string[]> = {
+  [DefaultCategory.PHONES]: ['Новый (Sealed)', 'Отличное', 'Хорошее', 'Удовлетворительное', 'На запчасти'],
+  [DefaultCategory.GAMES]: ['Запечатанный', 'Отличное', 'Хорошее', 'Царапины', 'Не работает'],
+  [DefaultCategory.MAGAZINES]: ['Идеальное', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Плохое'],
+  [DefaultCategory.MUSIC]: ['Запечатанный', 'Mint (M)', 'Near Mint (NM)', 'Very Good (VG)', 'Good (G)', 'Poor (P)'],
+  [DefaultCategory.VIDEO]: ['Запечатанный', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Не проверено', 'Не работает'],
+  [DefaultCategory.TOYS]: ['MISB (Sealed Box)', 'MIB (In Box)', 'Отличное (Loose)', 'Хорошее', 'Удовлетворительное', 'Для реставрации'],
+  [DefaultCategory.COMPUTERS]: ['Новый (Sealed)', 'Отличное', 'Хорошее', 'Требует ремонта', 'На запчасти', 'Нерабочий'],
+  [DefaultCategory.CAMERAS]: ['Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'Poor/Parts'],
+  [DefaultCategory.MISC]: ['Новый', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Нерабочий']
+};
+
+// 4. Specs Templates
+export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
+  [DefaultCategory.PHONES]: [
+      'Производитель', 'Модель', 'Год выпуска', 'Диагональ экрана', 'Разрешение экрана', 
+      'Процессор', 'RAM', 'ROM', 'Камера', 'Аккумулятор', 'ОС', 'Цвет', 'Комплектация'
+  ],
+  [DefaultCategory.GAMES]: [
+      'Название', 'Платформа', 'Год выпуска', 'Издатель', 'Жанр', 
+      'Регион', 'Язык', 'Тип носителя', 'Наличие коробки', 'Наличие мануала'
+  ],
+  [DefaultCategory.MAGAZINES]: [
+      'Название', 'Номер', 'Год/Месяц', 'Издательство', 
+      'Страниц', 'Приложения', 'Язык', 'Тематика'
+  ],
+  [DefaultCategory.MUSIC]: [
+      'Исполнитель', 'Альбом', 'Год', 'Лейбл', 'Страна', 
+      'Формат', 'Дисков/Сторон', 'Скорость', 'Вкладыши', 'Издание'
+  ],
+  [DefaultCategory.VIDEO]: [
+      'Название', 'Год', 'Дистрибьютор', 'Формат', 'Регион', 
+      'Продолжительность', 'Озвучка', 'Субтитры', 'Соотношение сторон', 'Тип коробки'
+  ],
+  [DefaultCategory.TOYS]: [
+      'Название', 'Производитель', 'Серия', 'Год', 'Материал', 
+      'Размер/Масштаб', 'Упаковка', 'Комплектность', 'Артикул', 'Батарейки'
+  ],
+  [DefaultCategory.COMPUTERS]: [
+      'Производитель', 'Модель', 'Год', 'Процессор', 'RAM', 
+      'HDD/SSD', 'Видеокарта', 'ОС', 'Порты', 'Комплектация', 'Серийный номер'
+  ],
+  [DefaultCategory.CAMERAS]: [
+      'Производитель', 'Модель', 'Год', 'Тип', 'Формат/Разрешение', 
+      'Объектив', 'Байонет', 'Затвор', 'Экспонометр', 'Комплектация'
+  ],
+  [DefaultCategory.MISC]: [
+      'Тип предмета', 'Производитель', 'Модель', 'Год', 
+      'Материал', 'Функциональность', 'Комплектация', 'Особые отметки'
+  ]
+};
+
+export const BADGES = {
+    'HELLO_WORLD': { label: 'HELLO WORLD', desc: 'Первый вход в систему', color: 'bg-green-500', icon: 'Terminal' },
+    'UPLOADER': { label: 'DATA_MINER', desc: 'Загружено 5+ артефактов', color: 'bg-blue-500', icon: 'Upload' },
+    'INFLUENCER': { label: 'NET_CELEB', desc: '100+ Лайков на контенте', color: 'bg-purple-500', icon: 'Star' },
+    'CRITIC': { label: 'OBSERVER', desc: 'Оставлено 5+ комментариев', color: 'bg-yellow-500', icon: 'MessageSquare' },
+    'LEGEND': { label: 'THE_ONE', desc: 'Владелец Легендарного артефакта', color: 'bg-red-500', icon: 'Zap' },
+    'COLLECTOR': { label: 'ARCHIVIST', desc: 'Создана первая коллекция', color: 'bg-orange-500', icon: 'Layers' }
+};
+
+export const STATUS_OPTIONS = {
+    'ONLINE': { label: 'В сети', color: 'text-green-500', icon: Circle },
+    'AWAY': { label: 'Отошел', color: 'text-yellow-500', icon: Moon },
+    'DND': { label: 'Не беспокоить', color: 'text-red-500', icon: MinusCircle },
+    'INVISIBLE': { label: 'Невидимка', color: 'text-gray-400', icon: EyeOff },
+    'FREE_FOR_CHAT': { label: 'Готов болтать', color: 'text-blue-500', icon: MessageCircle },
+};
+
+export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+
+export const calculateArtifactScore = (item: Exhibit): number => {
+    const likeScore = item.likes * 25;
+    const commentScore = (item.comments?.length || 0) * 10;
+    const viewScore = Math.floor(item.views * 1); 
+    return likeScore + commentScore + viewScore;
+};
+
+export const getArtifactTier = (item: Exhibit): TierType => {
+    const score = calculateArtifactScore(item);
+    const filledSpecs = Object.values(item.specs || {}).filter(v => v && v.trim().length > 0).length;
+    const imageCount = item.imageUrls?.length || 0;
+    const isHighQuality = filledSpecs >= 5 && imageCount >= 2;
+
+    if (score >= 20000) return isHighQuality ? 'LEGENDARY' : 'EPIC';
+    if (score >= 5000) return 'EPIC';
+    if (score >= 1000) return 'RARE';
+    return 'COMMON';
+};
+
+export const TIER_CONFIG: Record<TierType, {
+    name: string;
+    color: string;
+    bgColor: string;
+    borderDark: string;
+    borderLight: string;
+    badge: string;
+    shadow: string;
+    icon: any; 
+}> = {
+    COMMON: {
+        name: 'COMMON',
+        color: 'text-gray-500',
+        bgColor: 'bg-gray-500/20',
+        borderDark: 'border-dark-dim',
+        borderLight: 'border-light-dim',
+        badge: 'bg-gray-500 text-white',
+        shadow: '',
+        icon: User
+    },
+    RARE: {
+        name: 'RARE',
+        color: 'text-cyan-500',
+        bgColor: 'bg-cyan-500/20',
+        borderDark: 'border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.3)]',
+        borderLight: 'border-cyan-600 shadow-md',
+        badge: 'bg-cyan-600 text-white',
+        shadow: 'shadow-cyan-500/20',
+        icon: Award
+    },
+    EPIC: {
+        name: 'EPIC',
+        color: 'text-purple-500',
+        bgColor: 'bg-purple-500/20',
+        borderDark: 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]',
+        borderLight: 'border-purple-600 shadow-lg',
+        badge: 'bg-purple-600 text-white',
+        shadow: 'shadow-purple-500/30',
+        icon: Flame
+    },
+    LEGENDARY: {
+        name: 'LEGENDARY',
+        color: 'text-yellow-500',
+        bgColor: 'bg-yellow-500/20',
+        borderDark: 'border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.5)] bg-gradient-to-b from-yellow-900/20 to-black',
+        borderLight: 'border-orange-500 shadow-xl bg-gradient-to-b from-orange-50 to-white',
+        badge: 'bg-gradient-to-r from-yellow-600 to-red-600 text-white',
+        shadow: 'shadow-yellow-500/40',
+        icon: Zap
+    }
+};
+
+export const MOCK_USER: UserProfile = {
+  username: "Neo_User_01",
+  email: "neo@matrix.com",
+  tagline: "Подключен к сети.",
+  status: 'ONLINE',
+  avatarUrl: "https://picsum.photos/100/100?grayscale",
+  joinedDate: "31.12.1999",
+  following: ['Morpheus', 'Trinity'],
+  achievements: ['HELLO_WORLD']
+};
+
+export const MOCK_COLLECTIONS: Collection[] = [];
+export const MOCK_NOTIFICATIONS: Notification[] = [];
+export const MOCK_MESSAGES: Message[] = [];
+export const INITIAL_EXHIBITS: Exhibit[] = [];

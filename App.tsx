@@ -2090,13 +2090,6 @@ export default function App() {
               onClose={handleDismissInstall} 
           />
       )}
-
-      {/* OFFLINE INDICATOR */}
-      {isOffline() && (
-          <div className="fixed bottom-4 right-4 z-[100] px-3 py-1 bg-red-500 text-white font-pixel text-[10px] rounded animate-pulse flex items-center gap-2 shadow-lg">
-              <WifiOff size={12} /> OFFLINE MODE
-          </div>
-      )}
       
       {view !== 'AUTH' && (
         <header className={`hidden md:flex sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
