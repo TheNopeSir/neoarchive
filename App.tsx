@@ -324,7 +324,11 @@ export default function App() {
   // --- HASH ROUTING ---
   useEffect(() => {
       const handleHashChange = () => {
-          if (!user && view === 'AUTH') return; 
+          // STRICT GATEKEEPING: If no user, force AUTH view regardless of hash
+          if (!user) {
+              if (view !== 'AUTH') setView('AUTH');
+              return;
+          }
           
           const hash = window.location.hash;
           if (hash.startsWith('#/exhibit/')) {
@@ -358,7 +362,7 @@ export default function App() {
 
       window.addEventListener('hashchange', handleHashChange);
       return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [exhibits, collections, user, isInitializing]);
+  }, [exhibits, collections, user, isInitializing, view]); // ADD VIEW TO DEPS
 
   const updateHash = (path: string) => {
       window.history.pushState(null, '', `#${path}`);
@@ -407,10 +411,15 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-      await db.logoutUser();
-      setUser(null);
-      setView('AUTH');
-      window.location.hash = '';
+      try {
+          // Fire and forget logout to prevent blocking UI
+          db.logoutUser().catch(e => console.warn("Background logout error", e));
+      } finally {
+          setUser(null);
+          setView('AUTH');
+          // Clear hash silently to avoid triggering hashchange before view update propagates
+          window.history.pushState(null, '', ' ');
+      }
   };
 
   // ... (Rest of component functions remain largely same, just ensuring references are correct)
@@ -1941,8 +1950,8 @@ export default function App() {
                                         onClick={handleExhibitClick}
                                         isLiked={item.likedBy?.includes(user?.username || '') || false}
                                         isFavorited={false}
-                                        onLike={(e: React.MouseEvent) => toggleLike(item.id, e)}
-                                        onFavorite={(e: React.MouseEvent) => toggleFavorite(item.id, e)}
+                                        onLike={(e) => toggleLike(item.id, e)}
+                                        onFavorite={(e) => toggleFavorite(item.id, e)}
                                         onAuthorClick={handleAuthorClick}
                                     />
                                 ))
@@ -2079,7 +2088,7 @@ export default function App() {
 
       {view !== 'AUTH' && (
           <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
-              <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2023</p>
+              <p>NEO_ARCHIVE SYSTEM // EST. 2025 by <a href='https://t.me/truester1337'>Truester<a/> </p>
           </footer>
       )}
     </div>
