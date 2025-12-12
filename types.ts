@@ -83,6 +83,7 @@ export interface UserProfile {
   // Auth simulation fields
   password?: string;
   isAdmin?: boolean;
+  telegram?: string;
 }
 
 // Consolidated Views: 

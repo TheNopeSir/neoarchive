@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, ArrowRight, UserPlus, Terminal, User, AlertCircle } from 'lucide-react';
+import { Mail, Lock, ArrowRight, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -139,6 +139,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             type="email"
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="user@example.com"
+                            autoComplete="username"
                         />
                     </div>
                  </div>
@@ -152,8 +153,17 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             type="password"
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="******"
+                            autoComplete="current-password"
                         />
                     </div>
+                 </div>
+                 
+                 <div 
+                    onClick={() => setRememberMe(!rememberMe)}
+                    className="flex items-center gap-2 cursor-pointer opacity-70 hover:opacity-100 transition-opacity select-none"
+                 >
+                     {rememberMe ? <CheckSquare size={16} /> : <Square size={16} />}
+                     <span className="text-[10px] font-mono font-bold uppercase">СОХРАНИТЬ ПАРОЛЬ</span>
                  </div>
                  
                  {error && (
@@ -188,6 +198,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             type="email"
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="user@example.com"
+                            autoComplete="email"
                         />
                     </div>
                 </div>
@@ -202,6 +213,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             type="password"
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="******"
+                            autoComplete="new-password"
                         />
                     </div>
                 </div>
@@ -215,6 +227,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             onChange={e => setUsername(e.target.value)}
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="Neo"
+                            autoComplete="username"
                         />
                     </div>
                 </div>
@@ -259,7 +272,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
          <div className="flex justify-between items-start mb-8 border-b-2 border-dashed pb-4 border-current opacity-70">
              <div className="flex items-center gap-2">
                  <Terminal size={20} />
-                 <span className="font-pixel text-sm">NEO_AUTH v3.0</span>
+                 <span className="font-pixel text-sm">NEO_AUTH</span>
              </div>
              <div className="flex gap-1">
                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
@@ -270,19 +283,13 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
          {/* Title */}
          <div className="mb-8 relative overflow-hidden">
-             <h2 className={`text-3xl font-pixel font-bold uppercase ${glitchIntensity > 0.5 ? 'translate-x-1 text-red-500' : ''}`}>
+             <h2 className={`text-lg md:text-xl font-pixel font-bold uppercase ${glitchIntensity > 0.5 ? 'translate-x-1 text-red-500' : ''}`}>
                  {step === 'ENTRY' ? 'ИДЕНТИФИКАЦИЯ' : 
                   step === 'LOGIN' ? 'ВХОД В СИСТЕМУ' : 'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}
              </h2>
          </div>
 
          {renderContent()}
-
-         {/* Footer */}
-         <div className="mt-8 text-center opacity-40 font-mono text-[10px]">
-             SECURE CLOUD CONNECTION<br/>
-             PROVIDER: CLOUD_NET
-         </div>
       </div>
     </div>
   );

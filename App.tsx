@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
@@ -51,7 +50,7 @@ const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null 
                     NEO_ARCHIVE
                 </h1>
                 <p className={`font-mono text-xs md:text-sm max-w-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Это веб-приложение для публичных коллекций, в котором люди могут создавать, обсуждать и сохранять историю цифрового мира.
+                    Цифровой ковчег для сохранения артефактов прошлого в облачной вечности.
                 </p>
             </div>
         </div>
@@ -114,11 +113,50 @@ const MobileNavigation: React.FC<{
     );
 };
 
+const LoginTransition: React.FC = () => (
+    <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center text-green-500 font-pixel">
+      <div className="space-y-4 text-center p-4">
+        <div className="text-3xl md:text-5xl animate-pulse font-bold tracking-widest text-shadow-glow">
+            ACCESS GRANTED
+        </div>
+        <div className="font-mono text-xs md:text-sm opacity-80 flex flex-col gap-1">
+            <span className="animate-[fade_0.5s_ease-in-out_infinite]">DECRYPTING USER DATA...</span>
+            <span className="text-[10px] opacity-60">KEY: RSA-4096-VERIFIED</span>
+        </div>
+        
+        {/* Progress Bar */}
+        <div className="w-64 h-3 border-2 border-green-900 p-0.5 mx-auto rounded relative overflow-hidden bg-green-900/20">
+           <div 
+             className="h-full bg-green-500 animate-[width_2.5s_cubic-bezier(0.4,0,0.2,1)_forwards]" 
+             style={{width: '0%', boxShadow: '0 0 10px #22c55e'}}
+           ></div>
+        </div>
+
+        <div className="font-mono text-[10px] opacity-50 mt-4 animate-pulse">
+           ESTABLISHING SECURE CONNECTION TO MATRIX...
+        </div>
+      </div>
+      <style>{`
+        @keyframes width {
+          0% { width: 5%; }
+          30% { width: 45%; }
+          60% { width: 55%; }
+          80% { width: 90%; }
+          100% { width: 100%; }
+        }
+        .text-shadow-glow {
+            text-shadow: 0 0 10px #22c55e, 0 0 20px #22c55e;
+        }
+      `}</style>
+    </div>
+);
+
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewState>('AUTH'); 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isLoginTransition, setIsLoginTransition] = useState(false);
 
   // Data State
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
@@ -146,6 +184,7 @@ export default function App() {
   const [editTagline, setEditTagline] = useState('');
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
   const [editStatus, setEditStatus] = useState<UserStatus>('ONLINE');
+  const [editTelegram, setEditTelegram] = useState('');
   const [guestbookInput, setGuestbookInput] = useState('');
 
   // Feed State
@@ -211,7 +250,7 @@ export default function App() {
             } else {
                  setView('AUTH');
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Init failed", e);
             // Don't crash, just show auth
             setView('AUTH');
@@ -290,11 +329,21 @@ export default function App() {
   }, [view, feedMode, visibleCount]); 
 
   const handleLogin = (loggedInUser: UserProfile, remember: boolean) => {
-      setUser(loggedInUser);
-      // We don't need manual storage here anymore, Supabase handles token storage
-      setView('FEED');
-      updateHash('/feed');
-      refreshData();
+      // Start Transition
+      setIsLoginTransition(true);
+      
+      if (remember) {
+          localStorage.setItem('neo_active_user', loggedInUser.username);
+      }
+
+      // Delay View Switch for Animation
+      setTimeout(() => {
+          setUser(loggedInUser);
+          setView('FEED');
+          updateHash('/feed');
+          refreshData();
+          setIsLoginTransition(false); // End Transition
+      }, 2500);
   };
 
   const handleLogout = async () => {
@@ -303,9 +352,6 @@ export default function App() {
       setView('AUTH');
       window.location.hash = '';
   };
-
-  // ... (Rest of component functions remain largely same, just ensuring references are correct)
-  // To save space, I'm including the full return block logic which relies on updated state
 
   const handleShuffle = () => {
       const shuffled = [...exhibits].sort(() => Math.random() - 0.5);
@@ -610,7 +656,8 @@ export default function App() {
           ...user,
           tagline: editTagline,
           avatarUrl: editAvatarUrl || user.avatarUrl,
-          status: editStatus
+          status: editStatus,
+          telegram: editTelegram
       };
       db.updateUserProfile(updatedUser);
       setUser(updatedUser);
@@ -912,7 +959,7 @@ export default function App() {
                        <div className="animate-in fade-in slide-in-from-bottom-2">
                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                {collections
-                                  .filter(c => !searchQuery || c.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+                                  .filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()))
                                   .map(renderCollectionCard)
                                }
                            </div>
@@ -930,7 +977,7 @@ export default function App() {
                                        <Grid size={14}/> КАТЕГОРИИ
                                    </h3>
                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-                                       {Object.values(DefaultCategory).map(cat => (
+                                       {Object.values(DefaultCategory).map((cat: string) => (
                                            <button 
                                               key={cat}
                                               onClick={() => {
@@ -951,9 +998,9 @@ export default function App() {
 
                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                {(searchQuery 
-                                 ? exhibits.filter(ex => ex.title?.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+                                 ? exhibits.filter(ex => ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))
                                  : exhibits.sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)
-                               ).map(item => (
+                               ).map((item: Exhibit) => (
                                     <ExhibitCard 
                                         key={item.id} 
                                         item={item} 
@@ -962,8 +1009,8 @@ export default function App() {
                                         onClick={handleExhibitClick}
                                         isLiked={false}
                                         isFavorited={false}
-                                        onLike={(e) => toggleLike(item.id, e)}
-                                        onFavorite={(e) => toggleFavorite(item.id, e)}
+                                        onLike={(e: React.MouseEvent) => toggleLike(item.id, e)}
+                                        onFavorite={(e: React.MouseEvent) => toggleFavorite(item.id, e)}
                                         onAuthorClick={handleAuthorClick}
                                     />
                                ))}
@@ -1175,7 +1222,7 @@ export default function App() {
                  <div className="space-y-1">
                      <label className="text-[10px] font-pixel uppercase opacity-70">КАТЕГОРИЯ</label>
                      <div className="hidden md:flex flex-wrap gap-2 pt-2">
-                         {Object.values(DefaultCategory).map(cat => (
+                         {Object.values(DefaultCategory).map((cat: string) => (
                              <button
                                 key={cat}
                                 onClick={() => {
@@ -1214,7 +1261,7 @@ export default function App() {
                                  : 'bg-white text-black border-light-dim focus:border-light-accent'
                              }`}
                          >
-                             {Object.values(DefaultCategory).map(cat => (
+                             {Object.values(DefaultCategory).map((cat: string) => (
                                  <option key={cat} value={cat}>{cat}</option>
                              ))}
                          </select>
@@ -1482,7 +1529,8 @@ export default function App() {
              avatarUrl: `https://ui-avatars.com/api/?name=${profileUsername}`,
              joinedDate: 'Unknown',
              following: [],
-             achievements: []
+             achievements: [],
+             telegram: ''
          } as UserProfile;
 
          const profileArtifacts = exhibits.filter(e => e.owner === profileUsername);
@@ -1518,6 +1566,12 @@ export default function App() {
                                      placeholder="Статус..."
                                      className="w-full bg-transparent border-b p-1 font-mono text-sm"
                                  />
+                                 <input 
+                                     value={editTelegram}
+                                     onChange={e => setEditTelegram(e.target.value)}
+                                     placeholder="Telegram (без @)"
+                                     className="w-full bg-transparent border-b p-1 font-mono text-sm"
+                                 />
                                  <div className="flex gap-2">
                                      {(Object.keys(STATUS_OPTIONS) as UserStatus[]).map(s => (
                                          <button 
@@ -1544,6 +1598,7 @@ export default function App() {
                                          <button onClick={() => { 
                                              setEditTagline(user?.tagline || ''); 
                                              setEditStatus(user?.status || 'ONLINE');
+                                             setEditTelegram(user?.telegram || '');
                                              setIsEditingProfile(true); 
                                          }} className="opacity-50 hover:opacity-100">
                                              <Edit2 size={12} />
@@ -1555,6 +1610,16 @@ export default function App() {
                                          {React.createElement(STATUS_OPTIONS[profileUser.status].icon, { size: 12 })}
                                          {STATUS_OPTIONS[profileUser.status].label}
                                      </div>
+                                 )}
+                                 {profileUser.telegram && (
+                                     <a 
+                                        href={`https://t.me/${profileUser.telegram.replace('@', '')}`}
+                                        target="_blank"
+                                        rel="nofollow noreferrer"
+                                        className={`flex items-center gap-1 text-xs font-bold justify-center md:justify-start hover:underline ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}
+                                     >
+                                        <Send size={12} /> Telegram
+                                     </a>
                                  )}
                              </>
                          )}
@@ -1773,7 +1838,7 @@ export default function App() {
                             >
                                 [ ВСЕ ]
                             </button>
-                            {Object.values(DefaultCategory).map(cat => (
+                            {Object.values(DefaultCategory).map((cat: string) => (
                                 <button
                                     key={cat}
                                     onClick={() => { setSelectedCategory(cat); updateHash('/feed'); }}
@@ -1792,7 +1857,7 @@ export default function App() {
                              {exhibits
                                 .filter(ex => selectedCategory === 'ВСЕ' || ex.category === selectedCategory)
                                 .slice(0, visibleCount)
-                                .map(item => (
+                                .map((item: Exhibit) => (
                                     <ExhibitCard 
                                         key={item.id} 
                                         item={item} 
@@ -1801,8 +1866,8 @@ export default function App() {
                                         onClick={handleExhibitClick}
                                         isLiked={item.likedBy?.includes(user?.username || '') || false}
                                         isFavorited={false}
-                                        onLike={(e) => toggleLike(item.id, e)}
-                                        onFavorite={(e) => toggleFavorite(item.id, e)}
+                                        onLike={(e: React.MouseEvent) => toggleLike(item.id, e)}
+                                        onFavorite={(e: React.MouseEvent) => toggleFavorite(item.id, e)}
                                         onAuthorClick={handleAuthorClick}
                                     />
                                 ))
