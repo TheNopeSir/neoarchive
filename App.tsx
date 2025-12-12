@@ -46,10 +46,10 @@ const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null 
         <div className={`absolute top-0 left-0 w-1 h-full opacity-50 ${theme === 'dark' ? 'bg-dark-primary' : 'bg-light-accent'}`}></div>
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-                <h1 className={`text-xl md:text-3xl lg:text-4xl font-pixel mb-2 break-words ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                <h1 className={`text-sm md:text-2xl lg:text-3xl font-pixel mb-2 break-words ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
                     NEO_ARCHIVE
                 </h1>
-                <p className={`font-mono text-xs md:text-sm max-w-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                <p className={`font-mono text-[10px] md:text-sm max-w-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                     Цифровой ковчег для сохранения артефактов прошлого в облачной вечности.
                 </p>
             </div>
@@ -71,11 +71,12 @@ const MobileNavigation: React.FC<{
     onResetFeed: () => void;
     onProfileClick: () => void;
 }> = ({ theme, view, setView, updateHash, hasNotifications, username, onResetFeed, onProfileClick }) => {
+    // Navigation items now explicitly push hash updates to prevent view resets
     const navItems = [
         { id: 'FEED', icon: Home, label: 'ГЛАВНАЯ', action: () => { onResetFeed(); setView('FEED'); updateHash('/feed'); } },
-        { id: 'SEARCH', icon: Search, label: 'ПОИСК', action: () => { setView('SEARCH'); } },
-        { id: 'ADD', icon: PlusCircle, label: 'ДОБАВИТЬ', action: () => { setView('CREATE_HUB'); }, highlight: true },
-        { id: 'ACTIVITY', icon: Bell, label: 'АКТИВНОСТЬ', action: () => { setView('ACTIVITY'); }, hasBadge: hasNotifications },
+        { id: 'SEARCH', icon: Search, label: 'ПОИСК', action: () => { setView('SEARCH'); updateHash('/search'); } },
+        { id: 'ADD', icon: PlusCircle, label: 'ДОБАВИТЬ', action: () => { setView('CREATE_HUB'); updateHash('/create'); }, highlight: true },
+        { id: 'ACTIVITY', icon: Bell, label: 'АКТИВНОСТЬ', action: () => { setView('ACTIVITY'); updateHash('/activity'); }, hasBadge: hasNotifications },
         { id: 'PROFILE', icon: User, label: 'ПРОФИЛЬ', action: onProfileClick }
     ];
 
@@ -85,7 +86,7 @@ const MobileNavigation: React.FC<{
         }`}>
             <div className="flex justify-around items-center h-16">
                 {navItems.map(item => {
-                    const isActive = view === item.id || (item.id === 'PROFILE' && view === 'USER_PROFILE') || (item.id === 'ADD' && ['CREATE_HUB', 'CREATE_ARTIFACT', 'CREATE_COLLECTION'].includes(view));
+                    const isActive = view === item.id || (item.id === 'PROFILE' && view === 'USER_PROFILE') || (item.id === 'ADD' && ['CREATE_HUB', 'CREATE_ARTIFACT', 'CREATE_COLLECTION'].includes(view)) || (item.id === 'ACTIVITY' && ['ACTIVITY', 'DIRECT_CHAT'].includes(view));
                     return (
                         <button 
                             key={item.id}
@@ -97,11 +98,11 @@ const MobileNavigation: React.FC<{
                             }`}
                         >
                             <item.icon 
-                                size={item.highlight ? 28 : 22} 
+                                size={item.highlight ? 28 : 20} 
                                 strokeWidth={item.highlight ? 2 : 1.5}
                                 className={item.highlight ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}
                             />
-                            {!item.highlight && <span className="text-[9px] font-pixel">{item.label}</span>}
+                            {!item.highlight && <span className="text-[8px] font-pixel mt-1">{item.label}</span>}
                             {item.hasBadge && (
                                 <span className="absolute top-3 right-6 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                             )}
@@ -290,10 +291,10 @@ export default function App() {
                  console.log("🟢 [App] Session restored for:", restoredUser.username);
                  setUser(restoredUser);
                  refreshData();
-                 // If specifically asking for feed or empty hash, ensure we are in FEED view to prevent Auth flash
-                 if (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#/feed') {
+                 // Do NOT force feed here if there's a hash, let hash routing handle it
+                 if (!window.location.hash || window.location.hash === '#/') {
                      setView('FEED');
-                     if(window.location.hash !== '#/feed') updateHash('/feed');
+                     updateHash('/feed');
                  }
             } else {
                  setView('AUTH');
@@ -331,6 +332,45 @@ export default function App() {
           }
           
           const hash = window.location.hash;
+          console.log("🧭 [Router] Hash changed:", hash);
+          
+          // --- GLOBAL ROUTES ---
+          if (hash === '#/activity') {
+              setView('ACTIVITY');
+              return;
+          }
+          if (hash === '#/search') {
+              setView('SEARCH');
+              return;
+          }
+          if (hash === '#/hall-of-fame') {
+              setView('HALL_OF_FAME');
+              return;
+          }
+
+          // --- CREATION ROUTES ---
+          if (hash === '#/create') {
+              setView('CREATE_HUB');
+              return;
+          }
+          if (hash === '#/create/artifact') {
+              setView('CREATE_ARTIFACT');
+              return;
+          }
+          if (hash === '#/create/collection') {
+              setView('CREATE_COLLECTION');
+              return;
+          }
+
+          // --- DYNAMIC ROUTES ---
+          if (hash.startsWith('#/chat/')) {
+              const partner = hash.split('/')[2];
+              if (partner) {
+                  setChatPartner(partner);
+                  setView('DIRECT_CHAT');
+              }
+              return;
+          }
           if (hash.startsWith('#/exhibit/')) {
               const param = hash.split('/')[2];
               const item = exhibits.find(e => e.slug === param || e.id === param);
@@ -338,21 +378,29 @@ export default function App() {
                   setSelectedExhibit(item);
                   setView('EXHIBIT');
               }
-          } else if (hash.startsWith('#/collection/')) {
+              return;
+          } 
+          if (hash.startsWith('#/collection/')) {
               const param = hash.split('/')[2];
               const col = collections.find(c => c.slug === param || c.id === param);
               if (col) {
                   setSelectedCollection(col);
                   setView('COLLECTION_DETAIL');
               }
-          } else if (hash.startsWith('#/profile/')) {
+              return;
+          } 
+          if (hash.startsWith('#/profile/')) {
               const username = hash.split('/')[2];
               if (username) {
                   setViewedProfile(username);
                   setView('USER_PROFILE');
               }
-          } else if (hash === '#/feed' || hash === '') {
-              if (view !== 'AUTH') setView('FEED');
+              return;
+          } 
+          
+          // --- DEFAULT ---
+          if (hash === '#/feed' || hash === '' || hash === '#/') {
+              setView('FEED');
           }
       };
 
@@ -362,10 +410,19 @@ export default function App() {
 
       window.addEventListener('hashchange', handleHashChange);
       return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [exhibits, collections, user, isInitializing, view]); // ADD VIEW TO DEPS
+      
+      // CRITICAL FIX: Removed 'view' from dependency array to prevent loops
+      // 'exhibits' kept to re-resolve URLs on load
+  }, [exhibits, collections, user, isInitializing]); 
 
   const updateHash = (path: string) => {
       window.history.pushState(null, '', `#${path}`);
+      // Manually trigger popstate/hashchange if needed, but pushState doesn't trigger hashchange by default
+      // So we mainly rely on explicit setView calls in nav, OR we dispatch event.
+      // For this architecture: we use navigation buttons to set View AND hash. 
+      // But back button relies on hashchange.
+      // To ensure sync, we can just dispatch event.
+      window.dispatchEvent(new Event('hashchange'));
   };
 
   // Reset pagination
@@ -561,9 +618,9 @@ export default function App() {
               const base64 = await fileToBase64(file);
               setEditAvatarUrl(base64);
               if (user) {
-                  const updatedUser = { ...user, avatarUrl: base64 };
-                  setUser(updatedUser);
-                  db.updateUserProfile(updatedUser);
+                  // Only preview, save on button click
+                  // const updatedUser = { ...user, avatarUrl: base64 };
+                  // setUser(updatedUser);
               }
           } catch (err: any) {
               alert("Ошибка загрузки изображения");
@@ -722,17 +779,32 @@ export default function App() {
       }
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
       if (!user) return;
+      // Determine if we are editing the current user or someone else (Superadmin mode)
+      const targetUsername = viewedProfile || user.username;
+      
+      // Fetch the specific user object we are editing from DB/Cache to ensure we have all fields
+      const existingData = db.getFullDatabase().users.find(u => u.username === targetUsername);
+      if (!existingData) return;
+
       const updatedUser: UserProfile = {
-          ...user,
+          ...existingData, // Keep existing fields (id, email, etc)
           tagline: editTagline,
-          avatarUrl: editAvatarUrl || user.avatarUrl,
+          avatarUrl: editAvatarUrl || existingData.avatarUrl,
           status: editStatus,
           telegram: editTelegram
       };
-      db.updateUserProfile(updatedUser);
-      setUser(updatedUser);
+
+      await db.updateUserProfile(updatedUser);
+
+      // If we updated ourselves, update the session state
+      if (user.username === targetUsername) {
+          setUser(updatedUser);
+      }
+      
+      // Force refresh to update the UI list
+      refreshData();
       setIsEditingProfile(false);
   };
 
@@ -813,6 +885,7 @@ export default function App() {
       const updatedMessages = db.getMessages();
       setMessages([...updatedMessages]);
       setView('DIRECT_CHAT');
+      updateHash(`/chat/${partnerUsername}`);
   };
 
   const handleSendMessage = () => {
@@ -869,6 +942,8 @@ export default function App() {
           const updatedNotifs = db.getNotifications();
           setNotifications([...updatedNotifs]);
       }
+      setView('ACTIVITY');
+      updateHash('/activity');
   };
 
   const getUserAchievements = (username: string) => {
@@ -895,13 +970,13 @@ export default function App() {
       >
           <img src={col.coverImage} alt={col.title} className="w-full h-full object-cover transition-transform group-hover:scale-105"/>
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-4">
-              <div className="font-pixel text-xs text-white/70 mb-1 flex items-center gap-1">
-                  <FolderOpen size={12}/> КОЛЛЕКЦИЯ
+              <div className="font-pixel text-[10px] text-white/70 mb-1 flex items-center gap-1">
+                  <FolderOpen size={10}/> КОЛЛЕКЦИЯ
               </div>
-              <h3 className="text-white font-pixel text-lg font-bold leading-tight mb-1">{col.title}</h3>
+              <h3 className="text-white font-pixel text-sm md:text-lg font-bold leading-tight mb-1">{col.title}</h3>
               <div className="flex justify-between items-end">
-                  <span className="text-xs font-mono text-white/60">@{col.owner}</span>
-                  <span className="px-2 py-0.5 bg-white/20 backdrop-blur rounded text-xs font-bold text-white">
+                  <span className="text-[10px] font-mono text-white/60">@{col.owner}</span>
+                  <span className="px-2 py-0.5 bg-white/20 backdrop-blur rounded text-[9px] font-bold text-white">
                       {col.exhibitIds.length} ITEMS
                   </span>
               </div>
@@ -919,7 +994,7 @@ export default function App() {
               <HallOfFame 
                   theme={theme} 
                   achievedIds={user ? getUserAchievements(user.username) : []} 
-                  onBack={() => setView('FEED')} 
+                  onBack={() => { setView('FEED'); updateHash('/feed'); }}
               />
           );
 
@@ -932,7 +1007,7 @@ export default function App() {
 
           return (
               <div className="max-w-2xl mx-auto animate-in fade-in h-[80vh] flex flex-col">
-                  <button onClick={() => setView('ACTIVITY')} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs">
+                  <button onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs">
                      <ArrowLeft size={16} /> НАЗАД
                   </button>
                   <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
@@ -993,11 +1068,11 @@ export default function App() {
                        <Search size={20} className="opacity-50" />
                        <input 
                          type="text"
-                         placeholder="ПОИСК ПО БАЗЕ ДАННЫХ..."
+                         placeholder="ПОИСК..."
                          value={searchQuery}
                          onChange={(e) => setSearchQuery(e.target.value)}
                          autoFocus
-                         className="bg-transparent w-full py-4 focus:outline-none font-pixel text-base md:text-lg tracking-wide"
+                         className="bg-transparent w-full py-4 focus:outline-none font-pixel text-sm md:text-lg tracking-wide"
                        />
                        {searchQuery && (
                            <button onClick={() => setSearchQuery('')}><X size={20}/></button>
@@ -1045,7 +1120,7 @@ export default function App() {
                        <div className="animate-in fade-in slide-in-from-bottom-2">
                            {!searchQuery && (
                                <>
-                                   <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2">
+                                   <h3 className="font-pixel text-[10px] opacity-70 mb-4 flex items-center gap-2">
                                        <Grid size={14}/> КАТЕГОРИИ
                                    </h3>
                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
@@ -1098,7 +1173,7 @@ export default function App() {
                   <h2 className="text-xl font-pixel mb-8 text-center uppercase">Выберите тип загрузки</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <button 
-                        onClick={() => setView('CREATE_ARTIFACT')}
+                        onClick={() => { setView('CREATE_ARTIFACT'); updateHash('/create/artifact'); }}
                         className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
                             theme === 'dark' ? 'border-dark-dim hover:border-dark-primary bg-dark-surface' : 'border-light-dim hover:border-light-accent bg-white'
                         }`}
@@ -1107,13 +1182,13 @@ export default function App() {
                               <FilePlus size={32} />
                           </div>
                           <div className="text-center">
-                              <h3 className="font-pixel text-base font-bold">АРТЕФАКТ</h3>
+                              <h3 className="font-pixel text-sm md:text-base font-bold">АРТЕФАКТ</h3>
                               <p className="font-mono text-xs opacity-70 mt-2">Загрузить единичный объект</p>
                           </div>
                       </button>
 
                       <button 
-                        onClick={() => setView('CREATE_COLLECTION')}
+                        onClick={() => { setView('CREATE_COLLECTION'); updateHash('/create/collection'); }}
                         className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
                             theme === 'dark' ? 'border-dark-dim hover:border-yellow-500 bg-dark-surface' : 'border-light-dim hover:border-orange-500 bg-white'
                         }`}
@@ -1122,7 +1197,7 @@ export default function App() {
                               <FolderPlus size={32} />
                           </div>
                           <div className="text-center">
-                              <h3 className="font-pixel text-base font-bold">КОЛЛЕКЦИЯ</h3>
+                              <h3 className="font-pixel text-sm md:text-base font-bold">КОЛЛЕКЦИЯ</h3>
                               <p className="font-mono text-xs opacity-70 mt-2">Создать подборку предметов</p>
                           </div>
                       </button>
@@ -1139,7 +1214,7 @@ export default function App() {
                   <div className="flex items-center justify-between mb-6">
                      <div className="flex items-center gap-2">
                         <button onClick={handleBack} className="hover:underline font-pixel text-xs"><ArrowLeft size={16}/></button>
-                        <h2 className="text-lg font-pixel">РЕДАКТОР КОЛЛЕКЦИИ</h2>
+                        <h2 className="text-sm md:text-lg font-pixel">РЕДАКТОР КОЛЛЕКЦИИ</h2>
                      </div>
                      <button onClick={handleDeleteCollection} className="text-red-500 p-2 border border-red-500 rounded hover:bg-red-500/10 transition-colors">
                          <Trash2 size={16} />
@@ -1165,7 +1240,7 @@ export default function App() {
                       <div className="space-y-1">
                          <label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label>
                          <input 
-                           className="w-full bg-transparent border-b p-2 font-pixel text-lg focus:outline-none"
+                           className="w-full bg-transparent border-b p-2 font-pixel text-sm md:text-lg focus:outline-none"
                            value={collectionToEdit.title}
                            onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})}
                          />
@@ -1220,10 +1295,10 @@ export default function App() {
       case 'CREATE_COLLECTION':
           return (
               <div className="max-w-xl mx-auto animate-in fade-in">
-                 <button onClick={() => setView('CREATE_HUB')} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100">
+                 <button onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100">
                      <ArrowLeft size={16} /> НАЗАД
                  </button>
-                 <h2 className="text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
+                 <h2 className="text-sm md:text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
                  <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
                      <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
                           {newCollection.coverImage ? (
@@ -1243,7 +1318,7 @@ export default function App() {
                      <div>
                          <label className="text-xs font-pixel uppercase opacity-70">НАЗВАНИЕ ПОДБОРКИ *</label>
                          <input 
-                           className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-base mt-1"
+                           className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-sm md:text-base mt-1"
                            placeholder="Например: Мои консоли"
                            value={newCollection.title}
                            onChange={e => setNewCollection({...newCollection, title: e.target.value})}
@@ -1275,16 +1350,16 @@ export default function App() {
         return (
           <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
              <div className="flex items-center gap-2 mb-6">
-                 <button onClick={() => setView('CREATE_HUB')} className="md:hidden"><ChevronDown className="rotate-90" /></button>
-                 <button onClick={() => setView('FEED')} className="hidden md:block"><ChevronDown className="rotate-90" /></button>
-                 <h2 className="text-lg md:text-xl font-pixel">ЗАГРУЗКА АРТЕФАКТА</h2>
+                 <button onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} className="md:hidden"><ChevronDown className="rotate-90" /></button>
+                 <button onClick={() => { setView('FEED'); updateHash('/feed'); }} className="hidden md:block"><ChevronDown className="rotate-90" /></button>
+                 <h2 className="text-sm md:text-xl font-pixel">ЗАГРУЗКА АРТЕФАКТА</h2>
              </div>
              
              <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
                  <div className="space-y-1">
                      <label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label>
                      <input 
-                       className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-base md:text-lg"
+                       className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-sm md:text-lg"
                        placeholder="Например: Sony Walkman"
                        value={newExhibit.title || ''}
                        onChange={e => setNewExhibit({...newExhibit, title: e.target.value})}
@@ -1327,7 +1402,7 @@ export default function App() {
                                      condition: getDefaultCondition(cat)
                                  });
                              }}
-                             className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${
+                             className={`w-full p-2 border rounded font-pixel text-[10px] appearance-none cursor-pointer uppercase ${
                                  theme === 'dark' 
                                  ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
                                  : 'bg-white text-black border-light-dim focus:border-light-accent'
@@ -1353,7 +1428,7 @@ export default function App() {
                          <select 
                             value={newExhibit.condition || ''}
                             onChange={(e) => setNewExhibit({...newExhibit, condition: e.target.value})}
-                            className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer ${
+                            className={`w-full p-2 border rounded font-pixel text-[10px] appearance-none cursor-pointer ${
                                 theme === 'dark' 
                                 ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
                                 : 'bg-white text-black border-light-dim focus:border-light-accent'
@@ -1493,7 +1568,7 @@ export default function App() {
                   <div className="flex justify-center mb-6 border-b border-gray-500/30">
                       <button 
                         onClick={handleOpenUpdates}
-                        className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${
+                        className={`px-6 py-3 font-pixel text-[10px] md:text-xs font-bold border-b-2 transition-colors relative ${
                             activityTab === 'UPDATES' 
                             ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') 
                             : 'border-transparent opacity-50'
@@ -1504,7 +1579,7 @@ export default function App() {
                       </button>
                       <button 
                         onClick={() => setActivityTab('DIALOGS')}
-                        className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${
+                        className={`px-6 py-3 font-pixel text-[10px] md:text-xs font-bold border-b-2 transition-colors relative ${
                             activityTab === 'DIALOGS' 
                             ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') 
                             : 'border-transparent opacity-50'
@@ -1531,11 +1606,11 @@ export default function App() {
                                           {notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}
                                       </div>
                                       <div className="flex-1">
-                                          <div className="font-pixel text-xs opacity-50 mb-1 flex justify-between">
+                                          <div className="font-pixel text-[10px] opacity-50 mb-1 flex justify-between">
                                               <span>{notif.timestamp}</span>
                                               {!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}
                                           </div>
-                                          <div className="font-mono text-sm">
+                                          <div className="font-mono text-xs md:text-sm">
                                               <span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(notif.actor)}>@{notif.actor}</span>
                                               {notif.type === 'LIKE' && ' оценил ваш артефакт.'}
                                               {notif.type === 'COMMENT' && ' прокомментировал: '}
@@ -1609,10 +1684,12 @@ export default function App() {
          const profileCollections = collections.filter(c => c.owner === profileUsername);
          const isCurrentUser = user?.username === profileUsername;
          const isSubscribed = user?.following.includes(profileUsername) || false;
+         // Enable editing if owner or ADMIN
+         const canEditProfile = isCurrentUser || user?.isAdmin;
 
          return (
              <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32">
-                 <button onClick={() => setView('FEED')} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
+                 <button onClick={() => { setView('FEED'); updateHash('/feed'); }} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
                      <ArrowLeft size={16} /> НАЗАД
                   </button>
                  
@@ -1621,7 +1698,7 @@ export default function App() {
                          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-gray-500">
                              <img src={profileUser.avatarUrl} alt={profileUser.username || ''} className="w-full h-full object-cover"/>
                          </div>
-                         {isCurrentUser && (
+                         {canEditProfile && (
                              <label className="absolute bottom-0 right-0 bg-gray-800 p-2 rounded-full cursor-pointer hover:bg-gray-700 text-white border border-gray-600">
                                  <Edit2 size={14} />
                                  <input type="file" accept="image/*" className="hidden" onChange={handleProfileImageUpload} />
@@ -1630,7 +1707,7 @@ export default function App() {
                      </div>
 
                      <div className="flex-1 text-center md:text-left space-y-2">
-                         {isEditingProfile && isCurrentUser ? (
+                         {isEditingProfile && canEditProfile ? (
                              <div className="space-y-2 max-w-sm">
                                  <input 
                                      value={editTagline}
@@ -1663,16 +1740,17 @@ export default function App() {
                              </div>
                          ) : (
                              <>
-                                 <h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2>
-                                 <p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">
+                                 <h2 className="text-xl md:text-2xl font-pixel font-bold">@{profileUser.username}</h2>
+                                 <p className="font-mono text-xs md:text-sm opacity-70 flex items-center justify-center md:justify-start gap-2">
                                      {profileUser.tagline}
-                                     {isCurrentUser && (
+                                     {canEditProfile && (
                                          <button onClick={() => { 
-                                             setEditTagline(user?.tagline || ''); 
-                                             setEditStatus(user?.status || 'ONLINE');
-                                             setEditTelegram(user?.telegram || '');
+                                             // Pre-fill with TARGET user data, not current user
+                                             setEditTagline(profileUser.tagline || ''); 
+                                             setEditStatus(profileUser.status || 'ONLINE');
+                                             setEditTelegram(profileUser.telegram || '');
                                              setIsEditingProfile(true); 
-                                         }} className="opacity-50 hover:opacity-100">
+                                         }} className="opacity-50 hover:opacity-100" title={user?.isAdmin ? "ADMIN EDIT" : "EDIT"}>
                                              <Edit2 size={12} />
                                          </button>
                                      )}
@@ -1788,7 +1866,7 @@ export default function App() {
                  </div>
                  
                  <div className="pt-8 border-t border-dashed border-gray-500/30">
-                     <h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
+                     <h3 className="font-pixel text-xs md:text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
                      <div className="space-y-4 mb-4">
                          {guestbook.filter(g => g.targetUser === profileUser.username).map(entry => (
                              <div key={entry.id} className="p-3 border rounded border-gray-500/30 text-xs">
@@ -1851,12 +1929,13 @@ export default function App() {
                   <div className="relative aspect-[3/1] rounded-xl overflow-hidden mb-8 group">
                       <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
-                          <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
-                          <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
-                          {user?.username === selectedCollection.owner && (
+                          <h1 className="text-lg md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
+                          <p className="text-white/80 font-mono text-xs md:text-sm max-w-2xl">{selectedCollection.description}</p>
+                          {(user?.username === selectedCollection.owner || user?.isAdmin) && (
                               <button 
                                 onClick={() => handleEditCollection(selectedCollection)}
                                 className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
+                                title={user?.isAdmin ? "ADMIN EDIT" : "EDIT"}
                               >
                                   <Edit2 size={16} />
                               </button>
@@ -1889,7 +1968,7 @@ export default function App() {
                  <div className="flex items-center justify-center gap-4 mb-8">
                      <button 
                          onClick={() => setFeedMode('ARTIFACTS')}
-                         className={`px-4 py-2 font-pixel text-sm rounded-full transition-all ${
+                         className={`px-4 py-2 font-pixel text-xs md:text-sm rounded-full transition-all ${
                              feedMode === 'ARTIFACTS' 
                              ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') 
                              : 'opacity-50 hover:opacity-100'
@@ -1899,7 +1978,7 @@ export default function App() {
                      </button>
                      <button 
                          onClick={() => setFeedMode('COLLECTIONS')}
-                         className={`px-4 py-2 font-pixel text-sm rounded-full transition-all ${
+                         className={`px-4 py-2 font-pixel text-xs md:text-sm rounded-full transition-all ${
                              feedMode === 'COLLECTIONS' 
                              ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') 
                              : 'opacity-50 hover:opacity-100'
@@ -1950,8 +2029,8 @@ export default function App() {
                                         onClick={handleExhibitClick}
                                         isLiked={item.likedBy?.includes(user?.username || '') || false}
                                         isFavorited={false}
-                                        onLike={(e) => toggleLike(item.id, e)}
-                                        onFavorite={(e) => toggleFavorite(item.id, e)}
+                                        onLike={(e: React.MouseEvent) => toggleLike(item.id, e)}
+                                        onFavorite={(e: React.MouseEvent) => toggleFavorite(item.id, e)}
                                         onAuthorClick={handleAuthorClick}
                                     />
                                 ))
@@ -2020,7 +2099,7 @@ export default function App() {
                     </div>
 
                     <button 
-                        onClick={() => setView('CREATE_HUB')} 
+                        onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} 
                         className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}
                         title="Добавить"
                     >
@@ -2028,7 +2107,7 @@ export default function App() {
                     </button>
                     
                     <button 
-                        onClick={() => setView('ACTIVITY')} 
+                        onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} 
                         className="relative p-2 opacity-70 hover:opacity-100"
                         title="Активность"
                     >
@@ -2088,7 +2167,7 @@ export default function App() {
 
       {view !== 'AUTH' && (
           <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
-              <p>NEO_ARCHIVE SYSTEM // EST. 2025 by <a href='https://t.me/truester1337'>Truester</a></p>
+              <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2023</p>
           </footer>
       )}
     </div>
