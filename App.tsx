@@ -290,8 +290,10 @@ export default function App() {
                  console.log("🟢 [App] Session restored for:", restoredUser.username);
                  setUser(restoredUser);
                  refreshData();
-                 if (!window.location.hash || window.location.hash === '#/') {
+                 // If specifically asking for feed or empty hash, ensure we are in FEED view to prevent Auth flash
+                 if (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#/feed') {
                      setView('FEED');
+                     if(window.location.hash !== '#/feed') updateHash('/feed');
                  }
             } else {
                  setView('AUTH');
@@ -1707,6 +1709,18 @@ export default function App() {
                                  </button>
                              </div>
                          )}
+
+                         {/* Mobile Logout Button (Visible only to owner) */}
+                         {isCurrentUser && (
+                             <div className="flex justify-center md:justify-start pt-2">
+                                 <button 
+                                     onClick={handleLogout}
+                                     className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-500 rounded hover:bg-red-500/10 text-xs font-pixel font-bold transition-colors"
+                                 >
+                                     <LogOut size={14} /> ВЫЙТИ ИЗ СИСТЕМЫ
+                                 </button>
+                             </div>
+                         )}
                      </div>
                  </div>
                  
@@ -1970,13 +1984,6 @@ export default function App() {
               onInstall={handleInstallClick} 
               onClose={() => setShowInstallBanner(false)} 
           />
-      )}
-
-      {/* OFFLINE INDICATOR */}
-      {isOffline() && (
-          <div className="fixed bottom-4 right-4 z-[100] px-3 py-1 bg-red-500 text-white font-pixel text-[10px] rounded animate-pulse flex items-center gap-2 shadow-lg">
-              <WifiOff size={12} /> OFFLINE MODE
-          </div>
       )}
       
       {view !== 'AUTH' && (
