@@ -2088,7 +2088,7 @@ export default function App() {
 
       {view !== 'AUTH' && (
           <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
-              <p>NEO_ARCHIVE SYSTEM // EST. 2025 by <a href='https://t.me/truester1337'>Truester<a/> </p>
+              <p>NEO_ARCHIVE SYSTEM // EST. 2025 by <a href='https://t.me/truester1337'>Truester</a></p>
           </footer>
       )}
     </div>
