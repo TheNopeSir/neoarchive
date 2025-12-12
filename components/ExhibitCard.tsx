@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Heart, Eye } from 'lucide-react';
 import { Exhibit } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
+import useSwipe from '../hooks/useSwipe';
 
 interface ExhibitCardProps {
   item: Exhibit;
@@ -47,17 +47,23 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
   const tierStyle = TIER_CONFIG[tier];
   const Icon = tierStyle.icon;
 
-  const handleNextImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleNextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (images.length === 0) return;
     setCurrentImageIndex((prev) => (prev + 1) % images.length);
   };
 
-  const handlePrevImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePrevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (images.length === 0) return;
     setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
+
+  // Swipe handlers for gallery
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: handleNextImage,
+    onSwipeRight: handlePrevImage,
+  });
 
   const handleLikeClick = (e: React.MouseEvent) => {
       // Trigger local animation immediately
@@ -83,7 +89,10 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
       }`}
     >
       {/* 1. Square Image Area with Overlays */}
-      <div className="relative aspect-square w-full bg-black/5 group/image overflow-hidden">
+      <div 
+        className="relative aspect-square w-full bg-black/5 group/image overflow-hidden"
+        {...swipeHandlers}
+      >
          <img 
            src={safeImageSrc} 
            alt={item.title} 
@@ -114,6 +123,16 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
               <button onClick={handleNextImage} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 text-white rounded-full opacity-0 group-hover/image:opacity-100 transition-all backdrop-blur-sm">
                 <ChevronRight size={16} />
               </button>
+              
+              {/* Pagination Dots for visual feedback on swipe */}
+              <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
+                  {images.map((_, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`w-1 h-1 rounded-full ${currentImageIndex === idx ? 'bg-white' : 'bg-white/40'}`}
+                      />
+                  ))}
+              </div>
            </>
          )}
       </div>

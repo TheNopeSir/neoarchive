@@ -20,8 +20,12 @@ import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES,
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
 import { fileToBase64, isOffline } from './services/storageService';
+import useSwipe from './hooks/useSwipe';
 
 const POPULAR_CATEGORIES = [DefaultCategory.PHONES, DefaultCategory.GAMES, DefaultCategory.MAGAZINES, DefaultCategory.MUSIC];
+
+// Main navigation order for swipe logic
+const NAV_ORDER: ViewState[] = ['FEED', 'SEARCH', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
 
 // Helper to generate specs based on category
 const generateSpecsForCategory = (cat: string) => {
@@ -447,13 +451,75 @@ export default function App() {
 
   const updateHash = (path: string) => {
       window.history.pushState(null, '', `#${path}`);
-      // Manually trigger popstate/hashchange if needed, but pushState doesn't trigger hashchange by default
-      // So we mainly rely on explicit setView calls in nav, OR we dispatch event.
-      // For this architecture: we use navigation buttons to set View AND hash. 
-      // But back button relies on hashchange.
-      // To ensure sync, we can just dispatch event.
       window.dispatchEvent(new Event('hashchange'));
   };
+
+  const handleResetFeed = () => {
+      setFeedMode('ARTIFACTS');
+      setSelectedCategory('ВСЕ');
+  };
+
+  // --- SWIPE LOGIC FOR MAIN NAVIGATION ---
+  const handleGlobalSwipeLeft = () => {
+      // Swipe Left = Go Next
+      if (view === 'AUTH' || !user) return;
+      const currentIndex = NAV_ORDER.indexOf(view);
+      
+      // Only allow global swipes on top-level views
+      if (currentIndex !== -1 && currentIndex < NAV_ORDER.length - 1) {
+          const nextView = NAV_ORDER[currentIndex + 1];
+          // Special handlers for parameterized views
+          if (nextView === 'USER_PROFILE') {
+              setViewedProfile(user.username);
+              setView('USER_PROFILE');
+              updateHash(`/profile/${user.username}`);
+          } else if (nextView === 'FEED') {
+              handleResetFeed();
+              setView('FEED');
+              updateHash('/feed');
+          } else if (nextView === 'CREATE_HUB') {
+              setView('CREATE_HUB');
+              updateHash('/create');
+          } else if (nextView === 'SEARCH') {
+              setView('SEARCH');
+              updateHash('/search');
+          } else if (nextView === 'ACTIVITY') {
+              setView('ACTIVITY');
+              updateHash('/activity');
+          }
+      }
+  };
+
+  const handleGlobalSwipeRight = () => {
+      // Swipe Right = Go Back
+      if (view === 'AUTH' || !user) return;
+      const currentIndex = NAV_ORDER.indexOf(view);
+
+      // Only allow global swipes on top-level views
+      if (currentIndex > 0) {
+          const prevView = NAV_ORDER[currentIndex - 1];
+          
+          if (prevView === 'FEED') {
+              handleResetFeed();
+              setView('FEED');
+              updateHash('/feed');
+          } else if (prevView === 'CREATE_HUB') {
+              setView('CREATE_HUB');
+              updateHash('/create');
+          } else if (prevView === 'SEARCH') {
+              setView('SEARCH');
+              updateHash('/search');
+          } else if (prevView === 'ACTIVITY') {
+              setView('ACTIVITY');
+              updateHash('/activity');
+          }
+      }
+  };
+
+  const globalSwipeHandlers = useSwipe({
+      onSwipeLeft: handleGlobalSwipeLeft,
+      onSwipeRight: handleGlobalSwipeRight
+  });
 
   // Reset pagination
   useEffect(() => {
@@ -508,9 +574,6 @@ export default function App() {
           window.history.pushState(null, '', ' ');
       }
   };
-
-  // ... (Rest of component functions remain largely same, just ensuring references are correct)
-  // To save space, I'm including the full return block logic which relies on updated state
 
   const handleShuffle = () => {
       const shuffled = [...exhibits].sort(() => Math.random() - 0.5);
@@ -724,12 +787,15 @@ export default function App() {
           exhibitIds: [],
           timestamp: new Date().toLocaleString('ru-RU')
       };
+      
       await db.saveCollection(newCol);
-      setCollections(db.getCollections());
+      // Ensures new reference to array is passed to trigger re-render
+      setCollections([...db.getCollections()]); 
       setNewCollection({ title: '', description: '', coverImage: '' });
       setIsLoading(false);
       setCollectionToEdit(newCol);
       setView('EDIT_COLLECTION'); 
+      updateHash('/create'); // Keeps it clean or can be custom hash
   };
 
   const toggleLike = (id: string, e?: React.MouseEvent) => {
@@ -1246,79 +1312,82 @@ export default function App() {
                         <button onClick={handleBack} className="hover:underline font-pixel text-xs"><ArrowLeft size={16}/></button>
                         <h2 className="text-sm md:text-lg font-pixel">РЕДАКТОР КОЛЛЕКЦИИ</h2>
                      </div>
-                     <button onClick={handleDeleteCollection} className="text-red-500 p-2 border border-red-500 rounded hover:bg-red-500/10 transition-colors">
-                         <Trash2 size={16} />
-                     </button>
+                     {collectionToEdit && (
+                         <button onClick={handleDeleteCollection} className="text-red-500 p-2 border border-red-500 rounded hover:bg-red-500/10 transition-colors">
+                             <Trash2 size={16} />
+                         </button>
+                     )}
                   </div>
-                  
-                  <div className="space-y-6">
-                      <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
-                          {collectionToEdit.coverImage ? (
-                              <img src={collectionToEdit.coverImage} className="w-full h-full object-cover" />
-                          ) : (
-                              <div className="flex items-center justify-center w-full h-full text-xs font-mono opacity-50">NO COVER</div>
-                          )}
-                          <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                              <div className="flex flex-col items-center gap-2 text-white">
-                                  <Upload size={24} />
-                                  <span className="font-pixel text-[10px]">CHANGE COVER</span>
-                              </div>
-                              <input type="file" accept="image/*" className="hidden" onChange={handleCollectionCoverUpload} />
-                          </label>
-                      </div>
-
-                      <div className="space-y-1">
-                         <label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label>
-                         <input 
-                           className="w-full bg-transparent border-b p-2 font-pixel text-sm md:text-lg focus:outline-none"
-                           value={collectionToEdit.title}
-                           onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})}
-                         />
-                      </div>
-                      
-                      <div className="space-y-1">
-                         <label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ</label>
-                         <textarea 
-                           className="w-full bg-transparent border p-2 font-mono text-sm rounded h-24 focus:outline-none"
-                           value={collectionToEdit.description}
-                           onChange={e => setCollectionToEdit({...collectionToEdit, description: e.target.value})}
-                         />
-                      </div>
-
-                      <div>
-                          <label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label>
-                          <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">
-                              {myExhibits.map(ex => {
-                                  const isSelected = collectionToEdit.exhibitIds.includes(ex.id);
-                                  return (
-                                      <div 
-                                        key={ex.id}
-                                        onClick={() => {
-                                            const newIds = isSelected 
-                                                ? collectionToEdit.exhibitIds.filter(id => id !== ex.id)
-                                                : [...collectionToEdit.exhibitIds, ex.id];
-                                            setCollectionToEdit({...collectionToEdit, exhibitIds: newIds});
-                                        }}
-                                        className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${
-                                            isSelected 
-                                            ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent')
-                                            : 'opacity-60 hover:opacity-100'
-                                        }`}
-                                      >
-                                          <div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>
-                                              {isSelected && <Check size={12} strokeWidth={4} />}
-                                          </div>
-                                          <div className="truncate font-mono text-xs">{ex.title}</div>
-                                      </div>
-                                  )
-                              })}
+                  {collectionToEdit && (
+                      <div className="space-y-6">
+                          <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
+                              {collectionToEdit.coverImage ? (
+                                  <img src={collectionToEdit.coverImage} className="w-full h-full object-cover" />
+                              ) : (
+                                  <div className="flex items-center justify-center w-full h-full text-xs font-mono opacity-50">NO COVER</div>
+                              )}
+                              <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                                  <div className="flex flex-col items-center gap-2 text-white">
+                                      <Upload size={24} />
+                                      <span className="font-pixel text-[10px]">CHANGE COVER</span>
+                                  </div>
+                                  <input type="file" accept="image/*" className="hidden" onChange={handleCollectionCoverUpload} />
+                              </label>
                           </div>
-                      </div>
+                          
+                          <div className="space-y-1">
+                             <label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label>
+                             <input 
+                               className="w-full bg-transparent border-b p-2 font-pixel text-sm md:text-lg focus:outline-none"
+                               value={collectionToEdit.title}
+                               onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})}
+                             />
+                          </div>
+                          
+                          <div className="space-y-1">
+                             <label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ</label>
+                             <textarea 
+                               className="w-full bg-transparent border p-2 font-mono text-sm rounded h-24 focus:outline-none"
+                               value={collectionToEdit.description}
+                               onChange={e => setCollectionToEdit({...collectionToEdit, description: e.target.value})}
+                             />
+                          </div>
 
-                      <button onClick={handleSaveCollection} className="w-full py-4 font-bold font-pixel bg-green-500 text-black uppercase">
-                          СОХРАНИТЬ ИЗМЕНЕНИЯ
-                      </button>
-                  </div>
+                          <div>
+                              <label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label>
+                              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">
+                                  {myExhibits.map(ex => {
+                                      const isSelected = collectionToEdit.exhibitIds.includes(ex.id);
+                                      return (
+                                          <div 
+                                            key={ex.id}
+                                            onClick={() => {
+                                                const newIds = isSelected 
+                                                    ? collectionToEdit.exhibitIds.filter(id => id !== ex.id)
+                                                    : [...collectionToEdit.exhibitIds, ex.id];
+                                                setCollectionToEdit({...collectionToEdit, exhibitIds: newIds});
+                                            }}
+                                            className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${
+                                                isSelected 
+                                                ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent')
+                                                : 'opacity-60 hover:opacity-100'
+                                            }`}
+                                          >
+                                              <div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>
+                                                  {isSelected && <Check size={12} strokeWidth={4} />}
+                                              </div>
+                                              <div className="truncate font-mono text-xs">{ex.title}</div>
+                                          </div>
+                                      )
+                                  })}
+                              </div>
+                          </div>
+
+                          <button onClick={handleSaveCollection} className="w-full py-4 font-bold font-pixel bg-green-500 text-black uppercase">
+                              СОХРАНИТЬ ИЗМЕНЕНИЯ
+                          </button>
+                      </div>
+                  )}
               </div>
           );
 
@@ -1432,7 +1501,7 @@ export default function App() {
                                      condition: getDefaultCondition(cat)
                                  });
                              }}
-                             className={`w-full p-2 border rounded font-pixel text-[10px] appearance-none cursor-pointer uppercase ${
+                             className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${
                                  theme === 'dark' 
                                  ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
                                  : 'bg-white text-black border-light-dim focus:border-light-accent'
@@ -1458,7 +1527,7 @@ export default function App() {
                          <select 
                             value={newExhibit.condition || ''}
                             onChange={(e) => setNewExhibit({...newExhibit, condition: e.target.value})}
-                            className={`w-full p-2 border rounded font-pixel text-[10px] appearance-none cursor-pointer ${
+                            className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer ${
                                 theme === 'dark' 
                                 ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
                                 : 'bg-white text-black border-light-dim focus:border-light-accent'
@@ -1768,17 +1837,16 @@ export default function App() {
                              </div>
                          ) : (
                              <>
-                                 <h2 className="text-xl md:text-2xl font-pixel font-bold">@{profileUser.username}</h2>
-                                 <p className="font-mono text-xs md:text-sm opacity-70 flex items-center justify-center md:justify-start gap-2">
+                                 <h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2>
+                                 <p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">
                                      {profileUser.tagline}
                                      {isCurrentUser && (
                                          <button onClick={() => { 
-                                             // Pre-fill with TARGET user data, not current user
-                                             setEditTagline(profileUser.tagline || ''); 
-                                             setEditStatus(profileUser.status || 'ONLINE');
-                                             setEditTelegram(profileUser.telegram || '');
+                                             setEditTagline(user?.tagline || ''); 
+                                             setEditStatus(user?.status || 'ONLINE');
+                                             setEditTelegram(user?.telegram || '');
                                              setIsEditingProfile(true); 
-                                         }} className="opacity-50 hover:opacity-100" title={user?.isAdmin ? "ADMIN EDIT" : "EDIT"}>
+                                         }} className="opacity-50 hover:opacity-100">
                                              <Edit2 size={12} />
                                          </button>
                                      )}
@@ -1825,7 +1893,6 @@ export default function App() {
                              </div>
                          )}
 
-                         {/* Mobile Logout Button (Visible only to owner) */}
                          {isCurrentUser && (
                              <div className="flex justify-center md:justify-start pt-2">
                                  <button 
@@ -1894,7 +1961,7 @@ export default function App() {
                  </div>
                  
                  <div className="pt-8 border-t border-dashed border-gray-500/30">
-                     <h3 className="font-pixel text-xs md:text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
+                     <h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
                      <div className="space-y-4 mb-4">
                          {guestbook.filter(g => g.targetUser === profileUser.username).map(entry => (
                              <div key={entry.id} className="p-3 border rounded border-gray-500/30 text-xs">
@@ -1957,13 +2024,12 @@ export default function App() {
                   <div className="relative aspect-[3/1] rounded-xl overflow-hidden mb-8 group">
                       <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
-                          <h1 className="text-lg md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
-                          <p className="text-white/80 font-mono text-xs md:text-sm max-w-2xl">{selectedCollection.description}</p>
-                          {(user?.username === selectedCollection.owner || user?.isAdmin) && (
+                          <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
+                          <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
+                          {user?.username === selectedCollection.owner && (
                               <button 
                                 onClick={() => handleEditCollection(selectedCollection)}
                                 className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
-                                title={user?.isAdmin ? "ADMIN EDIT" : "EDIT"}
                               >
                                   <Edit2 size={16} />
                               </button>
@@ -2121,6 +2187,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-4">
+                    {/* ... Search Input ... */}
                     <div className="relative">
                         <input 
                            value={searchQuery}
@@ -2178,7 +2245,11 @@ export default function App() {
         </header>
       )}
       
-      <main className="relative z-10 max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
+      {/* GLOBAL SWIPE CONTAINER */}
+      <main 
+        className="relative z-10 max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6"
+        {...globalSwipeHandlers}
+      >
          {view === 'FEED' && <HeroSection theme={theme} user={user} />}
          {renderContentArea()}
       </main>
@@ -2191,7 +2262,7 @@ export default function App() {
               updateHash={updateHash}
               hasNotifications={notifications.some(n => n.recipient === user?.username && !n.isRead) || messages.some(m => m.receiver === user?.username && !m.isRead)}
               username={user.username}
-              onResetFeed={() => { setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); }}
+              onResetFeed={handleResetFeed}
               onProfileClick={() => {
                    setViewedProfile(user.username);
                    setView('USER_PROFILE');
