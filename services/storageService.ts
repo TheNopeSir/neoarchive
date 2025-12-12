@@ -120,6 +120,14 @@ const fetchTable = async <T>(tableName: string): Promise<T[]> => {
     return items;
 };
 
+// Helper to merge Users (Union by username, Cloud wins on conflict)
+const mergeUsers = (local: UserProfile[], cloud: UserProfile[]): UserProfile[] => {
+    const map = new Map<string, UserProfile>();
+    local.forEach(item => map.set(item.username, item));
+    cloud.forEach(item => map.set(item.username, item));
+    return Array.from(map.values());
+};
+
 // Helper to merge Cloud and Local data (Union by ID, Cloud wins on conflict)
 const mergeData = <T extends { id: string, timestamp?: string }>(local: T[], cloud: T[]): T[] => {
     const map = new Map<string, T>();
@@ -148,7 +156,7 @@ const performCloudSync = async () => {
         ]) as [UserProfile[], Exhibit[], Collection[], Notification[], Message[], GuestbookEntry[]];
 
     // Merge strategies
-    if (users.length > 0) cache.users = mergeData(cache.users, users);
+    if (users.length > 0) cache.users = mergeUsers(cache.users, users);
     if (exhibits.length > 0) cache.exhibits = mergeData(cache.exhibits, exhibits);
     if (collections.length > 0) cache.collections = mergeData(cache.collections, collections);
     if (notifications.length > 0) cache.notifications = mergeData(cache.notifications, notifications);

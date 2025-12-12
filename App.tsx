@@ -5,7 +5,7 @@ import {
   User, ArrowLeft, Shuffle, Trophy, Star, SlidersHorizontal, CheckCircle2, Bell, 
   MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
   Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
-  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download
+  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download, Box
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -15,17 +15,13 @@ import ExhibitDetailPage from './components/ExhibitDetailPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import MatrixLogin from './components/MatrixLogin';
 import HallOfFame from './components/HallOfFame';
+import MyCollection from './components/MyCollection';
 import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
-import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS } from './constants';
+import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
 import { fileToBase64, isOffline } from './services/storageService';
 import useSwipe from './hooks/useSwipe';
-
-const POPULAR_CATEGORIES = [DefaultCategory.PHONES, DefaultCategory.GAMES, DefaultCategory.MAGAZINES, DefaultCategory.MUSIC];
-
-// Main navigation order for swipe logic
-const NAV_ORDER: ViewState[] = ['FEED', 'SEARCH', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
 
 // Helper to generate specs based on category
 const generateSpecsForCategory = (cat: string) => {
@@ -252,6 +248,7 @@ export default function App() {
   // Create Modal State
   const [newExhibit, setNewExhibit] = useState<Partial<Exhibit>>({
     category: DefaultCategory.PHONES,
+    subcategory: '', // Init empty
     specs: generateSpecsForCategory(DefaultCategory.PHONES),
     condition: getDefaultCondition(DefaultCategory.PHONES),
     imageUrls: []
@@ -366,73 +363,39 @@ export default function App() {
           }
           
           const hash = window.location.hash;
-          console.log("🧭 [Router] Hash changed:", hash);
           
-          // --- GLOBAL ROUTES ---
-          if (hash === '#/activity') {
-              setView('ACTIVITY');
-              return;
-          }
-          if (hash === '#/search') {
-              setView('SEARCH');
-              return;
-          }
-          if (hash === '#/hall-of-fame') {
-              setView('HALL_OF_FAME');
-              return;
-          }
+          if (hash === '#/activity') { setView('ACTIVITY'); return; }
+          if (hash === '#/search') { setView('SEARCH'); return; }
+          if (hash === '#/hall-of-fame') { setView('HALL_OF_FAME'); return; }
+          if (hash === '#/my-collection') { setView('MY_COLLECTION'); return; }
 
-          // --- CREATION ROUTES ---
-          if (hash === '#/create') {
-              setView('CREATE_HUB');
-              return;
-          }
-          if (hash === '#/create/artifact') {
-              setView('CREATE_ARTIFACT');
-              return;
-          }
-          if (hash === '#/create/collection') {
-              setView('CREATE_COLLECTION');
-              return;
-          }
+          if (hash === '#/create') { setView('CREATE_HUB'); return; }
+          if (hash === '#/create/artifact') { setView('CREATE_ARTIFACT'); return; }
+          if (hash === '#/create/collection') { setView('CREATE_COLLECTION'); return; }
 
-          // --- DYNAMIC ROUTES ---
           if (hash.startsWith('#/chat/')) {
               const partner = hash.split('/')[2];
-              if (partner) {
-                  setChatPartner(partner);
-                  setView('DIRECT_CHAT');
-              }
+              if (partner) { setChatPartner(partner); setView('DIRECT_CHAT'); }
               return;
           }
           if (hash.startsWith('#/exhibit/')) {
               const param = hash.split('/')[2];
               const item = exhibits.find(e => e.slug === param || e.id === param);
-              if (item) {
-                  setSelectedExhibit(item);
-                  setView('EXHIBIT');
-              }
+              if (item) { setSelectedExhibit(item); setView('EXHIBIT'); }
               return;
           } 
           if (hash.startsWith('#/collection/')) {
               const param = hash.split('/')[2];
               const col = collections.find(c => c.slug === param || c.id === param);
-              if (col) {
-                  setSelectedCollection(col);
-                  setView('COLLECTION_DETAIL');
-              }
+              if (col) { setSelectedCollection(col); setView('COLLECTION_DETAIL'); }
               return;
           } 
           if (hash.startsWith('#/profile/')) {
               const username = hash.split('/')[2];
-              if (username) {
-                  setViewedProfile(username);
-                  setView('USER_PROFILE');
-              }
+              if (username) { setViewedProfile(username); setView('USER_PROFILE'); }
               return;
           } 
           
-          // --- DEFAULT ---
           if (hash === '#/feed' || hash === '' || hash === '#/') {
               setView('FEED');
           }
@@ -444,14 +407,10 @@ export default function App() {
 
       window.addEventListener('hashchange', handleHashChange);
       return () => window.removeEventListener('hashchange', handleHashChange);
-      
-      // CRITICAL FIX: Removed 'view' from dependency array to prevent loops
-      // 'exhibits' kept to re-resolve URLs on load
   }, [exhibits, collections, user, isInitializing]); 
 
   const updateHash = (path: string) => {
-      window.history.pushState(null, '', `#${path}`);
-      window.dispatchEvent(new Event('hashchange'));
+      window.location.hash = path;
   };
 
   const handleResetFeed = () => {
@@ -459,60 +418,34 @@ export default function App() {
       setSelectedCategory('ВСЕ');
   };
 
-  // --- SWIPE LOGIC FOR MAIN NAVIGATION ---
+  // --- SWIPE LOGIC ---
   const handleGlobalSwipeLeft = () => {
-      // Swipe Left = Go Next
       if (view === 'AUTH' || !user) return;
-      const currentIndex = NAV_ORDER.indexOf(view);
-      
-      // Only allow global swipes on top-level views
-      if (currentIndex !== -1 && currentIndex < NAV_ORDER.length - 1) {
-          const nextView = NAV_ORDER[currentIndex + 1];
-          // Special handlers for parameterized views
-          if (nextView === 'USER_PROFILE') {
-              setViewedProfile(user.username);
-              setView('USER_PROFILE');
-              updateHash(`/profile/${user.username}`);
-          } else if (nextView === 'FEED') {
-              handleResetFeed();
-              setView('FEED');
-              updateHash('/feed');
-          } else if (nextView === 'CREATE_HUB') {
-              setView('CREATE_HUB');
-              updateHash('/create');
-          } else if (nextView === 'SEARCH') {
-              setView('SEARCH');
-              updateHash('/search');
-          } else if (nextView === 'ACTIVITY') {
-              setView('ACTIVITY');
-              updateHash('/activity');
-          }
+      // Simple loop: Feed -> Search -> Create -> Activity -> Profile
+      const order: ViewState[] = ['FEED', 'SEARCH', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
+      const idx = order.indexOf(view);
+      if (idx !== -1 && idx < order.length - 1) {
+          const next = order[idx+1];
+          if (next === 'USER_PROFILE') { setViewedProfile(user.username); updateHash(`/profile/${user.username}`); }
+          else if (next === 'FEED') { handleResetFeed(); updateHash('/feed'); }
+          else if (next === 'CREATE_HUB') updateHash('/create');
+          else if (next === 'SEARCH') updateHash('/search');
+          else if (next === 'ACTIVITY') updateHash('/activity');
+          setView(next);
       }
   };
 
   const handleGlobalSwipeRight = () => {
-      // Swipe Right = Go Back
       if (view === 'AUTH' || !user) return;
-      const currentIndex = NAV_ORDER.indexOf(view);
-
-      // Only allow global swipes on top-level views
-      if (currentIndex > 0) {
-          const prevView = NAV_ORDER[currentIndex - 1];
-          
-          if (prevView === 'FEED') {
-              handleResetFeed();
-              setView('FEED');
-              updateHash('/feed');
-          } else if (prevView === 'CREATE_HUB') {
-              setView('CREATE_HUB');
-              updateHash('/create');
-          } else if (prevView === 'SEARCH') {
-              setView('SEARCH');
-              updateHash('/search');
-          } else if (prevView === 'ACTIVITY') {
-              setView('ACTIVITY');
-              updateHash('/activity');
-          }
+      const order: ViewState[] = ['FEED', 'SEARCH', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
+      const idx = order.indexOf(view);
+      if (idx > 0) {
+          const prev = order[idx-1];
+          if (prev === 'FEED') { handleResetFeed(); updateHash('/feed'); }
+          else if (prev === 'CREATE_HUB') updateHash('/create');
+          else if (prev === 'SEARCH') updateHash('/search');
+          else if (prev === 'ACTIVITY') updateHash('/activity');
+          setView(prev);
       }
   };
 
@@ -546,32 +479,27 @@ export default function App() {
   }, [view, feedMode, visibleCount]); 
 
   const handleLogin = (loggedInUser: UserProfile, remember: boolean) => {
-      // Start Transition
       setIsLoginTransition(true);
-      
       if (remember) {
           localStorage.setItem('neo_active_user', loggedInUser.username);
       }
-
-      // Delay View Switch for Animation
       setTimeout(() => {
           setUser(loggedInUser);
           setView('FEED');
           updateHash('/feed');
           refreshData();
-          setIsLoginTransition(false); // End Transition
+          setIsLoginTransition(false); 
       }, 2500);
   };
 
   const handleLogout = async () => {
       try {
-          // Fire and forget logout to prevent blocking UI
           db.logoutUser().catch(e => console.warn("Background logout error", e));
       } finally {
+          // Clear hash to prevent routing conflicts before clearing user
+          window.location.hash = ''; 
           setUser(null);
           setView('AUTH');
-          // Clear hash silently to avoid triggering hashchange before view update propagates
-          window.history.pushState(null, '', ' ');
       }
   };
 
@@ -653,6 +581,7 @@ export default function App() {
          imageUrls: newExhibit.imageUrls,
          videoUrl: newExhibit.videoUrl, 
          category: newExhibit.category || DefaultCategory.MISC,
+         subcategory: newExhibit.subcategory, // NEW
          owner: user?.username || 'Guest',
          timestamp: new Date().toLocaleString('ru-RU'),
          likes: 0,
@@ -709,11 +638,20 @@ export default function App() {
           }
           try {
               const base64 = await fileToBase64(file);
-              setEditAvatarUrl(base64);
+              setEditAvatarUrl(base64); // Preview
+              
               if (user) {
-                  // Only preview, save on button click
-                  // const updatedUser = { ...user, avatarUrl: base64 };
-                  // setUser(updatedUser);
+                  // Explicitly create a NEW object to trigger re-render
+                  const updatedUser = { 
+                      ...user, 
+                      avatarUrl: base64 
+                  };
+                  
+                  // Optimistic update
+                  setUser(updatedUser); 
+                  
+                  // Persist
+                  await db.updateUserProfile(updatedUser);
               }
           } catch (err: any) {
               alert("Ошибка загрузки изображения");
@@ -756,10 +694,7 @@ export default function App() {
   };
 
   const removeImage = (index: number) => {
-    setNewExhibit(prev => ({
-        ...prev,
-        imageUrls: (prev.imageUrls || []).filter((_, i) => i !== index)
-    }));
+    setNewExhibit(prev => ({ ...prev, imageUrls: (prev.imageUrls || []).filter((_, i) => i !== index) }));
   };
 
   const handleCreateCollection = async () => {
@@ -787,9 +722,7 @@ export default function App() {
           exhibitIds: [],
           timestamp: new Date().toLocaleString('ru-RU')
       };
-      
       await db.saveCollection(newCol);
-      // Ensures new reference to array is passed to trigger re-render
       setCollections([...db.getCollections()]); 
       setNewCollection({ title: '', description: '', coverImage: '' });
       setIsLoading(false);
@@ -802,14 +735,11 @@ export default function App() {
       e?.stopPropagation();
       const exIndex = exhibits.findIndex(x => x.id === id);
       if (exIndex === -1) return;
-
       const updatedExhibits = [...exhibits];
       const ex = { ...updatedExhibits[exIndex] }; 
       const username = user?.username || 'Guest';
-
       if (!ex.likedBy) ex.likedBy = [];
       const alreadyLiked = ex.likedBy.includes(username);
-
       if (alreadyLiked) {
           ex.likes = Math.max(0, ex.likes - 1);
           ex.likedBy = ex.likedBy.filter(u => u !== username);
@@ -877,15 +807,12 @@ export default function App() {
 
   const handleSaveProfile = async () => {
       if (!user) return;
-      // Determine if we are editing the current user or someone else (Superadmin mode)
       const targetUsername = viewedProfile || user.username;
-      
-      // Fetch the specific user object we are editing from DB/Cache to ensure we have all fields
       const existingData = db.getFullDatabase().users.find(u => u.username === targetUsername);
       if (!existingData) return;
 
       const updatedUser: UserProfile = {
-          ...existingData, // Keep existing fields (id, email, etc)
+          ...existingData, 
           tagline: editTagline,
           avatarUrl: editAvatarUrl || existingData.avatarUrl,
           status: editStatus,
@@ -893,13 +820,9 @@ export default function App() {
       };
 
       await db.updateUserProfile(updatedUser);
-
-      // If we updated ourselves, update the session state
       if (user.username === targetUsername) {
           setUser(updatedUser);
       }
-      
-      // Force refresh to update the UI list
       refreshData();
       setIsEditingProfile(false);
   };
@@ -2187,7 +2110,6 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    {/* ... Search Input ... */}
                     <div className="relative">
                         <input 
                            value={searchQuery}
