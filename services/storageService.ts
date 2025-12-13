@@ -15,7 +15,7 @@ let cache = {
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
 // Bump this version on every major update/deploy to force cache invalidation
-const CACHE_VERSION = '2.1.0-Cleanup-V1'; 
+const CACHE_VERSION = '2.2.0-Compression-V1'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -80,14 +80,49 @@ const loadFromLocalCache = (): boolean => {
     return false;
 };
 
-export const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
+// --- IMAGE COMPRESSION UTILITY ---
+export const compressImage = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 1080;
+                const MAX_HEIGHT = 1080;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height;
+                        height = MAX_HEIGHT;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                
+                // Compress to JPEG with 0.7 quality
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                resolve(dataUrl);
+            };
+            img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (error) => reject(error);
+    });
 };
+
+export const fileToBase64 = compressImage; // Alias for backward compatibility if needed
 
 // --- CLOUD SYNC HELPERS ---
 
@@ -346,7 +381,6 @@ export const getExhibits = (): Exhibit[] => cache.exhibits;
 
 export const saveExhibit = async (exhibit: Exhibit) => {
   exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
-  // Add to cache first
   const existingIdx = cache.exhibits.findIndex(e => e.id === exhibit.id);
   if (existingIdx !== -1) {
       cache.exhibits[existingIdx] = exhibit;
@@ -367,30 +401,10 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
 };
 
 export const deleteExhibit = async (id: string) => {
-  // 1. Remove Exhibit
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
-  
-  // 2. Remove associated Notifications (Cleanup)
   cache.notifications = cache.notifications.filter(n => n.targetId !== id);
-  
   saveToLocalCache();
-  
-  // 3. Database operations
   await supabase.from('exhibits').delete().eq('id', id);
-  
-  // Cleanup Notifications in DB? Since we store them as JSON blobs in rows by ID,
-  // we would need a sophisticated query or filter. 
-  // For this simple JSONB setup, we will just rely on the local cache filter for UI,
-  // and let old notifications persist in DB until a full cleanup script runs, 
-  // OR we can try to delete where notification data->>'targetId' == id if we had columns.
-  // Given the structure, we'll iterate locally and upsert deletions or just ignore for now to keep it simple.
-  // Actually, let's try to delete notifications that match.
-  const toDelete = cache.notifications.filter(n => n.targetId === id).map(n => n.id);
-  if (toDelete.length > 0) {
-      // Logic for client-side filtering already done above. 
-      // This part is tricky without a relational DB. 
-      // We will rely on client-side filtering for now.
-  }
 };
 
 export const getCollections = (): Collection[] => cache.collections;
@@ -439,7 +453,6 @@ export const markNotificationsRead = async (recipient: string) => {
     
     if (hasUpdates) {
         saveToLocalCache();
-        // Batch upsert to sync read status
         if (toUpdate.length > 0) {
             const payload = toUpdate.map(n => toDbPayload(n));
             await supabase.from('notifications').upsert(payload);

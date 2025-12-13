@@ -21,7 +21,7 @@ import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Mes
 import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
-import { fileToBase64, isOffline } from './services/storageService';
+import { compressImage, isOffline } from './services/storageService';
 import useSwipe from './hooks/useSwipe';
 
 // Helper to generate specs based on category
@@ -215,7 +215,7 @@ export default function App() {
   const [viewedProfile, setViewedProfile] = useState<string | null>(null);
   const [activityTab, setActivityTab] = useState<'UPDATES' | 'DIALOGS'>('UPDATES');
   const [badgeIndex, setBadgeIndex] = useState(0);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // Mobile search state
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false); 
   
   // Pagination State
   const [visibleCount, setVisibleCount] = useState(12);
@@ -283,7 +283,7 @@ export default function App() {
           if (hasUpdates) {
               refreshData();
           }
-      }, 15000); // Poll every 15 seconds for updates
+      }, 15000); 
 
       return () => clearInterval(interval);
   }, [view]);
@@ -640,7 +640,8 @@ export default function App() {
             return;
         }
         try {
-            const base64 = await fileToBase64(file);
+            // COMPRESSION APPLIED
+            const base64 = await compressImage(file);
             setNewExhibit(prev => ({
                 ...prev,
                 imageUrls: [...(prev.imageUrls || []), base64]
@@ -660,7 +661,8 @@ export default function App() {
               return;
           }
           try {
-              const base64 = await fileToBase64(file);
+              // COMPRESSION APPLIED
+              const base64 = await compressImage(file);
               setEditAvatarUrl(base64); 
               
               if (user) {
@@ -686,7 +688,8 @@ export default function App() {
               return;
           }
           try {
-              const base64 = await fileToBase64(file);
+              // COMPRESSION APPLIED
+              const base64 = await compressImage(file);
               setNewCollection(prev => ({ ...prev, coverImage: base64 }));
           } catch(err: any) {
               alert("Ошибка загрузки обложки");
@@ -703,7 +706,8 @@ export default function App() {
               return;
           }
           try {
-              const base64 = await fileToBase64(file);
+              // COMPRESSION APPLIED
+              const base64 = await compressImage(file);
               setCollectionToEdit({...collectionToEdit, coverImage: base64});
           } catch(err: any) {
               alert("Ошибка загрузки");
@@ -975,9 +979,7 @@ export default function App() {
   const handleOpenUpdates = () => {
       setActivityTab('UPDATES');
       if (user) {
-          // FORCE UPDATE OF READ STATUS ON CLICK
           db.markNotificationsRead(user.username);
-          // Re-fetch to update UI immediately
           const updatedNotifs = db.getNotifications();
           setNotifications([...updatedNotifs]);
       }
@@ -1040,11 +1042,13 @@ export default function App() {
       case 'MY_COLLECTION':
           if (!user) return <div>Error</div>;
           const myItems = exhibits.filter(e => e.owner === user.username);
+          const myCols = collections.filter(c => c.owner === user.username);
           return (
               <MyCollection 
                   theme={theme}
                   user={user}
                   exhibits={myItems}
+                  collections={myCols}
                   onBack={() => { setView('FEED'); updateHash('/feed'); }}
                   onExhibitClick={(item) => {
                       if (item.isDraft) {
@@ -1263,6 +1267,8 @@ export default function App() {
               </div>
           );
       
+      // ... (Keeping existing EDIT_COLLECTION, CREATE_COLLECTION logic same, they are correct) ... 
+      // Re-inserting for complete file consistency in XML response
       case 'EDIT_COLLECTION':
           if (!collectionToEdit) return <div>Error</div>;
           const myExhibits = exhibits.filter(e => e.owner === user?.username && !e.isDraft);
@@ -1358,7 +1364,7 @@ export default function App() {
               <div className="max-w-xl mx-auto animate-in fade-in">
                  <button onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100">
                      <ArrowLeft size={16} /> НАЗАД
-                 </button>
+                  </button>
                  <h2 className="text-sm md:text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
                  <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
                      <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
@@ -1675,6 +1681,8 @@ export default function App() {
              </div>
           </div>
         );
+      
+      // ... ACTIVITY, USER_PROFILE ... (Keeping same, just ensuring correct context for file write)
       
       case 'ACTIVITY':
           const myNotifications = notifications.filter(n => n.recipient === user?.username);
@@ -2180,7 +2188,7 @@ export default function App() {
                 
                 {/* Mobile Header Actions */}
                 <div className="flex md:hidden items-center gap-4">
-                    <button onClick={() => setMobileSearchOpen(!mobileSearchOpen)} className="opacity-70">
+                    <button onClick={() => { setView('SEARCH'); updateHash('/search'); }} className="opacity-70">
                         <Search size={20} />
                     </button>
                     <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="opacity-70">
@@ -2189,8 +2197,8 @@ export default function App() {
                 </div>
             </div>
 
-            {/* Desktop Nav & Mobile Expanded Search */}
-            <div className={`w-full md:w-auto md:flex items-center gap-4 ${mobileSearchOpen ? 'flex flex-col mt-3 animate-in slide-in-from-top-2' : 'hidden'} md:mt-0`}>
+            {/* Desktop Nav */}
+            <div className={`w-full md:w-auto hidden md:flex items-center gap-4 md:mt-0`}>
                 <div className="relative w-full md:w-64">
                     <input 
                        value={searchQuery}
@@ -2285,7 +2293,9 @@ export default function App() {
 
       {view !== 'AUTH' && (
           <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
-              <p>NEO_ARCHIVE SYSTEM v2.0 // EST. 2023</p>
+              <p>
+                  NEO_ARCHIVE SYSTEM v2.2 // POWERED BY <a href="https://t.me/truester1337" target="_blank" rel="noopener noreferrer" className="hover:text-current hover:underline font-bold">TRUESTER</a>
+              </p>
           </footer>
       )}
     </div>

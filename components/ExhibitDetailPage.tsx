@@ -139,6 +139,11 @@ export default function ExhibitDetailPage({
         </button>
         
         <div className="flex gap-4">
+          {isOwner && onEdit && (
+              <button onClick={() => onEdit(exhibit)} className={`hover:scale-110 transition-transform ${theme === 'dark' ? 'text-yellow-400' : 'text-orange-500'}`} title="EDIT">
+                  <Edit size={18} />
+              </button>
+          )}
           {canDelete && onDelete && (
              <button onClick={() => onDelete(exhibit.id)} className="text-red-500 hover:text-red-400" title={isAdmin ? "ADMIN DELETE" : "DELETE"}>
                 <Trash2 size={18} />
@@ -160,32 +165,39 @@ export default function ExhibitDetailPage({
         {/* Left Column: Media */}
         <div className="space-y-4">
           <div 
-            className={`relative aspect-square w-full rounded-lg overflow-hidden border-2 shadow-2xl ${
-                theme === 'dark' ? 'border-dark-dim bg-black' : 'border-light-dim bg-white'
+            className={`relative w-full aspect-square md:aspect-[4/3] rounded-lg overflow-hidden border-2 shadow-2xl flex items-center justify-center ${
+                theme === 'dark' ? 'border-dark-dim bg-black' : 'border-light-dim bg-gray-100'
             } ${tier.name === 'LEGENDARY' ? 'shadow-yellow-500/20 border-yellow-500/50' : ''}`}
             {...swipeHandlers}
           >
+             {/* Blurry Background for vertical images */}
+             <div 
+                className="absolute inset-0 bg-cover bg-center blur-xl opacity-50 scale-110" 
+                style={{ backgroundImage: `url(${images[currentImageIndex]})` }}
+             ></div>
+
+             {/* Main Image - Contain Mode */}
              <img 
                src={images[currentImageIndex]} 
                alt={exhibit.title} 
-               className="w-full h-full object-contain"
+               className="relative z-10 w-full h-full object-contain max-h-[80vh]"
              />
              
              {images.length > 1 && (
                <>
                  <button 
                    onClick={handlePrevImage}
-                   className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors"
+                   className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors z-20 backdrop-blur-md"
                  >
                    <ChevronLeft />
                  </button>
                  <button 
                    onClick={handleNextImage}
-                   className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors"
+                   className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors z-20 backdrop-blur-md"
                  >
                    <ChevronRight />
                  </button>
-                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-xs font-bold font-mono">
+                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-xs font-bold font-mono z-20">
                    {currentImageIndex + 1} / {images.length}
                  </div>
                </>
