@@ -5,7 +5,8 @@ import {
   User, ArrowLeft, Shuffle, Trophy, Star, SlidersHorizontal, CheckCircle2, Bell, 
   MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
   Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
-  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download, Box
+  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download, Box,
+  Package
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -74,7 +75,7 @@ const MobileNavigation: React.FC<{
     // Navigation items now explicitly push hash updates to prevent view resets
     const navItems = [
         { id: 'FEED', icon: Home, label: 'ГЛАВНАЯ', action: () => { onResetFeed(); setView('FEED'); updateHash('/feed'); } },
-        { id: 'SEARCH', icon: Search, label: 'ПОИСК', action: () => { setView('SEARCH'); updateHash('/search'); } },
+        { id: 'MY_COLLECTION', icon: Package, label: 'ПОЛКА', action: () => { setView('MY_COLLECTION'); updateHash('/my-collection'); } },
         { id: 'ADD', icon: PlusCircle, label: 'ДОБАВИТЬ', action: () => { setView('CREATE_HUB'); updateHash('/create'); }, highlight: true },
         { id: 'ACTIVITY', icon: Bell, label: 'АКТИВНОСТЬ', action: () => { setView('ACTIVITY'); updateHash('/activity'); }, hasBadge: hasNotifications },
         { id: 'PROFILE', icon: User, label: 'ПРОФИЛЬ', action: onProfileClick }
@@ -421,15 +422,15 @@ export default function App() {
   // --- SWIPE LOGIC ---
   const handleGlobalSwipeLeft = () => {
       if (view === 'AUTH' || !user) return;
-      // Simple loop: Feed -> Search -> Create -> Activity -> Profile
-      const order: ViewState[] = ['FEED', 'SEARCH', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
+      // Simple loop: Feed -> My Collection -> Create -> Activity -> Profile
+      const order: ViewState[] = ['FEED', 'MY_COLLECTION', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
       const idx = order.indexOf(view);
       if (idx !== -1 && idx < order.length - 1) {
           const next = order[idx+1];
           if (next === 'USER_PROFILE') { setViewedProfile(user.username); updateHash(`/profile/${user.username}`); }
           else if (next === 'FEED') { handleResetFeed(); updateHash('/feed'); }
+          else if (next === 'MY_COLLECTION') updateHash('/my-collection');
           else if (next === 'CREATE_HUB') updateHash('/create');
-          else if (next === 'SEARCH') updateHash('/search');
           else if (next === 'ACTIVITY') updateHash('/activity');
           setView(next);
       }
@@ -437,13 +438,13 @@ export default function App() {
 
   const handleGlobalSwipeRight = () => {
       if (view === 'AUTH' || !user) return;
-      const order: ViewState[] = ['FEED', 'SEARCH', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
+      const order: ViewState[] = ['FEED', 'MY_COLLECTION', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
       const idx = order.indexOf(view);
       if (idx > 0) {
           const prev = order[idx-1];
           if (prev === 'FEED') { handleResetFeed(); updateHash('/feed'); }
+          else if (prev === 'MY_COLLECTION') updateHash('/my-collection');
           else if (prev === 'CREATE_HUB') updateHash('/create');
-          else if (prev === 'SEARCH') updateHash('/search');
           else if (prev === 'ACTIVITY') updateHash('/activity');
           setView(prev);
       }
@@ -1017,6 +1018,19 @@ export default function App() {
               />
           );
 
+      case 'MY_COLLECTION':
+          if (!user) return <div>Error</div>;
+          const myItems = exhibits.filter(e => e.owner === user.username);
+          return (
+              <MyCollection 
+                  theme={theme}
+                  user={user}
+                  exhibits={myItems}
+                  onBack={() => { setView('FEED'); updateHash('/feed'); }}
+                  onExhibitClick={handleExhibitClick}
+              />
+          );
+
       case 'DIRECT_CHAT':
           if (!chatPartner || !user) return <div onClick={() => setView('FEED')}>Error: No Chat Partner</div>;
           const conversation = messages.filter(m => 
@@ -1126,7 +1140,7 @@ export default function App() {
                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                {collections
                                   .filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()))
-                                  .map(renderCollectionCard)
+                                  .map(c => renderCollectionCard(c))
                                }
                            </div>
                            {collections.length === 0 && (
@@ -1137,31 +1151,6 @@ export default function App() {
 
                    {searchMode === 'ARTIFACTS' && (
                        <div className="animate-in fade-in slide-in-from-bottom-2">
-                           {!searchQuery && (
-                               <>
-                                   <h3 className="font-pixel text-[10px] opacity-70 mb-4 flex items-center gap-2">
-                                       <Grid size={14}/> КАТЕГОРИИ
-                                   </h3>
-                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-                                       {Object.values(DefaultCategory).map((cat: string) => (
-                                           <button 
-                                              key={cat}
-                                              onClick={() => {
-                                                  setSelectedCategory(cat);
-                                                  setView('FEED');
-                                                  updateHash('/feed');
-                                              }}
-                                              className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${
-                                                  theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'
-                                              }`}
-                                           >
-                                               <span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span>
-                                           </button>
-                                       ))}
-                                   </div>
-                               </>
-                           )}
-
                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                {(searchQuery 
                                  ? exhibits.filter(ex => ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -1319,7 +1308,7 @@ export default function App() {
               <div className="max-w-xl mx-auto animate-in fade-in">
                  <button onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100">
                      <ArrowLeft size={16} /> НАЗАД
-                 </button>
+                  </button>
                  <h2 className="text-sm md:text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
                  <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
                      <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
@@ -1880,7 +1869,7 @@ export default function App() {
                              onAuthorClick={() => {}}
                          />
                      ))}
-                     {profileTab === 'COLLECTIONS' && profileCollections.map(renderCollectionCard)}
+                     {profileTab === 'COLLECTIONS' && profileCollections.map(c => renderCollectionCard(c))}
                  </div>
                  
                  <div className="pt-8 border-t border-dashed border-gray-500/30">
@@ -1984,7 +1973,7 @@ export default function App() {
              <div className="max-w-7xl mx-auto animate-in fade-in">
                  <div className="flex items-center justify-center gap-4 mb-8">
                      <button 
-                         onClick={() => setFeedMode('ARTIFACTS')}
+                         onClick={() => { setFeedMode('ARTIFACTS'); if(view !== 'FEED') setView('FEED'); }}
                          className={`px-4 py-2 font-pixel text-xs md:text-sm rounded-full transition-all ${
                              feedMode === 'ARTIFACTS' 
                              ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') 
@@ -2007,31 +1996,7 @@ export default function App() {
 
                  {feedMode === 'ARTIFACTS' && (
                      <>
-                        <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 md:justify-center">
-                            <button 
-                                onClick={() => { setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
-                                className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border flex-shrink-0 ${
-                                    selectedCategory === 'ВСЕ'
-                                    ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
-                                    : 'border-transparent opacity-60 hover:opacity-100'
-                                }`}
-                            >
-                                [ ВСЕ ]
-                            </button>
-                            {Object.values(DefaultCategory).map((cat: string) => (
-                                <button
-                                    key={cat}
-                                    onClick={() => { setSelectedCategory(cat); updateHash('/feed'); }}
-                                    className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border flex-shrink-0 ${
-                                        selectedCategory === cat
-                                        ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
-                                        : 'border-transparent opacity-60 hover:opacity-100'
-                                    }`}
-                                >
-                                    {cat}
-                                </button>
-                            ))}
-                        </div>
+                        {/* CATEGORY CAROUSEL REMOVED AS REQUESTED */}
 
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                              {exhibits
@@ -2062,7 +2027,7 @@ export default function App() {
 
                  {feedMode === 'COLLECTIONS' && (
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                         {collections.map(renderCollectionCard)}
+                         {collections.map(c => renderCollectionCard(c))}
                      </div>
                  )}
              </div>
@@ -2090,6 +2055,13 @@ export default function App() {
               onClose={handleDismissInstall} 
           />
       )}
+
+      {/* OFFLINE INDICATOR */}
+      {isOffline() && (
+          <div className="fixed bottom-4 right-4 z-[100] px-3 py-1 bg-red-500 text-white font-pixel text-[10px] rounded animate-pulse flex items-center gap-2 shadow-lg">
+              <WifiOff size={12} /> OFFLINE MODE
+          </div>
+      )}
       
       {view !== 'AUTH' && (
         <header className={`hidden md:flex sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
@@ -2114,6 +2086,14 @@ export default function App() {
                         />
                         <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"/>
                     </div>
+
+                    <button 
+                        onClick={() => { setView('MY_COLLECTION'); updateHash('/my-collection'); }}
+                        className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-black'}`}
+                        title="Моя Полка"
+                    >
+                        <Package size={20} />
+                    </button>
 
                     <button 
                         onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} 

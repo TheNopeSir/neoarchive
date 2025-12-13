@@ -12,8 +12,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Changed fonts to Silkscreen (readable pixel) and Space Mono (clean tech mono) -->
-    <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <!-- Changed fonts to Orbitron (Headers) and Exo 2 (Body) for legibility and style -->
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,100..900;1,100..900&family=Orbitron:wght@400..900&display=swap" rel="stylesheet">
     <link rel="apple-touch-icon" href="https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=192" />
     <script>
       tailwind.config = {
@@ -33,8 +33,9 @@
               'light-dim': '#9ca3af',
             },
             fontFamily: {
-              'mono': ['"Space Mono"', '"Courier New"', 'monospace'],
-              'pixel': ['"Silkscreen"', 'cursive'],
+              'mono': ['"Exo 2"', 'monospace'], // Readable tech font
+              'pixel': ['"Orbitron"', 'sans-serif'], // Thematic header font
+              'sans': ['"Exo 2"', 'sans-serif'], // Body text
             },
             animation: {
               'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -51,7 +52,8 @@
       }
     </script>
     <style>
-      body { transition: background-color 0.3s, color 0.3s; overscroll-behavior-y: none; }
+      body { transition: background-color 0.3s, color 0.3s; overscroll-behavior-y: none; font-family: 'Exo 2', sans-serif; }
+      h1, h2, h3, h4, h5, h6, .font-pixel { font-family: 'Orbitron', sans-serif; }
       ::-webkit-scrollbar { width: 8px; height: 8px; }
       .dark ::-webkit-scrollbar-track { background: #09090b; }
       .dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
