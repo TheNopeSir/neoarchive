@@ -5,19 +5,18 @@ import {
   Heart, 
   Share2, 
   MessageSquare, 
-  ShieldAlert, 
   Trash2, 
   Edit,
-  User,
   Send,
   ArrowLeft,
   Eye,
   Check,
   Video
 } from 'lucide-react';
-import { Exhibit, Comment } from '../types';
+import { Exhibit } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
 import useSwipe from '../hooks/useSwipe';
+import { getUserAvatar } from '../services/storageService'; // Use this
 
 interface ExhibitDetailPageProps {
   exhibit: Exhibit;
@@ -29,6 +28,7 @@ interface ExhibitDetailPageProps {
   isFavorited: boolean;
   isLiked: boolean;
   onPostComment: (id: string, text: string) => void;
+  onLikeComment?: (exhibitId: string, commentId: string) => void; // New prop
   onAuthorClick: (author: string) => void;
   onFollow: (username: string) => void;
   onMessage: (username: string) => void;
@@ -49,6 +49,7 @@ export default function ExhibitDetailPage({
   isFavorited,
   isLiked,
   onPostComment,
+  onLikeComment,
   onAuthorClick,
   onFollow,
   onMessage,
@@ -86,7 +87,6 @@ export default function ExhibitDetailPage({
   });
 
   const handleNativeShare = async () => {
-      // Use the current URL which now contains the hash (e.g. /#/exhibit/123)
       const urlToShare = window.location.href; 
       const shareData = {
           title: `NeoArchive: ${exhibit.title}`,
@@ -101,7 +101,6 @@ export default function ExhibitDetailPage({
               console.warn('Share cancelled', err);
           }
       } else {
-          // Fallback
           try {
               await navigator.clipboard.writeText(urlToShare);
               setShareCopied(true);
@@ -113,13 +112,10 @@ export default function ExhibitDetailPage({
   };
 
   const isOwner = currentUser === exhibit.owner;
-  // Allow delete if owner OR admin
   const canDelete = isOwner || isAdmin;
 
-  // Video Embed Helper
   const getEmbedUrl = (url: string) => {
       if (!url) return null;
-      // Simple Youtube Parser
       const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
       const match = url.match(youtubeRegex);
       return match ? `https://www.youtube.com/embed/${match[1]}` : null;
@@ -170,13 +166,11 @@ export default function ExhibitDetailPage({
             } ${tier.name === 'LEGENDARY' ? 'shadow-yellow-500/20 border-yellow-500/50' : ''}`}
             {...swipeHandlers}
           >
-             {/* Blurry Background for vertical images */}
              <div 
                 className="absolute inset-0 bg-cover bg-center blur-xl opacity-50 scale-110" 
                 style={{ backgroundImage: `url(${images[currentImageIndex]})` }}
              ></div>
 
-             {/* Main Image - Contain Mode */}
              <img 
                src={images[currentImageIndex]} 
                alt={exhibit.title} 
@@ -204,7 +198,6 @@ export default function ExhibitDetailPage({
              )}
           </div>
           
-          {/* Thumbnails */}
           {images.length > 1 && (
             <div className="flex gap-2 overflow-x-auto py-2 scrollbar-hide">
                {images.map((img, idx) => (
@@ -223,7 +216,6 @@ export default function ExhibitDetailPage({
             </div>
           )}
 
-          {/* Video Player Section */}
           {exhibit.videoUrl && (
              <div className={`mt-4 border-2 border-dashed p-1 rounded-lg ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
                  <div className="font-pixel text-[10px] mb-2 px-1 flex items-center gap-2 opacity-70">
@@ -263,12 +255,10 @@ export default function ExhibitDetailPage({
                           {exhibit.category}
                       </div>
                       
-                      {/* Tier Badge */}
                       <div className={`inline-block px-2 py-0.5 text-[9px] font-bold font-pixel rounded border flex items-center gap-1 ${tier.bgColor} border-current ${tier.color}`}>
                           <TierIcon size={10} /> {tier.name}
                       </div>
                   </div>
-                  {/* Title with overflow protection - ADJUSTED SIZE */}
                   <h1 className="text-xl md:text-2xl lg:text-3xl font-bold font-pixel mb-2 leading-tight break-words">
                     {exhibit.title}
                   </h1>
@@ -300,8 +290,8 @@ export default function ExhibitDetailPage({
                 theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'
             }`}>
                <div className="flex items-center gap-3 cursor-pointer" onClick={() => onAuthorClick(exhibit.owner)}>
-                  <div className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden flex-shrink-0">
-                     <img src={`https://ui-avatars.com/api/?name=${exhibit.owner}&background=random`} alt="avatar" />
+                  <div className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden flex-shrink-0 border border-gray-500">
+                     <img src={getUserAvatar(exhibit.owner)} alt="avatar" />
                   </div>
                   <div className="overflow-hidden">
                      <div className="font-bold font-pixel text-xs truncate">@{exhibit.owner}</div>
@@ -353,20 +343,39 @@ export default function ExhibitDetailPage({
                   {comments.length === 0 ? (
                     <div className="text-center py-4 opacity-50 text-xs font-mono">НЕТ ЗАПИСЕЙ В ПРОТОКОЛЕ</div>
                   ) : (
-                    comments.map(comment => (
-                      <div key={comment.id} className={`p-2 rounded text-xs ${theme === 'dark' ? 'bg-white/5' : 'bg-black/5'}`}>
-                         <div className="flex justify-between items-baseline mb-1">
-                            <span 
-                              onClick={() => onAuthorClick(comment.author)}
-                              className={`font-bold cursor-pointer hover:underline font-pixel text-[9px] ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
-                            >
-                              @{comment.author}
-                            </span>
-                            <span className="text-[9px] opacity-40 font-mono">{comment.timestamp}</span>
-                         </div>
-                         <p className="opacity-80 font-mono break-words">{comment.text}</p>
-                      </div>
-                    ))
+                    comments.map(comment => {
+                      const isCommentLiked = comment.likedBy?.includes(currentUser);
+                      return (
+                        <div key={comment.id} className={`p-2 rounded text-xs ${theme === 'dark' ? 'bg-white/5' : 'bg-black/5'}`}>
+                           <div className="flex justify-between items-center mb-1">
+                              <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 rounded-full overflow-hidden flex-shrink-0 cursor-pointer" onClick={() => onAuthorClick(comment.author)}>
+                                      <img src={getUserAvatar(comment.author)} alt={comment.author} />
+                                  </div>
+                                  <span 
+                                    onClick={() => onAuthorClick(comment.author)}
+                                    className={`font-bold cursor-pointer hover:underline font-pixel text-[9px] ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
+                                  >
+                                    @{comment.author}
+                                  </span>
+                                  <span className="text-[9px] opacity-40 font-mono">{comment.timestamp}</span>
+                              </div>
+                              
+                              {/* Like Comment Button */}
+                              {onLikeComment && (
+                                  <button 
+                                    onClick={() => onLikeComment(exhibit.id, comment.id)}
+                                    className={`flex items-center gap-1 opacity-70 hover:opacity-100 ${isCommentLiked ? 'text-red-500' : ''}`}
+                                  >
+                                      <Heart size={10} fill={isCommentLiked ? "currentColor" : "none"} />
+                                      {comment.likes > 0 && <span className="text-[9px]">{comment.likes}</span>}
+                                  </button>
+                              )}
+                           </div>
+                           <p className="opacity-80 font-mono break-words ml-6">{comment.text}</p>
+                        </div>
+                      )
+                    })
                   )}
                </div>
 

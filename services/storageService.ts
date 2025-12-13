@@ -21,6 +21,22 @@ let isOfflineMode = false;
 // --- EXPORTS ---
 export const isOffline = () => isOfflineMode;
 
+// Helper for Consistent Avatars
+export const getUserAvatar = (username: string): string => {
+    const user = cache.users.find(u => u.username === username);
+    if (user && user.avatarUrl && !user.avatarUrl.includes('ui-avatars.com')) {
+        return user.avatarUrl;
+    }
+    // Deterministic generation based on username hash
+    let hash = 0;
+    for (let i = 0; i < username.length; i++) {
+        hash = username.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+    const color = "00000".substring(0, 6 - c.length) + c;
+    return `https://ui-avatars.com/api/?name=${username}&background=${color}&color=fff&bold=true`;
+};
+
 // --- SLUG GENERATOR ---
 const slugify = (text: string): string => {
     return text
@@ -299,7 +315,7 @@ export const registerUser = async (username: string, password: string, tagline: 
         username: isSuperAdmin ? 'TheArchitect' : username,
         email,
         tagline: isSuperAdmin ? 'System Administrator' : tagline,
-        avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=${isSuperAdmin ? '000000' : 'random'}&color=fff`,
+        avatarUrl: getUserAvatar(username), // Use consistent generator
         joinedDate: new Date().toLocaleString('ru-RU'),
         following: [],
         achievements: isSuperAdmin ? ['HELLO_WORLD', 'LEGEND', 'THE_ONE'] : ['HELLO_WORLD'],
@@ -319,7 +335,7 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
             username: 'TheArchitect',
             email: 'admin@neoarchive.net',
             tagline: 'System Root',
-            avatarUrl: 'https://ui-avatars.com/api/?name=Root&background=000&color=fff',
+            avatarUrl: getUserAvatar('TheArchitect'),
             joinedDate: '01.01.1999',
             following: [],
             achievements: ['LEGEND', 'THE_ONE'],
@@ -353,7 +369,7 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
                 username,
                 email: data.user.email || email,
                 tagline: 'Welcome back',
-                avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
+                avatarUrl: getUserAvatar(username),
                 joinedDate: new Date().toLocaleString('ru-RU'),
                 following: [],
                 achievements: []

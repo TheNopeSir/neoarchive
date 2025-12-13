@@ -3,6 +3,8 @@ export interface Comment {
   author: string;
   text: string;
   timestamp: string;
+  likes: number;
+  likedBy: string[];
 }
 
 export interface Exhibit {
@@ -37,7 +39,7 @@ export interface Collection {
   timestamp: string;
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK';
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT';
 
 export interface Notification {
   id: string;

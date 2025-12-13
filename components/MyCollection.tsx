@@ -11,16 +11,14 @@ interface MyCollectionProps {
     collections?: Collection[];
     onBack: () => void;
     onExhibitClick: (item: Exhibit) => void;
-    onLike: (id: string, e?: React.MouseEvent) => void; // Added onLike prop
+    onCollectionClick?: (col: Collection) => void;
+    onLike: (id: string, e?: React.MouseEvent) => void;
 }
 
-const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, collections = [], onBack, onExhibitClick, onLike }) => {
+const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, collections = [], onBack, onExhibitClick, onCollectionClick, onLike }) => {
     const [activeTab, setActiveTab] = useState<'ITEMS' | 'COLLECTIONS'>('ITEMS');
     const [activeCategory, setActiveCategory] = useState<string>('ALL');
 
-    // Get categories that actually have items
-    const userCategories = [...new Set(exhibits.map(e => e.category))];
-    
     const filteredExhibits = activeCategory === 'ALL' 
         ? exhibits 
         : exhibits.filter(e => e.category === activeCategory);
@@ -37,9 +35,23 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
         }
     };
 
+    const handleShareCollection = (col: Collection, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const url = `${window.location.origin}/#/collection/${col.slug || col.id}`;
+        if (navigator.share) {
+            navigator.share({
+                title: `NeoArchive: ${col.title}`,
+                text: col.description,
+                url: url
+            }).catch(console.error);
+        } else {
+            navigator.clipboard.writeText(url).then(() => alert('Ссылка на коллекцию скопирована!'));
+        }
+    };
+
     return (
         <div className="min-h-screen animate-in fade-in pb-24">
-            {/* Header - Fixed background to prevent scroll bleed-through */}
+            {/* Header */}
             <div className={`sticky top-0 z-40 border-b px-4 py-3 flex items-center justify-between shadow-lg ${
                 theme === 'dark' ? 'bg-dark-bg border-dark-dim' : 'bg-light-bg border-light-dim'
             }`}>
@@ -80,7 +92,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
 
             <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row gap-6">
                 
-                {/* Sidebar / Top Navigation for Categories (Only for ITEMS tab) */}
+                {/* Categories */}
                 {activeTab === 'ITEMS' && (
                     <div className="w-full md:w-64 flex-shrink-0">
                         <div className="flex overflow-x-auto md:flex-col gap-2 pb-2 md:pb-0 scrollbar-hide sticky top-20">
@@ -97,7 +109,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                             
                             {Object.values(DefaultCategory).map(cat => {
                                 const count = exhibits.filter(e => e.category === cat).length;
-                                if (count === 0) return null; // Hide empty categories
+                                if (count === 0) return null;
 
                                 return (
                                     <button
@@ -118,7 +130,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                     </div>
                 )}
 
-                {/* Content Area */}
+                {/* Content */}
                 <div className="flex-1">
                     {activeTab === 'ITEMS' ? (
                         filteredExhibits.length === 0 ? (
@@ -143,9 +155,9 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                                                 similarExhibits={[]}
                                                 theme={theme}
                                                 onClick={onExhibitClick}
-                                                isLiked={item.likedBy?.includes(user.username) || false} // Correctly show liked status
+                                                isLiked={item.likedBy?.includes(user.username) || false} 
                                                 isFavorited={false}
-                                                onLike={(e) => onLike(item.id, e)} // Pass the actual like handler
+                                                onLike={(e) => onLike(item.id, e)}
                                                 onFavorite={(e) => { e.stopPropagation(); }}
                                                 onAuthorClick={() => {}}
                                             />
@@ -171,6 +183,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                                 {collections.map(col => (
                                     <div 
                                         key={col.id}
+                                        onClick={() => onCollectionClick && onCollectionClick(col)}
                                         className={`group relative aspect-[2/1] rounded-xl overflow-hidden cursor-pointer border-2 transition-transform hover:-translate-y-1 ${
                                             theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'
                                         }`}
@@ -180,6 +193,13 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                                             <h3 className="text-white font-pixel text-lg font-bold leading-tight mb-1">{col.title}</h3>
                                             <div className="flex justify-between items-end">
                                                 <span className="text-[10px] font-mono text-white/60">{col.exhibitIds.length} ITEMS</span>
+                                                <button
+                                                    onClick={(e) => handleShareCollection(col, e)}
+                                                    className="bg-white/20 p-2 rounded hover:bg-white/40 text-white transition-colors"
+                                                    title="Поделиться коллекцией"
+                                                >
+                                                    <Share2 size={16} />
+                                                </button>
                                             </div>
                                         </div>
                                     </div>

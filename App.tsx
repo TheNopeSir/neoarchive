@@ -21,7 +21,7 @@ import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Mes
 import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
-import { compressImage, isOffline } from './services/storageService';
+import { compressImage, isOffline, getUserAvatar } from './services/storageService';
 import useSwipe from './hooks/useSwipe';
 
 // Helper to generate specs based on category
@@ -802,7 +802,9 @@ export default function App() {
           id: Date.now().toString(),
           author: username,
           text: text,
-          timestamp: new Date().toLocaleString('ru-RU')
+          timestamp: new Date().toLocaleString('ru-RU'),
+          likes: 0,
+          likedBy: []
       };
       ex.comments = [newComment, ...(ex.comments || [])];
       db.updateExhibit(ex);
@@ -823,6 +825,51 @@ export default function App() {
          setNotifications(prev => [notif, ...prev]);
       }
       if (selectedExhibit && selectedExhibit.id === id) {
+          setSelectedExhibit(ex);
+      }
+  };
+
+  const handleLikeComment = (exhibitId: string, commentId: string) => {
+      if (!user) return;
+      const exIndex = exhibits.findIndex(x => x.id === exhibitId);
+      if (exIndex === -1) return;
+      
+      const updatedExhibits = [...exhibits];
+      const ex = { ...updatedExhibits[exIndex] };
+      const commentIndex = ex.comments.findIndex(c => c.id === commentId);
+      if (commentIndex === -1) return;
+
+      const comment = { ...ex.comments[commentIndex] };
+      if (!comment.likedBy) comment.likedBy = [];
+      
+      const isLiked = comment.likedBy.includes(user.username);
+      if (isLiked) {
+          comment.likes = Math.max(0, comment.likes - 1);
+          comment.likedBy = comment.likedBy.filter(u => u !== user.username);
+      } else {
+          comment.likes++;
+          comment.likedBy.push(user.username);
+          // Notify comment author
+          if (comment.author !== user.username) {
+              const notif: Notification = {
+                 id: Date.now().toString(),
+                 type: 'LIKE_COMMENT',
+                 actor: user.username,
+                 recipient: comment.author,
+                 targetId: ex.id,
+                 targetPreview: comment.text.substring(0, 20) + '...',
+                 timestamp: new Date().toLocaleString('ru-RU'),
+                 isRead: false
+             };
+             db.saveNotification(notif);
+             setNotifications(prev => [notif, ...prev]);
+          }
+      }
+      ex.comments[commentIndex] = comment;
+      db.updateExhibit(ex);
+      updatedExhibits[exIndex] = ex;
+      setExhibits(updatedExhibits);
+      if (selectedExhibit && selectedExhibit.id === exhibitId) {
           setSelectedExhibit(ex);
       }
   };
@@ -987,6 +1034,30 @@ export default function App() {
       updateHash('/activity');
   };
 
+  const handleShareCollection = async (col: Collection) => {
+      const shareUrl = `${window.location.origin}/#/collection/${col.slug || col.id}`;
+      const shareData = {
+          title: `NeoArchive: ${col.title}`,
+          text: col.description || 'Посмотрите эту коллекцию!',
+          url: shareUrl
+      };
+
+      if (navigator.share) {
+          try {
+              await navigator.share(shareData);
+          } catch (err) {
+              // user cancelled
+          }
+      } else {
+          try {
+              await navigator.clipboard.writeText(shareUrl);
+              alert('ССЫЛКА НА КОЛЛЕКЦИЮ СКОПИРОВАНА');
+          } catch (err) {
+              console.error("Copy failed", err);
+          }
+      }
+  };
+
   const getUserAchievements = (username: string) => {
       const userExhibits = exhibits.filter(e => e.owner === username && !e.isDraft);
       const totalLikes = userExhibits.reduce((acc, curr) => acc + curr.likes, 0);
@@ -1017,9 +1088,18 @@ export default function App() {
               <h3 className="text-white font-pixel text-sm md:text-lg font-bold leading-tight mb-1">{col.title}</h3>
               <div className="flex justify-between items-end">
                   <span className="text-[10px] font-mono text-white/60">@{col.owner}</span>
-                  <span className="px-2 py-0.5 bg-white/20 backdrop-blur rounded text-[9px] font-bold text-white">
-                      {col.exhibitIds.length} ITEMS
-                  </span>
+                  <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-white/20 backdrop-blur rounded text-[9px] font-bold text-white">
+                          {col.exhibitIds.length} ITEMS
+                      </span>
+                      <button
+                          onClick={(e) => { e.stopPropagation(); handleShareCollection(col); }}
+                          className="bg-white/20 p-1.5 rounded hover:bg-white/40 text-white transition-colors"
+                          title="Поделиться"
+                      >
+                          <Share2 size={12} />
+                      </button>
+                  </div>
               </div>
           </div>
       </div>
@@ -1057,6 +1137,8 @@ export default function App() {
                           handleExhibitClick(item);
                       }
                   }}
+                  onCollectionClick={handleCollectionClick}
+                  onLike={toggleLike}
               />
           );
 
@@ -1073,8 +1155,8 @@ export default function App() {
                      <ArrowLeft size={16} /> НАЗАД
                   </button>
                   <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                      <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden">
-                          <img src={`https://ui-avatars.com/api/?name=${chatPartner}&background=random`} alt={chatPartner || ''} />
+                      <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden border border-gray-500">
+                          <img src={getUserAvatar(chatPartner)} alt={chatPartner || ''} />
                       </div>
                       <div>
                           <h2 className="font-pixel text-lg">@{chatPartner}</h2>
@@ -1267,9 +1349,8 @@ export default function App() {
               </div>
           );
       
-      // ... (Keeping existing EDIT_COLLECTION, CREATE_COLLECTION logic same, they are correct) ... 
-      // Re-inserting for complete file consistency in XML response
       case 'EDIT_COLLECTION':
+          // ... (same as before)
           if (!collectionToEdit) return <div>Error</div>;
           const myExhibits = exhibits.filter(e => e.owner === user?.username && !e.isDraft);
 
@@ -1360,6 +1441,7 @@ export default function App() {
           );
 
       case 'CREATE_COLLECTION':
+          // ... (same as before)
           return (
               <div className="max-w-xl mx-auto animate-in fade-in">
                  <button onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100">
@@ -1724,6 +1806,7 @@ export default function App() {
                                   } ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}>
                                       <div className="mt-1">
                                           {notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}
+                                          {notif.type === 'LIKE_COMMENT' && <Heart className="text-pink-500" size={16} />}
                                           {notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}
                                           {notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}
                                           {notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}
@@ -1736,6 +1819,7 @@ export default function App() {
                                           <div className="font-mono text-xs md:text-sm">
                                               <span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(notif.actor)}>@{notif.actor}</span>
                                               {notif.type === 'LIKE' && ' оценил ваш артефакт.'}
+                                              {notif.type === 'LIKE_COMMENT' && ' лайкнул ваш комментарий.'}
                                               {notif.type === 'COMMENT' && ' прокомментировал: '}
                                               {notif.type === 'FOLLOW' && ' подписался на вас.'}
                                               {notif.type === 'GUESTBOOK' && ' написал в гостевой книге.'}
@@ -1767,8 +1851,8 @@ export default function App() {
                                       theme === 'dark' ? 'bg-dark-surface border-dark-dim hover:border-dark-primary' : 'bg-white border-light-dim hover:border-light-accent'
                                     }`}
                                   >
-                                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative">
-                                          <img src={`https://ui-avatars.com/api/?name=${partner}&background=random`} alt="Avatar" />
+                                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative border border-gray-500">
+                                          <img src={getUserAvatar(partner)} alt="Avatar" />
                                           {unreadCount > 0 && (
                                               <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-black animate-pulse"></div>
                                           )}
@@ -1796,7 +1880,7 @@ export default function App() {
              username: profileUsername,
              email: 'ghost@matrix.net',
              tagline: 'Цифровой призрак',
-             avatarUrl: `https://ui-avatars.com/api/?name=${profileUsername}`,
+             avatarUrl: getUserAvatar(profileUsername),
              joinedDate: 'Unknown',
              following: [],
              achievements: [],
@@ -2026,6 +2110,7 @@ export default function App() {
                 isFavorited={false}
                 isLiked={selectedExhibit.likedBy?.includes((user?.username as string) || '') || false}
                 onPostComment={handlePostComment}
+                onLikeComment={handleLikeComment}
                 onAuthorClick={handleAuthorClick}
                 onFollow={handleFollow}
                 onMessage={handleOpenChat}
@@ -2050,14 +2135,24 @@ export default function App() {
                       <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
                           <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
                           <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
-                          {user?.username === selectedCollection.owner && (
+                          <div className="absolute top-4 right-4 flex gap-2">
                               <button 
-                                onClick={() => handleEditCollection(selectedCollection)}
-                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
+                                onClick={(e) => { e.stopPropagation(); handleShareCollection(selectedCollection); }}
+                                className="bg-white/20 p-2 rounded hover:bg-white/40 text-white transition-colors"
+                                title="Поделиться"
                               >
-                                  <Edit2 size={16} />
+                                  <Share2 size={16} />
                               </button>
-                          )}
+                              {user?.username === selectedCollection.owner && (
+                                  <button 
+                                    onClick={() => handleEditCollection(selectedCollection)}
+                                    className="bg-white/20 p-2 rounded hover:bg-white/40 text-white transition-colors"
+                                    title="Редактировать"
+                                  >
+                                      <Edit2 size={16} />
+                                  </button>
+                              )}
+                          </div>
                       </div>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2083,6 +2178,7 @@ export default function App() {
       default:
          return (
              <div className="max-w-7xl mx-auto animate-in fade-in">
+                 {/* ... (existing feed code) ... */}
                  <div className="flex items-center justify-center gap-4 mb-8">
                      <button 
                          onClick={() => { setFeedMode('ARTIFACTS'); if(view !== 'FEED') setView('FEED'); }}
@@ -2108,31 +2204,72 @@ export default function App() {
 
                  {feedMode === 'ARTIFACTS' && (
                      <>
-                        {/* CATEGORY CAROUSEL REMOVED AS REQUESTED */}
-
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                             {exhibits
-                                .filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory))
-                                .slice(0, visibleCount)
-                                .map((item: Exhibit) => (
-                                    <ExhibitCard 
-                                        key={item.id} 
-                                        item={item} 
-                                        theme={theme}
-                                        similarExhibits={[]}
-                                        onClick={handleExhibitClick}
-                                        isLiked={item.likedBy?.includes(user?.username || '') || false}
-                                        isFavorited={false}
-                                        onLike={(e: React.MouseEvent) => toggleLike(item.id, e)}
-                                        onFavorite={(e: React.MouseEvent) => toggleFavorite(item.id, e)}
-                                        onAuthorClick={handleAuthorClick}
-                                    />
-                                ))
-                             }
+                        <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 md:justify-center">
+                            <button 
+                                onClick={() => { setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
+                                className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border flex-shrink-0 ${
+                                    selectedCategory === 'ВСЕ'
+                                    ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
+                                    : 'border-transparent opacity-60 hover:opacity-100'
+                                }`}
+                            >
+                                [ ВСЕ ]
+                            </button>
+                            {Object.values(DefaultCategory).map((cat: string) => (
+                                <button
+                                    key={cat}
+                                    onClick={() => { setSelectedCategory(cat); updateHash('/feed'); }}
+                                    className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border flex-shrink-0 ${
+                                        selectedCategory === cat
+                                        ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
+                                        : 'border-transparent opacity-60 hover:opacity-100'
+                                    }`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
                         </div>
+
+                        {exhibits.filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory)).length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
+                                <Box size={48} className="mb-4 opacity-50" />
+                                <p className="font-mono text-sm mb-6">Эта полка пока что пустует...</p>
+                                <button 
+                                    onClick={() => { setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
+                                    className={`px-6 py-3 rounded font-pixel text-[10px] md:text-xs font-bold border transition-all hover:scale-105 ${
+                                        theme === 'dark' 
+                                        ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' 
+                                        : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'
+                                    }`}
+                                >
+                                    ВЕРНУТЬСЯ В ОБЩУЮ ЛЕНТУ
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                {exhibits
+                                    .filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory))
+                                    .slice(0, visibleCount)
+                                    .map((item: Exhibit) => (
+                                        <ExhibitCard 
+                                            key={item.id} 
+                                            item={item} 
+                                            theme={theme}
+                                            similarExhibits={[]}
+                                            onClick={handleExhibitClick}
+                                            isLiked={item.likedBy?.includes(user?.username || '') || false}
+                                            isFavorited={false}
+                                            onLike={(e) => toggleLike(item.id, e)}
+                                            onFavorite={(e) => toggleFavorite(item.id, e)}
+                                            onAuthorClick={handleAuthorClick}
+                                        />
+                                    ))
+                                }
+                            </div>
+                        )}
                         
                         <div ref={loadMoreRef} className="h-20 w-full flex items-center justify-center mt-8">
-                             {exhibits.length > visibleCount && <RetroLoader />}
+                             {exhibits.filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory)).length > visibleCount && <RetroLoader />}
                         </div>
                      </>
                  )}
@@ -2153,13 +2290,12 @@ export default function App() {
     <div className={`min-h-screen transition-colors duration-500 font-sans selection:bg-green-500 selection:text-black ${
       theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-800'
     }`}>
+      {/* ... (existing layout) ... */}
       <MatrixRain theme={theme} />
       {theme === 'dark' && <CRTOverlay />}
 
-      {/* LOGIN TRANSITION OVERLAY */}
       {isLoginTransition && <LoginTransition />}
 
-      {/* PWA INSTALL BANNER */}
       {showInstallBanner && (
           <InstallBanner 
               theme={theme} 
@@ -2168,7 +2304,6 @@ export default function App() {
           />
       )}
 
-      {/* OFFLINE INDICATOR */}
       {isOffline() && (
           <div className="fixed bottom-4 right-4 z-[100] px-3 py-1 bg-red-500 text-white font-pixel text-[10px] rounded animate-pulse flex items-center gap-2 shadow-lg">
               <WifiOff size={12} /> OFFLINE MODE
@@ -2250,7 +2385,7 @@ export default function App() {
                          className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden border border-transparent hover:border-current transition-all"
                          title="Профиль"
                     >
-                        <img src={`https://ui-avatars.com/api/?name=${user?.username || 'Guest'}&background=random`} alt="User" />
+                        <img src={getUserAvatar(user?.username || 'Guest')} alt="User" />
                     </button>
 
                     <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="opacity-50 hover:opacity-100">
@@ -2294,7 +2429,7 @@ export default function App() {
       {view !== 'AUTH' && (
           <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
               <p>
-                  NEO_ARCHIVE SYSTEM v2.2 // POWERED BY <a href="https://t.me/truester1337" target="_blank" rel="noopener noreferrer" className="hover:text-current hover:underline font-bold">TRUESTER</a>
+                  NEO_ARCHIVE SYSTEM v2.2 | POWERED BY <a href="https://t.me/truester1337" target="_blank" rel="noopener noreferrer" className="hover:text-current hover:underline font-bold">TRUESTER</a>
               </p>
           </footer>
       )}
