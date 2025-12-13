@@ -1091,7 +1091,46 @@ export default function App() {
 
   const renderContentArea = () => {
     switch (view) {
-      // ... (Cases kept identical, focusing on CREATE_ARTIFACT and COLLECTION_DETAIL)
+      // 1. ADD: CREATE HUB (Missing piece restored)
+      case 'CREATE_HUB':
+          return (
+              <div className="max-w-2xl mx-auto animate-in fade-in h-[70vh] flex flex-col justify-center">
+                  <h2 className="text-xl font-pixel mb-8 text-center uppercase">Выберите тип загрузки</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <button 
+                        onClick={() => { setView('CREATE_ARTIFACT'); updateHash('/create/artifact'); }}
+                        className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
+                            theme === 'dark' ? 'border-dark-dim hover:border-dark-primary bg-dark-surface' : 'border-light-dim hover:border-light-accent bg-white'
+                        }`}
+                      >
+                          <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>
+                              <FilePlus size={32} />
+                          </div>
+                          <div className="text-center">
+                              <h3 className="font-pixel text-base font-bold">АРТЕФАКТ</h3>
+                              <p className="font-mono text-xs opacity-70 mt-2">Загрузить единичный объект</p>
+                          </div>
+                      </button>
+
+                      <button 
+                        onClick={() => { setView('CREATE_COLLECTION'); updateHash('/create/collection'); }}
+                        className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
+                            theme === 'dark' ? 'border-dark-dim hover:border-yellow-500 bg-dark-surface' : 'border-light-dim hover:border-orange-500 bg-white'
+                        }`}
+                      >
+                           <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-yellow-500 text-black' : 'bg-orange-500 text-white'}`}>
+                              <FolderPlus size={32} />
+                          </div>
+                          <div className="text-center">
+                              <h3 className="font-pixel text-base font-bold">КОЛЛЕКЦИЯ</h3>
+                              <p className="font-mono text-xs opacity-70 mt-2">Создать подборку предметов</p>
+                          </div>
+                      </button>
+                  </div>
+              </div>
+          );
+
+      // 2. CREATE ARTIFACT
       case 'CREATE_ARTIFACT':
         return (
           <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
@@ -1146,7 +1185,7 @@ export default function App() {
                      </div>
                  </div>
 
-                 {/* Subcategory Selector (Restored) */}
+                 {/* Subcategory Selector */}
                  {CATEGORY_SUBCATEGORIES[newExhibit.category || ''] && (
                      <div className="space-y-1 animate-in fade-in">
                          <label className="text-[10px] font-pixel uppercase opacity-70">ПОДКАТЕГОРИЯ</label>
@@ -1331,59 +1370,6 @@ export default function App() {
           </div>
         );
 
-      case 'COLLECTION_DETAIL':
-          if (!selectedCollection) return <div>Error</div>;
-          const colExhibits = exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id));
-          return (
-              <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
-                  <div className="flex justify-between items-center mb-6">
-                      <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
-                         <ArrowLeft size={16} /> НАЗАД
-                      </button>
-                      <button 
-                          onClick={(e) => { e.stopPropagation(); handleShareCollection(selectedCollection); }}
-                          className={`p-2 rounded hover:bg-white/10 transition-colors ${theme === 'dark' ? 'text-white' : 'text-black'}`}
-                          title="Поделиться коллекцией"
-                      >
-                          <Share2 size={20} />
-                      </button>
-                  </div>
-                  
-                  <div className="relative aspect-[3/1] rounded-xl overflow-hidden mb-8 group">
-                      <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
-                          <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
-                          <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
-                          {user?.username === selectedCollection.owner && (
-                              <button 
-                                onClick={() => handleEditCollection(selectedCollection)}
-                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
-                              >
-                                  <Edit2 size={16} />
-                              </button>
-                          )}
-                      </div>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {colExhibits.map(item => (
-                          <ExhibitCard 
-                             key={item.id} 
-                             item={item} 
-                             theme={theme}
-                             similarExhibits={[]}
-                             onClick={handleExhibitClick}
-                             isLiked={item.likedBy?.includes(user?.username || '') || false}
-                             isFavorited={false}
-                             onLike={(e) => toggleLike(item.id, e)}
-                             onFavorite={(e) => toggleFavorite(item.id, e)}
-                             onAuthorClick={handleAuthorClick}
-                          />
-                      ))}
-                  </div>
-              </div>
-          );
-
-      // (Other cases are implicitly handled via the default render, but we need to ensure the full file is returned to keep structure valid)
       case 'AUTH': return <MatrixLogin theme={theme} onLogin={handleLogin} />;
       case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
       case 'MY_COLLECTION':
@@ -1486,7 +1472,6 @@ export default function App() {
               </div>
           );
       case 'USER_PROFILE':
-         // Simplified for brevity, reusing the existing block logic fully in the real app but ensuring it's valid XML
          const profileUsername = viewedProfile || user?.username;
          if (!profileUsername) return <div>User not found</div>;
          const profileUser = db.getFullDatabase().users.find(u => u.username === profileUsername) || { username: profileUsername, email: 'ghost@matrix.net', tagline: 'Цифровой призрак', avatarUrl: getUserAvatar(profileUsername), joinedDate: 'Unknown', following: [], achievements: [], telegram: '' } as UserProfile;
@@ -1494,7 +1479,83 @@ export default function App() {
          const profileCollections = collections.filter(c => c.owner === profileUsername);
          const isCurrentUser = user?.username === profileUsername;
          const isSubscribed = user?.following.includes(profileUsername) || false;
-         return (<div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32"><button onClick={() => { setView('FEED'); updateHash('/feed'); }} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button><div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><div className="relative"><div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-gray-500"><img src={profileUser.avatarUrl} alt={profileUser.username || ''} className="w-full h-full object-cover"/></div>{isCurrentUser && (<label className="absolute bottom-0 right-0 bg-gray-800 p-2 rounded-full cursor-pointer hover:bg-gray-700 text-white border border-gray-600"><Edit2 size={14} /><input type="file" accept="image/*" className="hidden" onChange={handleProfileImageUpload} /></label>)}</div><div className="flex-1 text-center md:text-left space-y-2">{isEditingProfile && isCurrentUser ? (<div className="space-y-2 max-w-sm"><input value={editTagline} onChange={e => setEditTagline(e.target.value)} placeholder="Статус..." className="w-full bg-transparent border-b p-1 font-mono text-sm" /><input value={editTelegram} onChange={e => setEditTelegram(e.target.value)} placeholder="Telegram (без @)" className="w-full bg-transparent border-b p-1 font-mono text-sm" /><div className="flex gap-2">{(Object.keys(STATUS_OPTIONS) as UserStatus[]).map(s => (<button key={s} onClick={() => setEditStatus(s)} className={`p-1 rounded border ${editStatus === s ? 'border-green-500 bg-green-500/20' : 'border-transparent'}`} title={STATUS_OPTIONS[s].label}>{React.createElement(STATUS_OPTIONS[s].icon, { size: 16 })}</button>))}</div><div className="flex gap-2 justify-center md:justify-start"><button onClick={handleSaveProfile} className="bg-green-600 text-white px-3 py-1 rounded text-xs">OK</button><button onClick={() => setIsEditingProfile(false)} className="bg-gray-600 text-white px-3 py-1 rounded text-xs">CANCEL</button></div></div>) : (<><h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2><p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">{profileUser.tagline}{isCurrentUser && (<button onClick={() => { setEditTagline(user?.tagline || ''); setEditStatus(user?.status || 'ONLINE'); setEditTelegram(user?.telegram || ''); setIsEditingProfile(true); }} className="opacity-50 hover:opacity-100"><Edit2 size={12} /></button>)}</p>{profileUser.status && (<div className={`flex items-center gap-1 text-xs font-bold ${STATUS_OPTIONS[profileUser.status].color} justify-center md:justify-start`}>{React.createElement(STATUS_OPTIONS[profileUser.status].icon, { size: 12 })}{STATUS_OPTIONS[profileUser.status].label}</div>)}{profileUser.telegram && (<a href={`https://t.me/${profileUser.telegram.replace('@', '')}`} target="_blank" rel="nofollow noreferrer" className={`flex items-center gap-1 text-xs font-bold justify-center md:justify-start hover:underline ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}><Send size={12} /> Telegram</a>)}</>)}{!isCurrentUser && (<div className="flex gap-2 justify-center md:justify-start pt-2"><button onClick={() => handleFollow(profileUser.username)} className={`px-4 py-2 rounded font-bold font-pixel text-xs ${isSubscribed ? 'border border-gray-500 opacity-70' : (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white')}`}>{isSubscribed ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}</button><button onClick={() => handleOpenChat(profileUser.username)} className="px-4 py-2 rounded border hover:bg-white/10"><MessageSquare size={16} /></button></div>)}{isCurrentUser && (<div className="flex justify-center md:justify-start pt-2"><button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-500 rounded hover:bg-red-500/10 text-xs font-pixel font-bold transition-colors"><LogOut size={14} /> ВЫЙТИ ИЗ СИСТЕМЫ</button></div>)}</div></div>{profileUser.achievements && profileUser.achievements.length > 0 && (<div className="flex gap-2 flex-wrap justify-center md:justify-start">{profileUser.achievements.map(badgeId => { const b = BADGES[badgeId as keyof typeof BADGES]; if(!b) return null; return (<div key={badgeId} className={`px-2 py-1 rounded text-[10px] font-bold text-white ${b.color} flex items-center gap-1`} title={b.desc}>{b.label}</div>) })}</div>)}<button onClick={() => { setView('HALL_OF_FAME'); updateHash('/hall-of-fame'); }} className="w-full py-3 border border-dashed border-gray-500/30 text-xs font-pixel opacity-70 hover:opacity-100 flex items-center justify-center gap-2"><Trophy size={14} /> ОТКРЫТЬ ЗАЛ СЛАВЫ</button><div className="flex gap-4 border-b border-gray-500/30"><button onClick={() => setProfileTab('ARTIFACTS')} className={`pb-2 font-pixel text-xs ${profileTab === 'ARTIFACTS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>АРТЕФАКТЫ</button><button onClick={() => setProfileTab('COLLECTIONS')} className={`pb-2 font-pixel text-xs ${profileTab === 'COLLECTIONS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>КОЛЛЕКЦИИ</button></div><div className="grid grid-cols-2 md:grid-cols-3 gap-4">{profileTab === 'ARTIFACTS' && profileArtifacts.map(item => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={() => {}} />))}{profileTab === 'COLLECTIONS' && profileCollections.map(renderCollectionCard)}</div><div className="pt-8 border-t border-dashed border-gray-500/30"><h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3><div className="space-y-4 mb-4">{guestbook.filter(g => g.targetUser === profileUser.username).map(entry => (<div key={entry.id} className="p-3 border rounded border-gray-500/30 text-xs relative group"><div className="flex justify-between mb-1"><span className="font-bold font-pixel cursor-pointer" onClick={() => handleAuthorClick(entry.author)}>@{entry.author}</span><span className="opacity-50">{entry.timestamp}</span></div><p className="font-mono mb-2">{entry.text}</p><button onClick={() => { setGuestbookInput(`@${entry.author} `); guestbookInputRef.current?.focus(); }} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity"><Reply size={10} /> ОТВЕТИТЬ</button></div>))}</div>{user && (<div className="flex gap-2"><input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className="flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none" /><button onClick={handleGuestbookPost} className="p-2 border rounded hover:bg-white/10"><Send size={16} /></button></div>)}</div></div>);
+         return (<div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32"><button onClick={() => { setView('FEED'); updateHash('/feed'); }} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button><div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><div className="relative"><div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-gray-500"><img src={profileUser.avatarUrl} alt={profileUser.username || ''} className="w-full h-full object-cover"/></div>{isCurrentUser && (<label className="absolute bottom-0 right-0 bg-gray-800 p-2 rounded-full cursor-pointer hover:bg-gray-700 text-white border border-gray-600"><Edit2 size={14} /><input type="file" accept="image/*" className="hidden" onChange={handleProfileImageUpload} /></label>)}</div><div className="flex-1 text-center md:text-left space-y-2">{isEditingProfile && isCurrentUser ? (<div className="space-y-2 max-w-sm"><input value={editTagline} onChange={e => setEditTagline(e.target.value)} placeholder="Статус..." className="w-full bg-transparent border-b p-1 font-mono text-sm" /><input value={editTelegram} onChange={e => setEditTelegram(e.target.value)} placeholder="Telegram (без @)" className="w-full bg-transparent border-b p-1 font-mono text-sm" /><div className="flex gap-2">{(Object.keys(STATUS_OPTIONS) as UserStatus[]).map(s => (<button key={s} onClick={() => setEditStatus(s)} className={`p-1 rounded border ${editStatus === s ? 'border-green-500 bg-green-500/20' : 'border-transparent'}`} title={STATUS_OPTIONS[s].label}>{React.createElement(STATUS_OPTIONS[s].icon, { size: 16 })}</button>))}</div><div className="flex gap-2 justify-center md:justify-start"><button onClick={handleSaveProfile} className="bg-green-600 text-white px-3 py-1 rounded text-xs">OK</button><button onClick={() => setIsEditingProfile(false)} className="bg-gray-600 text-white px-3 py-1 rounded text-xs">CANCEL</button></div></div>) : (<><h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2><p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">{profileUser.tagline}{isCurrentUser && (<button onClick={() => { setEditTagline(user?.tagline || ''); setEditStatus(user?.status || 'ONLINE'); setEditTelegram(user?.telegram || ''); setIsEditingProfile(true); }} className="opacity-50 hover:opacity-100"><Edit2 size={12} /></button>)}</p>{profileUser.status && (<div className={`flex items-center gap-1 text-xs font-bold ${STATUS_OPTIONS[profileUser.status].color} justify-center md:justify-start`}>{React.createElement(STATUS_OPTIONS[profileUser.status].icon, { size: 12 })}{STATUS_OPTIONS[profileUser.status].label}</div>)}{profileUser.telegram && (<a href={`https://t.me/${profileUser.telegram.replace('@', '')}`} target="_blank" rel="nofollow noreferrer" className={`flex items-center gap-1 text-xs font-bold justify-center md:justify-start hover:underline ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}><Send size={12} /> Telegram</a>)}</>)}{!isCurrentUser && (<div className="flex gap-2 justify-center md:justify-start pt-2"><button onClick={() => handleFollow(profileUser.username)} className={`px-4 py-2 rounded font-bold font-pixel text-xs ${isSubscribed ? 'border border-gray-500 opacity-70' : (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white')}`}>{isSubscribed ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}</button><button onClick={() => handleOpenChat(profileUser.username)} className="px-4 py-2 rounded border hover:bg-white/10"><MessageSquare size={16} /></button></div>)}{isCurrentUser && (<div className="flex justify-center md:justify-start pt-2"><button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-500 rounded hover:bg-red-500/10 text-xs font-pixel font-bold transition-colors"><LogOut size={14} /> ВЫЙТИ ИЗ СИСТЕМЫ</button></div>)}</div></div>{profileUser.achievements && profileUser.achievements.length > 0 && (<div className="flex gap-2 flex-wrap justify-center md:justify-start">{profileUser.achievements.map(badgeId => { const b = BADGES[badgeId as keyof typeof BADGES]; if(!b) return null; return (<div key={badgeId} className={`px-2 py-1 rounded text-[10px] font-bold text-white ${b.color} flex items-center gap-1`} title={b.desc}>{b.label}</div>) })}</div>)}<button onClick={() => { setView('HALL_OF_FAME'); updateHash('/hall-of-fame'); }} className="w-full py-3 border border-dashed border-gray-500/30 text-xs font-pixel opacity-70 hover:opacity-100 flex items-center justify-center gap-2"><Trophy size={14} /> ОТКРЫТЬ ЗАЛ СЛАВЫ</button><div className="flex gap-4 border-b border-gray-500/30"><button onClick={() => setProfileTab('ARTIFACTS')} className={`pb-2 font-pixel text-xs ${profileTab === 'ARTIFACTS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>АРТЕФАКТЫ</button><button onClick={() => setProfileTab('COLLECTIONS')} className={`pb-2 font-pixel text-xs ${profileTab === 'COLLECTIONS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>КОЛЛЕКЦИИ</button></div><div className="grid grid-cols-2 md:grid-cols-3 gap-4">{profileTab === 'ARTIFACTS' && profileArtifacts.map(item => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />))}{profileTab === 'COLLECTIONS' && profileCollections.map(renderCollectionCard)}</div><div className="pt-8 border-t border-dashed border-gray-500/30"><h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3><div className="space-y-4 mb-4">{guestbook.filter(g => g.targetUser === profileUser.username).map(entry => (<div key={entry.id} className="p-3 border rounded border-gray-500/30 text-xs relative group"><div className="flex justify-between mb-1"><span className="font-bold font-pixel cursor-pointer" onClick={() => handleAuthorClick(entry.author)}>@{entry.author}</span><span className="opacity-50">{entry.timestamp}</span></div><p className="font-mono mb-2">{entry.text}</p><button onClick={() => { setGuestbookInput(`@${entry.author} `); guestbookInputRef.current?.focus(); }} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity"><Reply size={10} /> ОТВЕТИТЬ</button></div>))}</div>{user && (<div className="flex gap-2"><input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className="flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none" /><button onClick={handleGuestbookPost} className="p-2 border rounded hover:bg-white/10"><Send size={16} /></button></div>)}</div></div>);
+
+      case 'EXHIBIT':
+        return selectedExhibit ? (
+            <ExhibitDetailPage 
+                exhibit={selectedExhibit}
+                theme={theme}
+                onBack={handleBack}
+                onShare={(id: string) => { /* handled internally */ }}
+                onFavorite={(id: string) => toggleFavorite(id)}
+                onLike={(id: string) => toggleLike(id)}
+                isFavorited={false}
+                isLiked={selectedExhibit.likedBy?.includes((user?.username as string) || '') || false}
+                onPostComment={handlePostComment}
+                onLikeComment={handleLikeComment}
+                onAuthorClick={handleAuthorClick}
+                onFollow={handleFollow}
+                onMessage={handleOpenChat}
+                onDelete={user?.username === selectedExhibit.owner || user?.isAdmin ? handleDeleteExhibit : undefined}
+                onEdit={handleEditExhibit}
+                isFollowing={user?.following.includes(selectedExhibit.owner) || false}
+                currentUser={user?.username || ''}
+                isAdmin={user?.isAdmin || false}
+            />
+        ) : <div>Error: No exhibit selected</div>;
+
+      case 'COLLECTION_DETAIL':
+          if (!selectedCollection) return <div>Error</div>;
+          const colExhibits = exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id));
+          return (
+              <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
+                  <div className="flex justify-between items-center mb-6">
+                      <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
+                         <ArrowLeft size={16} /> НАЗАД
+                      </button>
+                      <button 
+                          onClick={(e) => { e.stopPropagation(); handleShareCollection(selectedCollection); }}
+                          className={`p-2 rounded hover:bg-white/10 transition-colors ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                          title="Поделиться коллекцией"
+                      >
+                          <Share2 size={20} />
+                      </button>
+                  </div>
+                  
+                  <div className="relative aspect-[3/1] rounded-xl overflow-hidden mb-8 group">
+                      <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
+                          <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
+                          <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
+                          {user?.username === selectedCollection.owner && (
+                              <button 
+                                onClick={() => handleEditCollection(selectedCollection)}
+                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
+                              >
+                                  <Edit2 size={16} />
+                              </button>
+                          )}
+                      </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {colExhibits.map(item => (
+                          <ExhibitCard 
+                             key={item.id} 
+                             item={item} 
+                             theme={theme}
+                             similarExhibits={[]}
+                             onClick={handleExhibitClick}
+                             isLiked={item.likedBy?.includes(user?.username || '') || false}
+                             isFavorited={false}
+                             onLike={(e) => toggleLike(item.id, e)}
+                             onFavorite={(e) => toggleFavorite(item.id, e)}
+                             onAuthorClick={handleAuthorClick}
+                          />
+                      ))}
+                  </div>
+              </div>
+          );
 
       default:
       case 'FEED':
