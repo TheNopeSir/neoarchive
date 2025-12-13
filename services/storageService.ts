@@ -15,8 +15,8 @@ let cache = {
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-// Bump version to force structure update
-const CACHE_VERSION = '2.3.0-DeletedSyncFix'; 
+// Bump version to force structure update and clear old cache
+const CACHE_VERSION = '2.4.0-GlobalForceUpdate'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -68,9 +68,9 @@ const loadFromLocalCache = (): boolean => {
         try {
             const parsed = JSON.parse(json);
             
-            // Version Check
+            // Version Check - Critical for forcing updates
             if (!parsed.version || parsed.version !== CACHE_VERSION) {
-                console.log(`♻️ [Cache] Version mismatch (Old: ${parsed.version}, New: ${CACHE_VERSION}). Clearing cache.`);
+                console.log(`♻️ [Cache] Version mismatch (Old: ${parsed.version}, New: ${CACHE_VERSION}). Clearing cache to apply updates.`);
                 localStorage.removeItem(LOCAL_STORAGE_KEY);
                 return false;
             }
