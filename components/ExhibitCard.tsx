@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Heart, Eye } from 'lucide-react';
 import { Exhibit } from '../types';
@@ -136,9 +137,10 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
          </div>
 
          <div className="mt-auto pt-3 flex justify-between items-center border-t border-dashed border-opacity-20 border-gray-500">
+             {/* VISIBLE ON ALL DEVICES (Removed hidden md:flex) */}
              <div 
                onClick={handleAuthorClickInternal}
-               className={`hidden md:flex text-[10px] truncate max-w-[50%] opacity-60 items-center gap-1 cursor-pointer hover:underline hover:opacity-100 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
+               className={`flex text-[10px] truncate max-w-[60%] opacity-60 items-center gap-1 cursor-pointer hover:underline hover:opacity-100 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
              >
                 <div className="w-4 h-4 rounded-full bg-gray-500 overflow-hidden flex-shrink-0 border border-gray-500">
                      <img src={getUserAvatar(item.owner)} alt={item.owner} />
@@ -146,7 +148,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
                 @{item.owner}
              </div>
              
-             <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+             <div className="flex items-center gap-2 w-auto justify-end">
                  <div className={`flex items-center gap-1 text-[9px] md:text-[10px] opacity-60 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                     <Eye size={12} />
                     <span>{item.views}</span>

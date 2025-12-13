@@ -1,3 +1,4 @@
+
 import { Exhibit, UserProfile, Collection, Notification, Message } from './types';
 import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle } from 'lucide-react';
 import React from 'react';
@@ -17,15 +18,15 @@ export const DefaultCategory = {
 
 // 2. Subcategories
 export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
-    [DefaultCategory.PHONES]: ['Смартфоны', 'Кнопочные телефоны', 'Раскладушки', 'Слайдеры', 'КПК'],
-    [DefaultCategory.GAMES]: ['Картриджи (Dendy, Sega, GB)', 'Диски (PS, Xbox, PC)', 'Кассеты', 'Консоли', 'Аксессуары'],
-    [DefaultCategory.MAGAZINES]: ['Игровые журналы', 'Компьютерные журналы', 'Технические журналы', 'Музыкальные журналы', 'Каталоги', 'Комиксы'],
-    [DefaultCategory.MUSIC]: ['Кассеты', 'Виниловые пластинки', 'CD диски', 'MiniDisc', 'Катушки', 'Плееры'],
-    [DefaultCategory.VIDEO]: ['VHS кассеты', 'Betamax', 'Video CD (VCD)', 'DVD', 'Blu-ray', 'LaserDisc', 'Проигрыватели'],
-    [DefaultCategory.TOYS]: ['Фигурки', 'Модели', 'Конструкторы', 'Мягкие игрушки', 'Роботы/трансформеры', 'Настольные игры', 'Электроника'],
-    [DefaultCategory.COMPUTERS]: ['ПК (настольные)', 'Ноутбуки', 'Нетбуки', 'Моноблоки', 'Планшеты', 'Периферия', 'Комплектующие'],
-    [DefaultCategory.CAMERAS]: ['Пленочные фотоаппараты', 'Цифровые фотоаппараты', 'Видеокамеры', 'Мгновенные (Polaroid)', 'Объективы', 'Аксессуары'],
-    [DefaultCategory.MISC]: ['Часы', 'Калькуляторы', 'Радиоприемники', 'Электроника СССР', 'Бытовая техника', 'Документация', 'Упаковки', 'Аксессуары']
+    [DefaultCategory.PHONES]: ['Смартфоны', 'Кнопочные телефоны', 'Раскладушки', 'Слайдеры', 'КПК', 'Стационарные'],
+    [DefaultCategory.GAMES]: ['Картриджи (8-bit/16-bit)', 'Диски (CD/DVD/BD)', 'Портативные консоли', 'Стационарные консоли', 'Аксессуары', 'Аркадные автоматы'],
+    [DefaultCategory.MAGAZINES]: ['Игровые', 'Компьютерные', 'Технические', 'Музыкальные', 'Комиксы', 'Каталоги', 'Постеры'],
+    [DefaultCategory.MUSIC]: ['Аудиокассеты', 'Винил (LP/EP)', 'CD', 'MiniDisc', 'Катушки', 'Плееры', 'Hi-Fi Техника'],
+    [DefaultCategory.VIDEO]: ['VHS', 'DVD', 'Blu-ray', 'LaserDisc', 'Video CD', 'Проекторы', 'Видеоплееры'],
+    [DefaultCategory.TOYS]: ['Action Figures', 'Конструкторы', 'Мягкие игрушки', 'Роботы', 'Настольные игры', 'Тамагочи/Электроника'],
+    [DefaultCategory.COMPUTERS]: ['Ретро ПК', 'Ноутбуки', 'Комплектующие', 'Периферия', 'Носители информации (Floppy/ZIP)'],
+    [DefaultCategory.CAMERAS]: ['Пленочные', 'Цифровые (Early Digital)', 'Polaroid/Instax', 'Видеокамеры', 'Объективы'],
+    [DefaultCategory.MISC]: ['Часы', 'Калькуляторы', 'Мерч', 'Упаковка', 'Реклама', 'Другое']
 };
 
 // 3. Grades / Conditions
@@ -41,51 +42,50 @@ export const CATEGORY_CONDITIONS: Record<string, string[]> = {
   [DefaultCategory.MISC]: ['Новый', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Нерабочий']
 };
 
-// 4. Specs Templates (Removed 'Название'/'Title' as requested)
+// 4. Specs Templates
 export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
   [DefaultCategory.PHONES]: [
-      'Производитель', 'Модель', 'Год выпуска', 'Диагональ экрана', 'Разрешение экрана', 
-      'Процессор', 'RAM', 'ROM', 'Камера', 'Аккумулятор', 'ОС', 'Цвет', 'Комплектация'
+      'Производитель', 'Модель', 'Год выпуска', 'ОС', 'Тип корпуса', 'Цвет', 'Комплектация'
   ],
   [DefaultCategory.GAMES]: [
-      'Платформа', 'Год выпуска', 'Издатель', 'Жанр', 
-      'Регион', 'Язык', 'Тип носителя', 'Наличие коробки', 'Наличие мануала'
+      'Платформа', 'Название игры', 'Выпуск картриджа', 'Регион', 'Год', 'Комплектация (CIB/Loose)'
   ],
   [DefaultCategory.MAGAZINES]: [
-      'Номер', 'Год/Месяц', 'Издательство', 
-      'Страниц', 'Приложения', 'Язык', 'Тематика'
+      'Название', 'Номер', 'Год/Месяц', 'Издательство', 'Страниц', 'Язык'
   ],
   [DefaultCategory.MUSIC]: [
-      'Исполнитель', 'Альбом', 'Год', 'Лейбл', 'Страна', 
-      'Формат', 'Дисков/Сторон', 'Скорость', 'Вкладыши', 'Издание'
+      'Исполнитель', 'Альбом', 'Формат', 'Год издания', 'Лейбл', 'Страна'
   ],
   [DefaultCategory.VIDEO]: [
-      'Год', 'Дистрибьютор', 'Формат', 'Регион', 
-      'Продолжительность', 'Озвучка', 'Субтитры', 'Соотношение сторон', 'Тип коробки'
+      'Название', 'Формат', 'Год выхода', 'Перевод', 'Дистрибьютор'
   ],
   [DefaultCategory.TOYS]: [
-      'Производитель', 'Серия', 'Год', 'Материал', 
-      'Размер/Масштаб', 'Упаковка', 'Комплектность', 'Артикул', 'Батарейки'
+      'Название', 'Производитель', 'Год', 'Серия', 'Материал', 'Размер'
   ],
   [DefaultCategory.COMPUTERS]: [
-      'Производитель', 'Модель', 'Год', 'Процессор', 'RAM', 
-      'HDD/SSD', 'Видеокарта', 'ОС', 'Порты', 'Комплектация', 'Серийный номер'
+      'Производитель', 'Модель', 'Процессор', 'ОЗУ', 'HDD', 'ОС', 'Год'
   ],
   [DefaultCategory.CAMERAS]: [
-      'Производитель', 'Модель', 'Год', 'Тип', 'Формат/Разрешение', 
-      'Объектив', 'Байонет', 'Затвор', 'Экспонометр', 'Комплектация'
+      'Бренд', 'Модель', 'Тип', 'Объектив', 'Год', 'Работоспособность'
   ],
   [DefaultCategory.MISC]: [
-      'Тип предмета', 'Производитель', 'Модель', 'Год', 
-      'Материал', 'Функциональность', 'Комплектация', 'Особые отметки'
+      'Предмет', 'Производитель', 'Год', 'Материал', 'Описание'
   ]
 };
 
 // Common values for autocomplete suggestions
 export const COMMON_SPEC_VALUES: Record<string, string[]> = {
+    'Выпуск картриджа': [
+        'Оригинал стар. (Vintage Original)',
+        'Пиратский стар. (Vintage Bootleg)',
+        'Оригинал-новодел (Modern Repro/Official)',
+        'Пиратский новодел (Modern Bootleg)',
+        'Другое / Hack / Homebrew'
+    ],
+    'Комплектация (CIB/Loose)': ['Только картридж', 'С коробкой', 'Полный комплект (CIB)', 'Запечатанный'],
     'Производитель': ['Sony', 'Nokia', 'Samsung', 'Panasonic', 'Apple', 'Nintendo', 'Sega', 'Casio', 'Motorola', 'Siemens', 'Canon', 'Nikon', 'Kodak', 'Polaroid', 'JVC', 'Sharp', 'Philips'],
     'Год выпуска': Array.from({length: 50}, (_, i) => (2024 - i).toString()), // 2024 down to 1974
-    'Платформа': ['NES/Dendy', 'Sega Mega Drive', 'PlayStation 1', 'PlayStation 2', 'Game Boy', 'Game Boy Color', 'Game Boy Advance', 'Xbox', 'PC (Windows 98)', 'PC (DOS)', 'PSP'],
+    'Платформа': ['NES/Dendy', 'Sega Mega Drive', 'PlayStation 1', 'PlayStation 2', 'Game Boy', 'Game Boy Color', 'Game Boy Advance', 'Xbox', 'PC', 'PSP'],
     'Регион': ['PAL', 'NTSC-U', 'NTSC-J', 'Region Free'],
     'Язык': ['Русский', 'English', '日本語', 'Deutsch', 'Français'],
     'Материал': ['Пластик', 'Металл', 'Дерево', 'Стекло', 'Винил'],
