@@ -23,6 +23,7 @@ export interface Exhibit {
   quality: string;
   specs: Record<string, string>;
   comments: Comment[];
+  isDraft?: boolean; // NEW: Draft status
 }
 
 export interface Collection {

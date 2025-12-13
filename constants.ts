@@ -17,15 +17,15 @@ export const DefaultCategory = {
 
 // 2. Subcategories
 export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
-    [DefaultCategory.PHONES]: ['Смартфоны', 'Кнопочные телефоны', 'Раскладушки', 'Слайдеры'],
-    [DefaultCategory.GAMES]: ['Картриджи (Dendy, Sega, GB)', 'Диски (PS, Xbox, PC)', 'Кассеты', 'Цифровые коды'],
-    [DefaultCategory.MAGAZINES]: ['Игровые журналы', 'Компьютерные журналы', 'Технические журналы', 'Музыкальные журналы', 'Каталоги'],
-    [DefaultCategory.MUSIC]: ['Кассеты', 'Виниловые пластинки', 'CD диски', 'MiniDisc', 'Катушки'],
-    [DefaultCategory.VIDEO]: ['VHS кассеты', 'Betamax', 'Video CD (VCD)', 'DVD', 'Blu-ray', 'LaserDisc'],
+    [DefaultCategory.PHONES]: ['Смартфоны', 'Кнопочные телефоны', 'Раскладушки', 'Слайдеры', 'КПК'],
+    [DefaultCategory.GAMES]: ['Картриджи (Dendy, Sega, GB)', 'Диски (PS, Xbox, PC)', 'Кассеты', 'Консоли', 'Аксессуары'],
+    [DefaultCategory.MAGAZINES]: ['Игровые журналы', 'Компьютерные журналы', 'Технические журналы', 'Музыкальные журналы', 'Каталоги', 'Комиксы'],
+    [DefaultCategory.MUSIC]: ['Кассеты', 'Виниловые пластинки', 'CD диски', 'MiniDisc', 'Катушки', 'Плееры'],
+    [DefaultCategory.VIDEO]: ['VHS кассеты', 'Betamax', 'Video CD (VCD)', 'DVD', 'Blu-ray', 'LaserDisc', 'Проигрыватели'],
     [DefaultCategory.TOYS]: ['Фигурки', 'Модели', 'Конструкторы', 'Мягкие игрушки', 'Роботы/трансформеры', 'Настольные игры', 'Электроника'],
-    [DefaultCategory.COMPUTERS]: ['ПК (настольные)', 'Ноутбуки', 'Нетбуки', 'Моноблоки', 'Планшеты', 'КПК', 'Периферия', 'Комплектующие'],
+    [DefaultCategory.COMPUTERS]: ['ПК (настольные)', 'Ноутбуки', 'Нетбуки', 'Моноблоки', 'Планшеты', 'Периферия', 'Комплектующие'],
     [DefaultCategory.CAMERAS]: ['Пленочные фотоаппараты', 'Цифровые фотоаппараты', 'Видеокамеры', 'Мгновенные (Polaroid)', 'Объективы', 'Аксессуары'],
-    [DefaultCategory.MISC]: ['Часы', 'Калькуляторы', 'Плееры', 'Радиоприемники', 'Электроника СССР', 'Бытовая техника', 'Документация', 'Упаковки', 'Аксессуары']
+    [DefaultCategory.MISC]: ['Часы', 'Калькуляторы', 'Радиоприемники', 'Электроника СССР', 'Бытовая техника', 'Документация', 'Упаковки', 'Аксессуары']
 };
 
 // 3. Grades / Conditions
@@ -41,18 +41,18 @@ export const CATEGORY_CONDITIONS: Record<string, string[]> = {
   [DefaultCategory.MISC]: ['Новый', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Нерабочий']
 };
 
-// 4. Specs Templates
+// 4. Specs Templates (Removed 'Название'/'Title' as requested)
 export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
   [DefaultCategory.PHONES]: [
       'Производитель', 'Модель', 'Год выпуска', 'Диагональ экрана', 'Разрешение экрана', 
       'Процессор', 'RAM', 'ROM', 'Камера', 'Аккумулятор', 'ОС', 'Цвет', 'Комплектация'
   ],
   [DefaultCategory.GAMES]: [
-      'Название', 'Платформа', 'Год выпуска', 'Издатель', 'Жанр', 
+      'Платформа', 'Год выпуска', 'Издатель', 'Жанр', 
       'Регион', 'Язык', 'Тип носителя', 'Наличие коробки', 'Наличие мануала'
   ],
   [DefaultCategory.MAGAZINES]: [
-      'Название', 'Номер', 'Год/Месяц', 'Издательство', 
+      'Номер', 'Год/Месяц', 'Издательство', 
       'Страниц', 'Приложения', 'Язык', 'Тематика'
   ],
   [DefaultCategory.MUSIC]: [
@@ -60,11 +60,11 @@ export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
       'Формат', 'Дисков/Сторон', 'Скорость', 'Вкладыши', 'Издание'
   ],
   [DefaultCategory.VIDEO]: [
-      'Название', 'Год', 'Дистрибьютор', 'Формат', 'Регион', 
+      'Год', 'Дистрибьютор', 'Формат', 'Регион', 
       'Продолжительность', 'Озвучка', 'Субтитры', 'Соотношение сторон', 'Тип коробки'
   ],
   [DefaultCategory.TOYS]: [
-      'Название', 'Производитель', 'Серия', 'Год', 'Материал', 
+      'Производитель', 'Серия', 'Год', 'Материал', 
       'Размер/Масштаб', 'Упаковка', 'Комплектность', 'Артикул', 'Батарейки'
   ],
   [DefaultCategory.COMPUTERS]: [
@@ -79,6 +79,18 @@ export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
       'Тип предмета', 'Производитель', 'Модель', 'Год', 
       'Материал', 'Функциональность', 'Комплектация', 'Особые отметки'
   ]
+};
+
+// Common values for autocomplete suggestions
+export const COMMON_SPEC_VALUES: Record<string, string[]> = {
+    'Производитель': ['Sony', 'Nokia', 'Samsung', 'Panasonic', 'Apple', 'Nintendo', 'Sega', 'Casio', 'Motorola', 'Siemens', 'Canon', 'Nikon', 'Kodak', 'Polaroid', 'JVC', 'Sharp', 'Philips'],
+    'Год выпуска': Array.from({length: 50}, (_, i) => (2024 - i).toString()), // 2024 down to 1974
+    'Платформа': ['NES/Dendy', 'Sega Mega Drive', 'PlayStation 1', 'PlayStation 2', 'Game Boy', 'Game Boy Color', 'Game Boy Advance', 'Xbox', 'PC (Windows 98)', 'PC (DOS)', 'PSP'],
+    'Регион': ['PAL', 'NTSC-U', 'NTSC-J', 'Region Free'],
+    'Язык': ['Русский', 'English', '日本語', 'Deutsch', 'Français'],
+    'Материал': ['Пластик', 'Металл', 'Дерево', 'Стекло', 'Винил'],
+    'ОС': ['Symbian', 'Windows Mobile', 'Palm OS', 'Android 1.6', 'iOS 3', 'Java MIDP 2.0'],
+    'Цвет': ['Черный', 'Белый', 'Серебристый', 'Прозрачный', 'Синий', 'Красный', 'Желтый']
 };
 
 export const BADGES = {

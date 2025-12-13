@@ -15,7 +15,7 @@ let cache = {
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
 // Bump this version on every major update/deploy to force cache invalidation
-const CACHE_VERSION = '2.0.1-Deploy-Clear'; 
+const CACHE_VERSION = '2.1.0-Cleanup-V1'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -346,7 +346,13 @@ export const getExhibits = (): Exhibit[] => cache.exhibits;
 
 export const saveExhibit = async (exhibit: Exhibit) => {
   exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
-  cache.exhibits.unshift(exhibit);
+  // Add to cache first
+  const existingIdx = cache.exhibits.findIndex(e => e.id === exhibit.id);
+  if (existingIdx !== -1) {
+      cache.exhibits[existingIdx] = exhibit;
+  } else {
+      cache.exhibits.unshift(exhibit);
+  }
   saveToLocalCache();
   await supabase.from('exhibits').upsert(toDbPayload(exhibit));
 };
@@ -361,9 +367,30 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
 };
 
 export const deleteExhibit = async (id: string) => {
+  // 1. Remove Exhibit
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
+  
+  // 2. Remove associated Notifications (Cleanup)
+  cache.notifications = cache.notifications.filter(n => n.targetId !== id);
+  
   saveToLocalCache();
+  
+  // 3. Database operations
   await supabase.from('exhibits').delete().eq('id', id);
+  
+  // Cleanup Notifications in DB? Since we store them as JSON blobs in rows by ID,
+  // we would need a sophisticated query or filter. 
+  // For this simple JSONB setup, we will just rely on the local cache filter for UI,
+  // and let old notifications persist in DB until a full cleanup script runs, 
+  // OR we can try to delete where notification data->>'targetId' == id if we had columns.
+  // Given the structure, we'll iterate locally and upsert deletions or just ignore for now to keep it simple.
+  // Actually, let's try to delete notifications that match.
+  const toDelete = cache.notifications.filter(n => n.targetId === id).map(n => n.id);
+  if (toDelete.length > 0) {
+      // Logic for client-side filtering already done above. 
+      // This part is tricky without a relational DB. 
+      // We will rely on client-side filtering for now.
+  }
 };
 
 export const getCollections = (): Collection[] => cache.collections;
@@ -399,17 +426,24 @@ export const saveNotification = async (notif: Notification) => {
 };
 
 export const markNotificationsRead = async (recipient: string) => {
+    let hasUpdates = false;
     const toUpdate: Notification[] = [];
+    
     cache.notifications.forEach(n => {
         if (n.recipient === recipient && !n.isRead) {
              n.isRead = true;
              toUpdate.push(n);
+             hasUpdates = true;
         }
     });
-    saveToLocalCache();
-    if (toUpdate.length > 0) {
-        const payload = toUpdate.map(n => toDbPayload(n));
-        await supabase.from('notifications').upsert(payload);
+    
+    if (hasUpdates) {
+        saveToLocalCache();
+        // Batch upsert to sync read status
+        if (toUpdate.length > 0) {
+            const payload = toUpdate.map(n => toDbPayload(n));
+            await supabase.from('notifications').upsert(payload);
+        }
     }
 };
 

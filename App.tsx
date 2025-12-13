@@ -6,7 +6,7 @@ import {
   MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
   Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
   Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download, Box,
-  Package
+  Package, FileEdit
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -18,7 +18,7 @@ import MatrixLogin from './components/MatrixLogin';
 import HallOfFame from './components/HallOfFame';
 import MyCollection from './components/MyCollection';
 import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
-import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES } from './constants';
+import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
 import { fileToBase64, isOffline } from './services/storageService';
@@ -72,7 +72,6 @@ const MobileNavigation: React.FC<{
     onResetFeed: () => void;
     onProfileClick: () => void;
 }> = ({ theme, view, setView, updateHash, hasNotifications, username, onResetFeed, onProfileClick }) => {
-    // Navigation items now explicitly push hash updates to prevent view resets
     const navItems = [
         { id: 'FEED', icon: Home, label: 'ГЛАВНАЯ', action: () => { onResetFeed(); setView('FEED'); updateHash('/feed'); } },
         { id: 'MY_COLLECTION', icon: Package, label: 'ПОЛКА', action: () => { setView('MY_COLLECTION'); updateHash('/my-collection'); } },
@@ -216,6 +215,7 @@ export default function App() {
   const [viewedProfile, setViewedProfile] = useState<string | null>(null);
   const [activityTab, setActivityTab] = useState<'UPDATES' | 'DIALOGS'>('UPDATES');
   const [badgeIndex, setBadgeIndex] = useState(0);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // Mobile search state
   
   // Pagination State
   const [visibleCount, setVisibleCount] = useState(12);
@@ -243,13 +243,16 @@ export default function App() {
   // Collection Editing
   const [collectionToEdit, setCollectionToEdit] = useState<Collection | null>(null);
 
+  // Exhibit Editing
+  const [editingExhibitId, setEditingExhibitId] = useState<string | null>(null);
+
   // Session tracking
   const [viewedExhibitsSession, setViewedExhibitsSession] = useState<Set<string>>(new Set());
 
   // Create Modal State
   const [newExhibit, setNewExhibit] = useState<Partial<Exhibit>>({
     category: DefaultCategory.PHONES,
-    subcategory: '', // Init empty
+    subcategory: '', 
     specs: generateSpecsForCategory(DefaultCategory.PHONES),
     condition: getDefaultCondition(DefaultCategory.PHONES),
     imageUrls: []
@@ -292,15 +295,11 @@ export default function App() {
       return false;
     };
 
-    // PWA Install Prompt Listener
     const handleBeforeInstallPrompt = (e: any) => {
         e.preventDefault();
         setDeferredPrompt(e);
-        
-        // Show only if not dismissed and shown less than 2 times
         const isDismissed = localStorage.getItem('pwa_dismissed') === 'true';
         const showCount = parseInt(localStorage.getItem('pwa_show_count') || '0', 10);
-
         if (!isDismissed && showCount < 2) {
             setShowInstallBanner(true);
             localStorage.setItem('pwa_show_count', (showCount + 1).toString());
@@ -312,10 +311,8 @@ export default function App() {
         try {
             const restoredUser = await db.initializeDatabase();
             if (restoredUser) {
-                 console.log("🟢 [App] Session restored for:", restoredUser.username);
                  setUser(restoredUser);
                  refreshData();
-                 // Do NOT force feed here if there's a hash, let hash routing handle it
                  if (!window.location.hash || window.location.hash === '#/') {
                      setView('FEED');
                      updateHash('/feed');
@@ -324,7 +321,6 @@ export default function App() {
                  setView('AUTH');
             }
         } catch (e: any) {
-            console.error("Init failed", e);
             setView('AUTH');
         } finally {
             setIsInitializing(false);
@@ -343,7 +339,6 @@ export default function App() {
       if (outcome === 'accepted') {
           setDeferredPrompt(null);
           setShowInstallBanner(false);
-          // If user installs, consider it dismissed/handled
           localStorage.setItem('pwa_dismissed', 'true');
       }
   };
@@ -357,23 +352,18 @@ export default function App() {
   // --- HASH ROUTING ---
   useEffect(() => {
       const handleHashChange = () => {
-          // STRICT GATEKEEPING: If no user, force AUTH view regardless of hash
           if (!user) {
               if (view !== 'AUTH') setView('AUTH');
               return;
           }
-          
           const hash = window.location.hash;
-          
           if (hash === '#/activity') { setView('ACTIVITY'); return; }
           if (hash === '#/search') { setView('SEARCH'); return; }
           if (hash === '#/hall-of-fame') { setView('HALL_OF_FAME'); return; }
           if (hash === '#/my-collection') { setView('MY_COLLECTION'); return; }
-
           if (hash === '#/create') { setView('CREATE_HUB'); return; }
           if (hash === '#/create/artifact') { setView('CREATE_ARTIFACT'); return; }
           if (hash === '#/create/collection') { setView('CREATE_COLLECTION'); return; }
-
           if (hash.startsWith('#/chat/')) {
               const partner = hash.split('/')[2];
               if (partner) { setChatPartner(partner); setView('DIRECT_CHAT'); }
@@ -396,7 +386,6 @@ export default function App() {
               if (username) { setViewedProfile(username); setView('USER_PROFILE'); }
               return;
           } 
-          
           if (hash === '#/feed' || hash === '' || hash === '#/') {
               setView('FEED');
           }
@@ -422,7 +411,6 @@ export default function App() {
   // --- SWIPE LOGIC ---
   const handleGlobalSwipeLeft = () => {
       if (view === 'AUTH' || !user) return;
-      // Simple loop: Feed -> My Collection -> Create -> Activity -> Profile
       const order: ViewState[] = ['FEED', 'MY_COLLECTION', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
       const idx = order.indexOf(view);
       if (idx !== -1 && idx < order.length - 1) {
@@ -497,7 +485,6 @@ export default function App() {
       try {
           db.logoutUser().catch(e => console.warn("Background logout error", e));
       } finally {
-          // Clear hash to prevent routing conflicts before clearing user
           window.location.hash = ''; 
           setUser(null);
           setView('AUTH');
@@ -529,6 +516,23 @@ export default function App() {
       updateHash(`/exhibit/${item.slug || item.id}`);
   };
 
+  const handleEditExhibit = (item: Exhibit) => {
+      setEditingExhibitId(item.id);
+      setNewExhibit({
+          title: item.title,
+          description: item.description,
+          category: item.category,
+          subcategory: item.subcategory,
+          condition: item.condition,
+          imageUrls: item.imageUrls,
+          videoUrl: item.videoUrl,
+          specs: item.specs || {},
+          isDraft: item.isDraft
+      });
+      setView('CREATE_ARTIFACT');
+      updateHash('/create/artifact');
+  };
+
   const handleCollectionClick = (col: Collection) => {
       setSelectedCollection(col);
       setView('COLLECTION_DETAIL');
@@ -552,51 +556,61 @@ export default function App() {
       refreshData();
   };
 
-  const handleCreateExhibit = async () => {
+  const handleCreateExhibit = async (isDraft = false) => {
      if (!newExhibit.title || newExhibit.title.length < 3) {
          alert('ОШИБКА: ЗАГОЛОВОК ДОЛЖЕН БЫТЬ НЕ МЕНЕЕ 3 СИМВОЛОВ');
          return;
      }
-     if (!newExhibit.description || newExhibit.description.length < 10) {
-         alert('ОШИБКА: ОПИСАНИЕ ДОЛЖНО БЫТЬ НЕ МЕНЕЕ 10 СИМВОЛОВ');
+     if (!newExhibit.description && !isDraft) {
+         alert('ОШИБКА: ОПИСАНИЕ ОБЯЗАТЕЛЬНО ДЛЯ ПУБЛИКАЦИИ');
          return;
      }
-     if (!newExhibit.imageUrls || newExhibit.imageUrls.length === 0) {
+     if ((!newExhibit.imageUrls || newExhibit.imageUrls.length === 0) && !isDraft) {
          alert('ОШИБКА: НЕОБХОДИМО ЗАГРУЗИТЬ МИНИМУМ ОДНО ИЗОБРАЖЕНИЕ');
          return;
      }
+     
      setIsLoading(true);
 
-     const contentToCheck = `${newExhibit.title} ${newExhibit.description}`;
-     const modResult = await moderateContent(contentToCheck);
-     if (!modResult.allowed) {
-         setIsLoading(false);
-         alert(`ОТКАЗАНО: ${modResult.reason || 'НАРУШЕНИЕ ПРАВИЛ СООБЩЕСТВА'}`);
-         return;
+     if (!isDraft) {
+         const contentToCheck = `${newExhibit.title} ${newExhibit.description}`;
+         const modResult = await moderateContent(contentToCheck);
+         if (!modResult.allowed) {
+             setIsLoading(false);
+             alert(`ОТКАЗАНО: ${modResult.reason || 'НАРУШЕНИЕ ПРАВИЛ СООБЩЕСТВА'}`);
+             return;
+         }
      }
 
      const exhibit: Exhibit = {
-         id: Date.now().toString(),
+         id: editingExhibitId || Date.now().toString(),
          title: newExhibit.title,
          description: newExhibit.description || '',
-         imageUrls: newExhibit.imageUrls,
+         imageUrls: newExhibit.imageUrls || [],
          videoUrl: newExhibit.videoUrl, 
          category: newExhibit.category || DefaultCategory.MISC,
-         subcategory: newExhibit.subcategory, // NEW
+         subcategory: newExhibit.subcategory, 
          owner: user?.username || 'Guest',
          timestamp: new Date().toLocaleString('ru-RU'),
-         likes: 0,
-         likedBy: [],
-         views: 0,
+         likes: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likes || 0 : 0,
+         likedBy: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likedBy || [] : [],
+         views: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.views || 0 : 0,
          specs: newExhibit.specs || {},
-         comments: [],
+         comments: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.comments || [] : [],
          quality: newExhibit.quality || 'Не указано',
-         condition: newExhibit.condition || getDefaultCondition(newExhibit.category || DefaultCategory.MISC)
+         condition: newExhibit.condition || getDefaultCondition(newExhibit.category || DefaultCategory.MISC),
+         isDraft: isDraft
      };
 
-     await db.saveExhibit(exhibit); 
+     if (editingExhibitId) {
+         await db.updateExhibit(exhibit);
+     } else {
+         await db.saveExhibit(exhibit); 
+     }
+     
      setExhibits([...db.getExhibits()]);
      
+     // Reset
      setNewExhibit({ 
          category: DefaultCategory.PHONES, 
          specs: generateSpecsForCategory(DefaultCategory.PHONES),
@@ -604,9 +618,17 @@ export default function App() {
          imageUrls: [],
          videoUrl: ''
      });
+     setEditingExhibitId(null);
      setIsLoading(false);
-     setView('FEED');
-     updateHash('/feed');
+     
+     if (isDraft) {
+         alert('ЧЕРНОВИК СОХРАНЕН');
+         setView('MY_COLLECTION');
+         updateHash('/my-collection');
+     } else {
+         setView('FEED');
+         updateHash('/feed');
+     }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -639,19 +661,14 @@ export default function App() {
           }
           try {
               const base64 = await fileToBase64(file);
-              setEditAvatarUrl(base64); // Preview
+              setEditAvatarUrl(base64); 
               
               if (user) {
-                  // Explicitly create a NEW object to trigger re-render
                   const updatedUser = { 
                       ...user, 
                       avatarUrl: base64 
                   };
-                  
-                  // Optimistic update
                   setUser(updatedUser); 
-                  
-                  // Persist
                   await db.updateUserProfile(updatedUser);
               }
           } catch (err: any) {
@@ -958,7 +975,9 @@ export default function App() {
   const handleOpenUpdates = () => {
       setActivityTab('UPDATES');
       if (user) {
+          // FORCE UPDATE OF READ STATUS ON CLICK
           db.markNotificationsRead(user.username);
+          // Re-fetch to update UI immediately
           const updatedNotifs = db.getNotifications();
           setNotifications([...updatedNotifs]);
       }
@@ -967,7 +986,7 @@ export default function App() {
   };
 
   const getUserAchievements = (username: string) => {
-      const userExhibits = exhibits.filter(e => e.owner === username);
+      const userExhibits = exhibits.filter(e => e.owner === username && !e.isDraft);
       const totalLikes = userExhibits.reduce((acc, curr) => acc + curr.likes, 0);
       const userComments = exhibits.flatMap(e => e.comments).filter(c => c.author === username);
       const badges: string[] = ['HELLO_WORLD']; 
@@ -1027,7 +1046,13 @@ export default function App() {
                   user={user}
                   exhibits={myItems}
                   onBack={() => { setView('FEED'); updateHash('/feed'); }}
-                  onExhibitClick={handleExhibitClick}
+                  onExhibitClick={(item) => {
+                      if (item.isDraft) {
+                          handleEditExhibit(item);
+                      } else {
+                          handleExhibitClick(item);
+                      }
+                  }}
               />
           );
 
@@ -1140,7 +1165,7 @@ export default function App() {
                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                {collections
                                   .filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()))
-                                  .map(c => renderCollectionCard(c))
+                                  .map(renderCollectionCard)
                                }
                            </div>
                            {collections.length === 0 && (
@@ -1151,10 +1176,35 @@ export default function App() {
 
                    {searchMode === 'ARTIFACTS' && (
                        <div className="animate-in fade-in slide-in-from-bottom-2">
+                           {!searchQuery && (
+                               <>
+                                   <h3 className="font-pixel text-[10px] opacity-70 mb-4 flex items-center gap-2">
+                                       <Grid size={14}/> КАТЕГОРИИ
+                                   </h3>
+                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+                                       {Object.values(DefaultCategory).map((cat: string) => (
+                                           <button 
+                                              key={cat}
+                                              onClick={() => {
+                                                  setSelectedCategory(cat);
+                                                  setView('FEED');
+                                                  updateHash('/feed');
+                                              }}
+                                              className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${
+                                                  theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'
+                                              }`}
+                                           >
+                                               <span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span>
+                                           </button>
+                                       ))}
+                                   </div>
+                               </>
+                           )}
+
                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                {(searchQuery 
-                                 ? exhibits.filter(ex => ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))
-                                 : exhibits.sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)
+                                 ? exhibits.filter(ex => !ex.isDraft && (ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase())))
+                                 : exhibits.filter(ex => !ex.isDraft).sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)
                                ).map((item: Exhibit) => (
                                     <ExhibitCard 
                                         key={item.id} 
@@ -1181,7 +1231,7 @@ export default function App() {
                   <h2 className="text-xl font-pixel mb-8 text-center uppercase">Выберите тип загрузки</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <button 
-                        onClick={() => { setView('CREATE_ARTIFACT'); updateHash('/create/artifact'); }}
+                        onClick={() => { setEditingExhibitId(null); setNewExhibit({ category: DefaultCategory.PHONES, specs: generateSpecsForCategory(DefaultCategory.PHONES), condition: getDefaultCondition(DefaultCategory.PHONES), imageUrls: [] }); setView('CREATE_ARTIFACT'); updateHash('/create/artifact'); }}
                         className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
                             theme === 'dark' ? 'border-dark-dim hover:border-dark-primary bg-dark-surface' : 'border-light-dim hover:border-light-accent bg-white'
                         }`}
@@ -1215,7 +1265,7 @@ export default function App() {
       
       case 'EDIT_COLLECTION':
           if (!collectionToEdit) return <div>Error</div>;
-          const myExhibits = exhibits.filter(e => e.owner === user?.username);
+          const myExhibits = exhibits.filter(e => e.owner === user?.username && !e.isDraft);
 
           return (
               <div className="max-w-2xl mx-auto animate-in fade-in pb-32">
@@ -1308,7 +1358,7 @@ export default function App() {
               <div className="max-w-xl mx-auto animate-in fade-in">
                  <button onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100">
                      <ArrowLeft size={16} /> НАЗАД
-                  </button>
+                 </button>
                  <h2 className="text-sm md:text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
                  <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
                      <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
@@ -1363,7 +1413,7 @@ export default function App() {
              <div className="flex items-center gap-2 mb-6">
                  <button onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} className="md:hidden"><ChevronDown className="rotate-90" /></button>
                  <button onClick={() => { setView('FEED'); updateHash('/feed'); }} className="hidden md:block"><ChevronDown className="rotate-90" /></button>
-                 <h2 className="text-sm md:text-xl font-pixel">ЗАГРУЗКА АРТЕФАКТА</h2>
+                 <h2 className="text-sm md:text-xl font-pixel">{editingExhibitId ? 'РЕДАКТИРОВАНИЕ' : 'ЗАГРУЗКА АРТЕФАКТА'}</h2>
              </div>
              
              <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
@@ -1384,12 +1434,15 @@ export default function App() {
                              <button
                                 key={cat}
                                 onClick={() => {
-                                    setNewExhibit({
-                                        ...newExhibit, 
-                                        category: cat, 
-                                        specs: generateSpecsForCategory(cat),
-                                        condition: getDefaultCondition(cat)
-                                    });
+                                    if(newExhibit.category !== cat) {
+                                        setNewExhibit({
+                                            ...newExhibit, 
+                                            category: cat, 
+                                            subcategory: '', // Reset subcategory on category change
+                                            specs: generateSpecsForCategory(cat),
+                                            condition: getDefaultCondition(cat)
+                                        });
+                                    }
                                 }}
                                 className={`px-3 py-1 rounded text-[10px] font-pixel tracking-wider border ${
                                     newExhibit.category === cat 
@@ -1409,6 +1462,7 @@ export default function App() {
                                  setNewExhibit({
                                      ...newExhibit, 
                                      category: cat, 
+                                     subcategory: '',
                                      specs: generateSpecsForCategory(cat),
                                      condition: getDefaultCondition(cat)
                                  });
@@ -1421,6 +1475,33 @@ export default function App() {
                          >
                              {Object.values(DefaultCategory).map((cat: string) => (
                                  <option key={cat} value={cat}>{cat}</option>
+                             ))}
+                         </select>
+                         <ChevronDown 
+                             size={16} 
+                             className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                                 theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
+                             }`} 
+                         />
+                     </div>
+                 </div>
+
+                 {/* SUBCATEGORY SELECTOR */}
+                 <div className="space-y-1">
+                     <label className="text-[10px] font-pixel uppercase opacity-70">ПОДКАТЕГОРИЯ</label>
+                     <div className="relative">
+                         <select
+                             value={newExhibit.subcategory || ''}
+                             onChange={(e) => setNewExhibit({...newExhibit, subcategory: e.target.value})}
+                             className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${
+                                 theme === 'dark' 
+                                 ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
+                                 : 'bg-white text-black border-light-dim focus:border-light-accent'
+                             }`}
+                         >
+                             <option value="">-- ВЫБЕРИТЕ --</option>
+                             {(CATEGORY_SUBCATEGORIES[newExhibit.category || DefaultCategory.MISC] || []).map((sub: string) => (
+                                 <option key={sub} value={sub}>{sub}</option>
                              ))}
                          </select>
                          <ChevronDown 
@@ -1518,7 +1599,7 @@ export default function App() {
                      <div className="text-[9px] opacity-40 font-mono">Поддерживается 1 видеофайл или ссылка</div>
                  </div>
 
-                 {/* Dynamic Specs Fields */}
+                 {/* Dynamic Specs Fields with Autocomplete */}
                  <div className="space-y-3">
                      <label className="text-[10px] font-pixel uppercase opacity-70 block border-b pb-1">ХАРАКТЕРИСТИКИ</label>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1527,6 +1608,7 @@ export default function App() {
                                  <div key={key} className="space-y-1">
                                      <label className="text-[10px] font-mono uppercase opacity-60 truncate block">{key}</label>
                                      <input 
+                                         list={`list-${key}`}
                                          className={`w-full bg-transparent border rounded p-2 text-sm focus:outline-none font-mono ${
                                              theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
                                          }`}
@@ -1539,6 +1621,14 @@ export default function App() {
                                              });
                                          }}
                                      />
+                                     {/* Datalist for autocomplete suggestions */}
+                                     {COMMON_SPEC_VALUES[key] && (
+                                         <datalist id={`list-${key}`}>
+                                             {COMMON_SPEC_VALUES[key].map((opt, i) => (
+                                                 <option key={i} value={opt} />
+                                             ))}
+                                         </datalist>
+                                     )}
                                  </div>
                              ))
                          ) : (
@@ -1559,15 +1649,29 @@ export default function App() {
                      />
                  </div>
 
-                 <button 
-                    onClick={handleCreateExhibit}
-                    disabled={isLoading}
-                    className={`w-full py-3 mt-4 font-pixel font-bold uppercase tracking-widest flex items-center justify-center gap-2 ${
-                        theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
-                    }`}
-                 >
-                    {isLoading ? '...' : 'СОХРАНИТЬ'} <Database size={18} />
-                 </button>
+                 <div className="flex gap-4 mt-4">
+                     <button 
+                        onClick={() => handleCreateExhibit(true)} // Save as Draft
+                        disabled={isLoading}
+                        className={`flex-1 py-3 font-pixel font-bold uppercase tracking-widest flex items-center justify-center gap-2 border ${
+                            theme === 'dark' 
+                            ? 'border-gray-600 text-gray-400 hover:text-white hover:border-white' 
+                            : 'border-gray-300 text-gray-500 hover:text-black hover:border-black'
+                        }`}
+                     >
+                        {isLoading ? '...' : 'ЧЕРНОВИК'} <FileEdit size={18} />
+                     </button>
+
+                     <button 
+                        onClick={() => handleCreateExhibit(false)} // Publish
+                        disabled={isLoading}
+                        className={`flex-[2] py-3 font-pixel font-bold uppercase tracking-widest flex items-center justify-center gap-2 ${
+                            theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
+                        }`}
+                     >
+                        {isLoading ? '...' : (editingExhibitId ? 'ОБНОВИТЬ' : 'ПУБЛИКАЦИЯ')} <Database size={18} />
+                     </button>
+                 </div>
              </div>
           </div>
         );
@@ -1691,7 +1795,7 @@ export default function App() {
              telegram: ''
          } as UserProfile;
 
-         const profileArtifacts = exhibits.filter(e => e.owner === profileUsername);
+         const profileArtifacts = exhibits.filter(e => e.owner === profileUsername && !e.isDraft);
          const profileCollections = collections.filter(c => c.owner === profileUsername);
          const isCurrentUser = user?.username === profileUsername;
          const isSubscribed = user?.following.includes(profileUsername) || false;
@@ -1869,7 +1973,7 @@ export default function App() {
                              onAuthorClick={() => {}}
                          />
                      ))}
-                     {profileTab === 'COLLECTIONS' && profileCollections.map(c => renderCollectionCard(c))}
+                     {profileTab === 'COLLECTIONS' && profileCollections.map(renderCollectionCard)}
                  </div>
                  
                  <div className="pt-8 border-t border-dashed border-gray-500/30">
@@ -1918,7 +2022,7 @@ export default function App() {
                 onFollow={handleFollow}
                 onMessage={handleOpenChat}
                 onDelete={user?.username === selectedExhibit.owner || user?.isAdmin ? handleDeleteExhibit : undefined}
-                onEdit={() => {/* TODO */}}
+                onEdit={user?.username === selectedExhibit.owner || user?.isAdmin ? handleEditExhibit : undefined}
                 isFollowing={user?.following.includes(selectedExhibit.owner) || false}
                 currentUser={user?.username || ''}
                 isAdmin={user?.isAdmin || false}
@@ -2000,7 +2104,7 @@ export default function App() {
 
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                              {exhibits
-                                .filter(ex => selectedCategory === 'ВСЕ' || ex.category === selectedCategory)
+                                .filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory))
                                 .slice(0, visibleCount)
                                 .map((item: Exhibit) => (
                                     <ExhibitCard 
@@ -2027,7 +2131,7 @@ export default function App() {
 
                  {feedMode === 'COLLECTIONS' && (
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                         {collections.map(c => renderCollectionCard(c))}
+                         {collections.map(renderCollectionCard)}
                      </div>
                  )}
              </div>
@@ -2064,8 +2168,8 @@ export default function App() {
       )}
       
       {view !== 'AUTH' && (
-        <header className={`hidden md:flex sticky top-0 z-50 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
-            <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between w-full">
+        <header className={`sticky top-0 z-50 backdrop-blur-md border-b flex flex-col md:flex-row items-center md:justify-between px-4 py-3 md:h-14 ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
+            <div className="w-full md:w-auto flex items-center justify-between">
                 <div 
                     onClick={() => { setView('FEED'); setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
                     className="font-pixel text-lg font-bold cursor-pointer flex items-center gap-2"
@@ -2073,20 +2177,33 @@ export default function App() {
                     <Terminal size={20} className={theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'} />
                     <span>NEO_ARCHIVE</span>
                 </div>
+                
+                {/* Mobile Header Actions */}
+                <div className="flex md:hidden items-center gap-4">
+                    <button onClick={() => setMobileSearchOpen(!mobileSearchOpen)} className="opacity-70">
+                        <Search size={20} />
+                    </button>
+                    <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="opacity-70">
+                        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                    </button>
+                </div>
+            </div>
 
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <input 
-                           value={searchQuery}
-                           onChange={(e) => { setSearchQuery(e.target.value); if(view !== 'SEARCH') setView('SEARCH'); }}
-                           placeholder="ПОИСК..."
-                           className={`w-64 bg-transparent border rounded-full px-3 py-1 text-xs font-pixel focus:outline-none focus:w-full transition-all ${
-                               theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
-                           }`}
-                        />
-                        <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"/>
-                    </div>
+            {/* Desktop Nav & Mobile Expanded Search */}
+            <div className={`w-full md:w-auto md:flex items-center gap-4 ${mobileSearchOpen ? 'flex flex-col mt-3 animate-in slide-in-from-top-2' : 'hidden'} md:mt-0`}>
+                <div className="relative w-full md:w-64">
+                    <input 
+                       value={searchQuery}
+                       onChange={(e) => { setSearchQuery(e.target.value); if(view !== 'SEARCH') setView('SEARCH'); }}
+                       placeholder="ПОИСК..."
+                       className={`w-full bg-transparent border rounded-full px-3 py-1 text-xs font-pixel focus:outline-none transition-all ${
+                           theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
+                       }`}
+                    />
+                    <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"/>
+                </div>
 
+                <div className="hidden md:flex items-center gap-4">
                     <button 
                         onClick={() => { setView('MY_COLLECTION'); updateHash('/my-collection'); }}
                         className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-black'}`}
