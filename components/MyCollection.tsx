@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Box, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Box, FolderOpen, Share2 } from 'lucide-react';
 import { Exhibit, UserProfile, Collection } from '../types';
 import ExhibitCard from './ExhibitCard';
 import { DefaultCategory } from '../constants';
@@ -8,12 +8,13 @@ interface MyCollectionProps {
     theme: 'dark' | 'light';
     user: UserProfile;
     exhibits: Exhibit[];
-    collections?: Collection[]; // Added collections support
+    collections?: Collection[];
     onBack: () => void;
     onExhibitClick: (item: Exhibit) => void;
+    onLike: (id: string, e?: React.MouseEvent) => void; // Added onLike prop
 }
 
-const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, collections = [], onBack, onExhibitClick }) => {
+const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, collections = [], onBack, onExhibitClick, onLike }) => {
     const [activeTab, setActiveTab] = useState<'ITEMS' | 'COLLECTIONS'>('ITEMS');
     const [activeCategory, setActiveCategory] = useState<string>('ALL');
 
@@ -23,6 +24,18 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
     const filteredExhibits = activeCategory === 'ALL' 
         ? exhibits 
         : exhibits.filter(e => e.category === activeCategory);
+
+    const handleShareShelf = () => {
+        const url = `${window.location.origin}/#/profile/${user.username}`;
+        if (navigator.share) {
+            navigator.share({
+                title: `NeoArchive: Полка @${user.username}`,
+                url: url
+            }).catch(console.error);
+        } else {
+            navigator.clipboard.writeText(url).then(() => alert('Ссылка на полку скопирована!'));
+        }
+    };
 
     return (
         <div className="min-h-screen animate-in fade-in pb-24">
@@ -42,6 +55,14 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <button 
+                        onClick={handleShareShelf}
+                        className={`p-2 rounded border opacity-70 hover:opacity-100 ${theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'}`}
+                        title="Поделиться полкой"
+                    >
+                        <Share2 size={16} />
+                    </button>
+                    <div className="w-px bg-gray-500/30 mx-1"></div>
                     <button 
                         onClick={() => setActiveTab('ITEMS')}
                         className={`p-2 rounded border ${activeTab === 'ITEMS' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'opacity-50'}`}
@@ -122,9 +143,9 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                                                 similarExhibits={[]}
                                                 theme={theme}
                                                 onClick={onExhibitClick}
-                                                isLiked={false}
+                                                isLiked={item.likedBy?.includes(user.username) || false} // Correctly show liked status
                                                 isFavorited={false}
-                                                onLike={(e) => { e.stopPropagation(); }}
+                                                onLike={(e) => onLike(item.id, e)} // Pass the actual like handler
                                                 onFavorite={(e) => { e.stopPropagation(); }}
                                                 onAuthorClick={() => {}}
                                             />

@@ -277,6 +277,13 @@ export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOStr
 // --- AUTH & CRUD (Unchanged from previous robust version) ---
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
+    // 0. UNIQUE USERNAME CHECK
+    const usernameExists = cache.users.some(u => u.username.toLowerCase() === username.toLowerCase());
+    if (usernameExists) {
+        throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
+    }
+
+    // 1. Auth with Supabase
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
