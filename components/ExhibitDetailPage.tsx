@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -11,7 +11,8 @@ import {
   ArrowLeft,
   Eye,
   Check,
-  Video
+  Video,
+  Reply
 } from 'lucide-react';
 import { Exhibit } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
@@ -62,6 +63,7 @@ export default function ExhibitDetailPage({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
+  const commentInputRef = useRef<HTMLInputElement>(null);
   
   // Safe access to arrays
   const images = Array.isArray(exhibit.imageUrls) ? exhibit.imageUrls : ['https://placehold.co/600x400?text=NO+IMAGE'];
@@ -108,6 +110,13 @@ export default function ExhibitDetailPage({
           } catch (err) {
               console.error('Clipboard failed', err);
           }
+      }
+  };
+
+  const handleReply = (author: string) => {
+      setCommentText(`@${author} `);
+      if (commentInputRef.current) {
+          commentInputRef.current.focus();
       }
   };
 
@@ -361,16 +370,27 @@ export default function ExhibitDetailPage({
                                   <span className="text-[9px] opacity-40 font-mono">{comment.timestamp}</span>
                               </div>
                               
-                              {/* Like Comment Button */}
-                              {onLikeComment && (
-                                  <button 
-                                    onClick={() => onLikeComment(exhibit.id, comment.id)}
-                                    className={`flex items-center gap-1 opacity-70 hover:opacity-100 ${isCommentLiked ? 'text-red-500' : ''}`}
-                                  >
-                                      <Heart size={10} fill={isCommentLiked ? "currentColor" : "none"} />
-                                      {comment.likes > 0 && <span className="text-[9px]">{comment.likes}</span>}
-                                  </button>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {/* Reply Button */}
+                                <button 
+                                    onClick={() => handleReply(comment.author)}
+                                    className="opacity-50 hover:opacity-100 transition-opacity"
+                                    title="Ответить"
+                                >
+                                    <Reply size={10} />
+                                </button>
+
+                                {/* Like Comment Button */}
+                                {onLikeComment && (
+                                    <button 
+                                        onClick={() => onLikeComment(exhibit.id, comment.id)}
+                                        className={`flex items-center gap-1 opacity-70 hover:opacity-100 ${isCommentLiked ? 'text-red-500' : ''}`}
+                                    >
+                                        <Heart size={10} fill={isCommentLiked ? "currentColor" : "none"} />
+                                        {comment.likes > 0 && <span className="text-[9px]">{comment.likes}</span>}
+                                    </button>
+                                )}
+                              </div>
                            </div>
                            <p className="opacity-80 font-mono break-words ml-6">{comment.text}</p>
                         </div>
@@ -381,6 +401,7 @@ export default function ExhibitDetailPage({
 
                <div className="flex gap-2">
                   <input 
+                    ref={commentInputRef}
                     type="text"
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}

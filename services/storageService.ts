@@ -9,13 +9,14 @@ let cache = {
     messages: [] as Message[],
     users: [] as UserProfile[],
     guestbook: [] as GuestbookEntry[],
+    deletedIds: [] as string[], // Track deleted IDs to prevent "zombies" from sync
     isLoaded: false
 };
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-// Bump this version on every major update/deploy to force cache invalidation
-const CACHE_VERSION = '2.2.0-Compression-V1'; 
+// Bump version to force structure update
+const CACHE_VERSION = '2.3.0-DeletedSyncFix'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -67,16 +68,15 @@ const loadFromLocalCache = (): boolean => {
         try {
             const parsed = JSON.parse(json);
             
-            // Version Check: Invalidate if mismatch (Deploy Cache Busting)
+            // Version Check
             if (!parsed.version || parsed.version !== CACHE_VERSION) {
                 console.log(`♻️ [Cache] Version mismatch (Old: ${parsed.version}, New: ${CACHE_VERSION}). Clearing cache.`);
                 localStorage.removeItem(LOCAL_STORAGE_KEY);
                 return false;
             }
 
-            const data = parsed.data || parsed; // Handle legacy structure if any
+            const data = parsed.data || parsed; 
             
-            // Ensure arrays exist
             cache = {
                 exhibits: data.exhibits || [],
                 collections: data.collections || [],
@@ -84,6 +84,7 @@ const loadFromLocalCache = (): boolean => {
                 messages: data.messages || [],
                 users: data.users || [],
                 guestbook: data.guestbook || [],
+                deletedIds: data.deletedIds || [],
                 isLoaded: true
             };
             return true;
@@ -138,29 +139,24 @@ export const compressImage = async (file: File): Promise<string> => {
     });
 };
 
-export const fileToBase64 = compressImage; // Alias for backward compatibility if needed
+export const fileToBase64 = compressImage;
 
 // --- CLOUD SYNC HELPERS ---
 
-// Helper to wrap object for JSONB storage pattern used in this app
 const toDbPayload = (item: any) => {
     return {
         id: item.id,
         data: item,
-        // We still send timestamp for future use, but won't rely on it for sorting in SQL query
         timestamp: new Date().toISOString()
     };
 };
 
-// Helper to fetch and unwrap data with IN-MEMORY sorting
 const fetchTable = async <T>(tableName: string): Promise<T[]> => {
     const { data, error } = await supabase
         .from(tableName)
         .select('data');
 
     if (error) {
-        // Silent fail for background sync to avoid log spam
-        // console.warn(`[Sync] Warning fetching ${tableName}:`, error.message);
         return [];
     }
 
@@ -171,7 +167,6 @@ const fetchTable = async <T>(tableName: string): Promise<T[]> => {
     return items;
 };
 
-// Helper to merge Users (Union by username, Cloud wins on conflict)
 const mergeUsers = (local: UserProfile[], cloud: UserProfile[]): UserProfile[] => {
     const map = new Map<string, UserProfile>();
     local.forEach(item => map.set(item.username, item));
@@ -179,22 +174,31 @@ const mergeUsers = (local: UserProfile[], cloud: UserProfile[]): UserProfile[] =
     return Array.from(map.values());
 };
 
-// Helper to merge Cloud and Local data (Union by ID, Cloud wins on conflict)
-const mergeData = <T extends { id: string, timestamp?: string }>(local: T[], cloud: T[]): T[] => {
+// Merge respecting deletedIds
+const mergeData = <T extends { id: string, timestamp?: string }>(local: T[], cloud: T[], deletedIds: string[]): T[] => {
     const map = new Map<string, T>();
-    local.forEach(item => map.set(item.id, item));
-    // Cloud overrides local if ID exists (Server Authority)
-    cloud.forEach(item => map.set(item.id, item));
+    
+    // Add local items if not deleted
+    local.forEach(item => {
+        if (!deletedIds.includes(item.id)) {
+            map.set(item.id, item);
+        }
+    });
+    
+    // Add cloud items if not deleted (Cloud overrides local on conflict, but local deletion wins)
+    cloud.forEach(item => {
+        if (!deletedIds.includes(item.id)) {
+            map.set(item.id, item);
+        }
+    });
     
     return Array.from(map.values()).sort((a, b) => {
-        // Sort Newest First
         const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return tB - tA;
     });
 };
 
-// Core Sync Logic
 const performCloudSync = async () => {
     const [users, exhibits, collections, notifications, messages, guestbook] = 
         await Promise.all([
@@ -206,27 +210,22 @@ const performCloudSync = async () => {
             fetchTable<GuestbookEntry>('guestbook')
         ]) as [UserProfile[], Exhibit[], Collection[], Notification[], Message[], GuestbookEntry[]];
 
-    // Merge strategies
     if (users.length > 0) cache.users = mergeUsers(cache.users, users);
-    if (exhibits.length > 0) cache.exhibits = mergeData(cache.exhibits, exhibits);
-    if (collections.length > 0) cache.collections = mergeData(cache.collections, collections);
-    if (notifications.length > 0) cache.notifications = mergeData(cache.notifications, notifications);
-    if (messages.length > 0) cache.messages = mergeData(cache.messages, messages).sort((a,b) => a.timestamp.localeCompare(b.timestamp)); 
-    if (guestbook.length > 0) cache.guestbook = mergeData(cache.guestbook, guestbook);
+    if (exhibits.length > 0) cache.exhibits = mergeData(cache.exhibits, exhibits, cache.deletedIds);
+    if (collections.length > 0) cache.collections = mergeData(cache.collections, collections, cache.deletedIds);
+    if (notifications.length > 0) cache.notifications = mergeData(cache.notifications, notifications, []);
+    if (messages.length > 0) cache.messages = mergeData(cache.messages, messages, []).sort((a,b) => a.timestamp.localeCompare(b.timestamp)); 
+    if (guestbook.length > 0) cache.guestbook = mergeData(cache.guestbook, guestbook, []);
     
     saveToLocalCache();
 };
 
 // --- INITIALIZATION ---
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
-    // 1. Load optimistic cache first (Fastest visual load)
     loadFromLocalCache();
 
-    // 2. Direct Cloud Sync (Supabase)
     try {
         console.log("☁️ [Sync] Connecting to NeoArchive Cloud (Supabase)...");
-        
-        // Timeout protection (5 seconds)
         const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Connection timed out')), 5000)
         );
@@ -241,7 +240,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
         isOfflineMode = true;
     }
 
-    // 3. Restore Session
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
     if (localActiveUser) {
         const cachedUser = cache.users.find(u => u.username === localActiveUser);
@@ -277,7 +275,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     return null;
 };
 
-// --- BACKGROUND SYNC ---
 export const backgroundSync = async (): Promise<boolean> => {
     if (isOfflineMode) return false;
     try {
@@ -290,16 +287,14 @@ export const backgroundSync = async (): Promise<boolean> => {
 
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
-// --- AUTH & CRUD (Unchanged from previous robust version) ---
+// --- AUTH & CRUD ---
 
-export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    // 0. UNIQUE USERNAME CHECK
+export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string): Promise<UserProfile> => {
     const usernameExists = cache.users.some(u => u.username.toLowerCase() === username.toLowerCase());
     if (usernameExists) {
         throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
     }
 
-    // 1. Auth with Supabase
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -315,11 +310,12 @@ export const registerUser = async (username: string, password: string, tagline: 
         username: isSuperAdmin ? 'TheArchitect' : username,
         email,
         tagline: isSuperAdmin ? 'System Administrator' : tagline,
-        avatarUrl: getUserAvatar(username), // Use consistent generator
+        avatarUrl: getUserAvatar(username),
         joinedDate: new Date().toLocaleString('ru-RU'),
         following: [],
         achievements: isSuperAdmin ? ['HELLO_WORLD', 'LEGEND', 'THE_ONE'] : ['HELLO_WORLD'],
-        isAdmin: isSuperAdmin
+        isAdmin: isSuperAdmin,
+        telegram: telegram
     };
 
     cache.users.push(userProfile);
@@ -398,7 +394,7 @@ export const updateUserProfile = async (user: UserProfile) => {
     await supabase.from('users').upsert({ username: user.username, data: user });
 };
 
-// --- DATA METHODS (Direct Cloud) ---
+// --- DATA METHODS ---
 
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
@@ -426,6 +422,7 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
 export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
   cache.notifications = cache.notifications.filter(n => n.targetId !== id);
+  cache.deletedIds.push(id); // Mark as deleted locally
   saveToLocalCache();
   await supabase.from('exhibits').delete().eq('id', id);
 };
@@ -450,6 +447,7 @@ export const updateCollection = async (updatedCollection: Collection) => {
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
+    cache.deletedIds.push(id); // Mark as deleted locally
     saveToLocalCache();
     await supabase.from('collections').delete().eq('id', id);
 };
