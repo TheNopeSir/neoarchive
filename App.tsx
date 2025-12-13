@@ -484,20 +484,12 @@ export default function App() {
 
   const handleLogout = async () => {
       try {
-          db.logoutUser().catch((e: any) => console.warn("Background logout error", e));
+          db.logoutUser().catch(e => console.warn("Background logout error", e));
       } finally {
           window.location.hash = ''; 
           setUser(null);
           setView('AUTH');
       }
-  };
-
-  // ... (Full app render logic retained, just updated footer version) ...
-  // Reusing all previously implemented handlers and logic
-
-  const handleShuffle = () => {
-      const shuffled = [...exhibits].sort(() => Math.random() - 0.5);
-      setExhibits(shuffled);
   };
 
   const handleExhibitClick = (item: Exhibit) => {
@@ -1099,6 +1091,7 @@ export default function App() {
 
   const renderContentArea = () => {
     switch (view) {
+        // ... (Cases identical to previous robust implementation) ...
       case 'AUTH': return <MatrixLogin theme={theme} onLogin={handleLogin} />;
       case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
       case 'MY_COLLECTION':
@@ -1803,6 +1796,8 @@ export default function App() {
           );
 
       case 'USER_PROFILE':
+         // ... (Same profile logic, including Reply button added in previous steps)
+         // Assuming full file injection, reusing the structure
          const profileUsername = viewedProfile || user?.username;
          if (!profileUsername) return <div>User not found</div>;
          
@@ -2033,19 +2028,74 @@ export default function App() {
              </div>
          );
 
-      // ... (Rest of cases remain same)
+      case 'EXHIBIT':
+        return selectedExhibit ? (
+            <ExhibitDetailPage 
+                exhibit={selectedExhibit}
+                theme={theme}
+                onBack={handleBack}
+                onShare={(id: string) => { /* handled internally */ }}
+                onFavorite={(id: string) => toggleFavorite(id)}
+                onLike={(id: string) => toggleLike(id)}
+                isFavorited={false}
+                isLiked={selectedExhibit.likedBy?.includes((user?.username as string) || '') || false}
+                onPostComment={handlePostComment}
+                onLikeComment={handleLikeComment}
+                onAuthorClick={handleAuthorClick}
+                onFollow={handleFollow}
+                onMessage={handleOpenChat}
+                onDelete={user?.username === selectedExhibit.owner || user?.isAdmin ? handleDeleteExhibit : undefined}
+                onEdit={handleEditExhibit}
+                isFollowing={user?.following.includes(selectedExhibit.owner) || false}
+                currentUser={user?.username || ''}
+                isAdmin={user?.isAdmin || false}
+            />
+        ) : <div>Error: No exhibit selected</div>;
+
+      case 'COLLECTION_DETAIL':
+          if (!selectedCollection) return <div>Error</div>;
+          const colExhibits = exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id));
+          return (
+              <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
+                  <button onClick={handleBack} className="flex items-center gap-2 mb-6 hover:underline opacity-70 font-pixel text-xs">
+                     <ArrowLeft size={16} /> НАЗАД
+                  </button>
+                  <div className="relative aspect-[3/1] rounded-xl overflow-hidden mb-8 group">
+                      <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
+                          <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
+                          <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
+                          {user?.username === selectedCollection.owner && (
+                              <button 
+                                onClick={() => handleEditCollection(selectedCollection)}
+                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
+                              >
+                                  <Edit2 size={16} />
+                              </button>
+                          )}
+                      </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {colExhibits.map(item => (
+                          <ExhibitCard 
+                             key={item.id} 
+                             item={item} 
+                             theme={theme}
+                             similarExhibits={[]}
+                             onClick={handleExhibitClick}
+                             isLiked={item.likedBy?.includes(user?.username || '') || false}
+                             isFavorited={false}
+                             onLike={(e) => toggleLike(item.id, e)}
+                             onFavorite={(e) => toggleFavorite(item.id, e)}
+                             onAuthorClick={handleAuthorClick}
+                          />
+                      ))}
+                  </div>
+              </div>
+          );
+
       default:
       case 'FEED':
-      case 'EXHIBIT':
-      case 'MY_COLLECTION':
-      case 'DIRECT_CHAT':
-      case 'SEARCH':
-      case 'CREATE_HUB':
-      case 'EDIT_COLLECTION':
-      case 'CREATE_COLLECTION':
-      case 'CREATE_ARTIFACT':
-      case 'ACTIVITY':
-      case 'COLLECTION_DETAIL':
          return (
              <div className="max-w-7xl mx-auto animate-in fade-in">
                  <div className="flex items-center justify-center gap-4 mb-8">
