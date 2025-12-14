@@ -1,22 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
   Heart, 
   Share2, 
   MessageSquare, 
-  ShieldAlert, 
   Trash2, 
   Edit,
-  User,
   Send,
   ArrowLeft,
   Eye,
   Check,
-  Video
+  Video,
+  Reply
 } from 'lucide-react';
-import { Exhibit, Comment } from '../types';
+import { Exhibit } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
+import useSwipe from '../hooks/useSwipe';
+import { getUserAvatar } from '../services/storageService'; // Use this
 
 interface ExhibitDetailPageProps {
   exhibit: Exhibit;
@@ -28,6 +29,7 @@ interface ExhibitDetailPageProps {
   isFavorited: boolean;
   isLiked: boolean;
   onPostComment: (id: string, text: string) => void;
+  onLikeComment?: (exhibitId: string, commentId: string) => void; // New prop
   onAuthorClick: (author: string) => void;
   onFollow: (username: string) => void;
   onMessage: (username: string) => void;
@@ -48,6 +50,7 @@ export default function ExhibitDetailPage({
   isFavorited,
   isLiked,
   onPostComment,
+  onLikeComment,
   onAuthorClick,
   onFollow,
   onMessage,
@@ -60,6 +63,7 @@ export default function ExhibitDetailPage({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
+  const commentInputRef = useRef<HTMLInputElement>(null);
   
   // Safe access to arrays
   const images = Array.isArray(exhibit.imageUrls) ? exhibit.imageUrls : ['https://placehold.co/600x400?text=NO+IMAGE'];
@@ -79,8 +83,12 @@ export default function ExhibitDetailPage({
     setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
 
+  const swipeHandlers = useSwipe({
+      onSwipeLeft: handleNextImage,
+      onSwipeRight: handlePrevImage
+  });
+
   const handleNativeShare = async () => {
-      // Use the current URL which now contains the hash (e.g. /#/exhibit/123)
       const urlToShare = window.location.href; 
       const shareData = {
           title: `NeoArchive: ${exhibit.title}`,
@@ -95,7 +103,6 @@ export default function ExhibitDetailPage({
               console.warn('Share cancelled', err);
           }
       } else {
-          // Fallback
           try {
               await navigator.clipboard.writeText(urlToShare);
               setShareCopied(true);
@@ -106,12 +113,18 @@ export default function ExhibitDetailPage({
       }
   };
 
-  const isOwner = currentUser === exhibit.owner;
+  const handleReply = (author: string) => {
+      setCommentText(`@${author} `);
+      if (commentInputRef.current) {
+          commentInputRef.current.focus();
+      }
+  };
 
-  // Video Embed Helper
+  const isOwner = currentUser === exhibit.owner;
+  const canDelete = isOwner || isAdmin;
+
   const getEmbedUrl = (url: string) => {
       if (!url) return null;
-      // Simple Youtube Parser
       const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
       const match = url.match(youtubeRegex);
       return match ? `https://www.youtube.com/embed/${match[1]}` : null;
@@ -131,8 +144,13 @@ export default function ExhibitDetailPage({
         </button>
         
         <div className="flex gap-4">
-          {isOwner && onDelete && (
-             <button onClick={() => onDelete(exhibit.id)} className="text-red-500 hover:text-red-400">
+          {isOwner && onEdit && (
+              <button onClick={() => onEdit(exhibit)} className={`hover:scale-110 transition-transform ${theme === 'dark' ? 'text-yellow-400' : 'text-orange-500'}`} title="EDIT">
+                  <Edit size={18} />
+              </button>
+          )}
+          {canDelete && onDelete && (
+             <button onClick={() => onDelete(exhibit.id)} className="text-red-500 hover:text-red-400" title={isAdmin ? "ADMIN DELETE" : "DELETE"}>
                 <Trash2 size={18} />
              </button>
           )}
@@ -151,37 +169,44 @@ export default function ExhibitDetailPage({
         
         {/* Left Column: Media */}
         <div className="space-y-4">
-          <div className={`relative aspect-square w-full rounded-lg overflow-hidden border-2 shadow-2xl ${
-              theme === 'dark' ? 'border-dark-dim bg-black' : 'border-light-dim bg-white'
-          } ${tier.name === 'LEGENDARY' ? 'shadow-yellow-500/20 border-yellow-500/50' : ''}`}>
+          <div 
+            className={`relative w-full aspect-square md:aspect-[4/3] rounded-lg overflow-hidden border-2 shadow-2xl flex items-center justify-center ${
+                theme === 'dark' ? 'border-dark-dim bg-black' : 'border-light-dim bg-gray-100'
+            } ${tier.name === 'LEGENDARY' ? 'shadow-yellow-500/20 border-yellow-500/50' : ''}`}
+            {...swipeHandlers}
+          >
+             <div 
+                className="absolute inset-0 bg-cover bg-center blur-xl opacity-50 scale-110" 
+                style={{ backgroundImage: `url(${images[currentImageIndex]})` }}
+             ></div>
+
              <img 
                src={images[currentImageIndex]} 
                alt={exhibit.title} 
-               className="w-full h-full object-contain"
+               className="relative z-10 w-full h-full object-contain max-h-[80vh]"
              />
              
              {images.length > 1 && (
                <>
                  <button 
                    onClick={handlePrevImage}
-                   className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors"
+                   className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors z-20 backdrop-blur-md"
                  >
                    <ChevronLeft />
                  </button>
                  <button 
                    onClick={handleNextImage}
-                   className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors"
+                   className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black transition-colors z-20 backdrop-blur-md"
                  >
                    <ChevronRight />
                  </button>
-                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-xs font-bold font-mono">
+                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-xs font-bold font-mono z-20">
                    {currentImageIndex + 1} / {images.length}
                  </div>
                </>
              )}
           </div>
           
-          {/* Thumbnails */}
           {images.length > 1 && (
             <div className="flex gap-2 overflow-x-auto py-2 scrollbar-hide">
                {images.map((img, idx) => (
@@ -200,7 +225,6 @@ export default function ExhibitDetailPage({
             </div>
           )}
 
-          {/* Video Player Section */}
           {exhibit.videoUrl && (
              <div className={`mt-4 border-2 border-dashed p-1 rounded-lg ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
                  <div className="font-pixel text-[10px] mb-2 px-1 flex items-center gap-2 opacity-70">
@@ -240,12 +264,10 @@ export default function ExhibitDetailPage({
                           {exhibit.category}
                       </div>
                       
-                      {/* Tier Badge */}
                       <div className={`inline-block px-2 py-0.5 text-[9px] font-bold font-pixel rounded border flex items-center gap-1 ${tier.bgColor} border-current ${tier.color}`}>
                           <TierIcon size={10} /> {tier.name}
                       </div>
                   </div>
-                  {/* Title with overflow protection - ADJUSTED SIZE */}
                   <h1 className="text-xl md:text-2xl lg:text-3xl font-bold font-pixel mb-2 leading-tight break-words">
                     {exhibit.title}
                   </h1>
@@ -277,8 +299,8 @@ export default function ExhibitDetailPage({
                 theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'
             }`}>
                <div className="flex items-center gap-3 cursor-pointer" onClick={() => onAuthorClick(exhibit.owner)}>
-                  <div className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden flex-shrink-0">
-                     <img src={`https://ui-avatars.com/api/?name=${exhibit.owner}&background=random`} alt="avatar" />
+                  <div className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden flex-shrink-0 border border-gray-500">
+                     <img src={getUserAvatar(exhibit.owner)} alt="avatar" />
                   </div>
                   <div className="overflow-hidden">
                      <div className="font-bold font-pixel text-xs truncate">@{exhibit.owner}</div>
@@ -311,7 +333,7 @@ export default function ExhibitDetailPage({
                {Object.entries(specs).map(([key, val]) => (
                  <div key={key} className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
                     <div className="text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">{key}</div>
-                    <div className="font-bold font-mono text-xs truncate">{val}</div>
+                    <div className="font-bold font-mono text-xs truncate">{val as string}</div>
                  </div>
                ))}
                <div className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
@@ -330,25 +352,56 @@ export default function ExhibitDetailPage({
                   {comments.length === 0 ? (
                     <div className="text-center py-4 opacity-50 text-xs font-mono">НЕТ ЗАПИСЕЙ В ПРОТОКОЛЕ</div>
                   ) : (
-                    comments.map(comment => (
-                      <div key={comment.id} className={`p-2 rounded text-xs ${theme === 'dark' ? 'bg-white/5' : 'bg-black/5'}`}>
-                         <div className="flex justify-between items-baseline mb-1">
-                            <span 
-                              onClick={() => onAuthorClick(comment.author)}
-                              className={`font-bold cursor-pointer hover:underline font-pixel text-[9px] ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
-                            >
-                              @{comment.author}
-                            </span>
-                            <span className="text-[9px] opacity-40 font-mono">{comment.timestamp}</span>
-                         </div>
-                         <p className="opacity-80 font-mono break-words">{comment.text}</p>
-                      </div>
-                    ))
+                    comments.map(comment => {
+                      const isCommentLiked = comment.likedBy?.includes(currentUser);
+                      return (
+                        <div key={comment.id} className={`p-2 rounded text-xs ${theme === 'dark' ? 'bg-white/5' : 'bg-black/5'}`}>
+                           <div className="flex justify-between items-center mb-1">
+                              <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 rounded-full overflow-hidden flex-shrink-0 cursor-pointer" onClick={() => onAuthorClick(comment.author)}>
+                                      <img src={getUserAvatar(comment.author)} alt={comment.author} />
+                                  </div>
+                                  <span 
+                                    onClick={() => onAuthorClick(comment.author)}
+                                    className={`font-bold cursor-pointer hover:underline font-pixel text-[9px] ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}
+                                  >
+                                    @{comment.author}
+                                  </span>
+                                  <span className="text-[9px] opacity-40 font-mono">{comment.timestamp}</span>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                {/* Reply Button */}
+                                <button 
+                                    onClick={() => handleReply(comment.author)}
+                                    className="opacity-50 hover:opacity-100 transition-opacity"
+                                    title="Ответить"
+                                >
+                                    <Reply size={10} />
+                                </button>
+
+                                {/* Like Comment Button */}
+                                {onLikeComment && (
+                                    <button 
+                                        onClick={() => onLikeComment(exhibit.id, comment.id)}
+                                        className={`flex items-center gap-1 opacity-70 hover:opacity-100 ${isCommentLiked ? 'text-red-500' : ''}`}
+                                    >
+                                        <Heart size={10} fill={isCommentLiked ? "currentColor" : "none"} />
+                                        {comment.likes > 0 && <span className="text-[9px]">{comment.likes}</span>}
+                                    </button>
+                                )}
+                              </div>
+                           </div>
+                           <p className="opacity-80 font-mono break-words ml-6">{comment.text}</p>
+                        </div>
+                      )
+                    })
                   )}
                </div>
 
                <div className="flex gap-2">
                   <input 
+                    ref={commentInputRef}
                     type="text"
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}

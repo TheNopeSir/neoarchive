@@ -1,7 +1,5 @@
-
-
 import React, { useState } from 'react';
-import { Terminal, Lock, User, ArrowRight, CheckSquare, Square, Github, Chrome, Gamepad2, Mail } from 'lucide-react';
+import { Terminal, Lock, User, ArrowRight, CheckSquare, Square, Github, Chrome, Gamepad2, Mail, Send } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -16,6 +14,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
   const [email, setEmail] = useState('');
   const [tagline, setTagline] = useState('');
   const [password, setPassword] = useState('');
+  const [telegram, setTelegram] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -30,10 +29,6 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
     }
 
     if (isRegister) {
-        if (!tagline) {
-             setError('УКАЖИТЕ СТАТУС');
-             return;
-        }
         if (!email) {
              setError('УКАЖИТЕ EMAIL');
              return;
@@ -46,7 +41,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
         let user: UserProfile;
         
         if (isRegister) {
-            user = await db.registerUser(username, password, tagline, email);
+            // Tagline is now optional, provide default if empty
+            const finalTagline = tagline.trim() || "Новый пользователь";
+            user = await db.registerUser(username, password, finalTagline, email, telegram);
         } else {
             user = await db.loginUser(username, password);
         }
@@ -61,13 +58,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
   };
 
   const handleSocialRedirect = (provider: string) => {
-      // Redirect to our backend auth routes
       if (provider === 'Google') {
           window.location.href = '/api/auth/google';
       } else if (provider === 'Yandex') {
           window.location.href = '/api/auth/yandex';
       } else {
-          // Keep simulation for others not implemented yet
           alert('Протокол еще не интегрирован в матрицу. Используйте Google или Yandex.');
       }
   };
@@ -125,6 +120,20 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
             </div>
 
             <div className="space-y-1 animate-in slide-in-from-top-2 fade-in">
+              <label className="text-xs font-bold ml-1 uppercase opacity-70">Telegram (Optional)</label>
+              <div className={`flex items-center border-b-2 px-2 py-2 ${theme === 'dark' ? 'border-dark-dim focus-within:border-dark-primary' : 'border-light-dim focus-within:border-light-accent'}`}>
+                <Send size={16} className="opacity-50 mr-2" />
+                <input 
+                  type="text" 
+                  value={telegram}
+                  onChange={e => setTelegram(e.target.value)}
+                  className="bg-transparent w-full focus:outline-none"
+                  placeholder="@username"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1 animate-in slide-in-from-top-2 fade-in">
               <label className="text-xs font-bold ml-1 uppercase opacity-70">Статус / Слоган</label>
               <div className={`flex items-center border-b-2 px-2 py-2 ${theme === 'dark' ? 'border-dark-dim focus-within:border-dark-primary' : 'border-light-dim focus:border-light-accent'}`}>
                 <Terminal size={16} className="opacity-50 mr-2" />
@@ -142,7 +151,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ theme, onLogin }) => {
 
           <div className="space-y-1">
             <label className="text-xs font-bold ml-1 uppercase opacity-70">Пароль</label>
-            <div className={`flex items-center border-b-2 px-2 py-2 ${theme === 'dark' ? 'border-dark-dim focus-within:border-dark-primary' : 'border-light-dim focus:border-light-accent'}`}>
+            <div className={`flex items-center border-b-2 px-2 py-2 ${theme === 'dark' ? 'border-dark-dim focus-within:border-dark-primary' : 'border-light-dim focus-within:border-light-accent'}`}>
               <Lock size={16} className="opacity-50 mr-2" />
               <input 
                 type="password" 
