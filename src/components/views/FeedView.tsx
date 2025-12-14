@@ -4,7 +4,8 @@ import { Exhibit, Collection, UserProfile, ViewState } from '../../types';
 import ExhibitCard from '../ExhibitCard';
 import CollectionCard from '../CollectionCard';
 import RetroLoader from '../RetroLoader';
-import { DefaultCategory, calculateArtifactScore } from '../../constants';
+import { DefaultCategory } from '../../constants';
+import SEO from '../SEO';
 
 interface FeedViewProps {
     theme: 'dark' | 'light';
@@ -46,8 +47,12 @@ const FeedView: React.FC<FeedViewProps> = ({
         
         if (!user) return { followedItems: [], recommendedItems: shuffleArray(allItems) };
 
+        // Items from people I follow
         const followed = allItems.filter(item => user.following.includes(item.owner));
-        const others = allItems.filter(item => !user.following.includes(item.owner) && item.owner !== user.username);
+        
+        // Everything else (including my own items if I'm not following myself, which is standard)
+        // Removed `&& item.owner !== user.username` to allow own items in feed
+        const others = allItems.filter(item => !user.following.includes(item.owner));
         
         return {
             followedItems: followed.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), // Newest first
@@ -59,7 +64,8 @@ const FeedView: React.FC<FeedViewProps> = ({
         if (!user) return { followedCollections: [], recommendedCollections: shuffleArray(collections) };
 
         const followed = collections.filter(c => user.following.includes(c.owner));
-        const others = collections.filter(c => !user.following.includes(c.owner) && c.owner !== user.username);
+        // Removed exclusion of own collections
+        const others = collections.filter(c => !user.following.includes(c.owner));
 
         return {
             followedCollections: followed.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
@@ -69,6 +75,11 @@ const FeedView: React.FC<FeedViewProps> = ({
 
     return (
         <div className="max-w-7xl mx-auto animate-in fade-in">
+            <SEO 
+                title={feedMode === 'COLLECTIONS' ? "NeoArchive: Коллекции" : "NeoArchive: Лента артефактов"} 
+                path="/feed"
+            />
+
             <div className="flex items-center justify-center gap-4 mb-8">
                 <button 
                     onClick={() => { setFeedMode('ARTIFACTS'); if(window.location.hash !== '#/feed') { setView('FEED'); updateHash('/feed'); }}}
@@ -137,7 +148,6 @@ const FeedView: React.FC<FeedViewProps> = ({
                     </div>
                 )}
 
-                {/* Followed Items Section */}
                 {followedItems.length > 0 && (
                     <div className="mb-10">
                         <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2">
@@ -162,18 +172,16 @@ const FeedView: React.FC<FeedViewProps> = ({
                     </div>
                 )}
 
-                {/* Recommendations Divider */}
-                {recommendedItems.length > 0 && followedItems.length > 0 && (
-                    <div className="relative flex items-center justify-center mb-10 opacity-70">
-                        <div className={`absolute w-full border-t border-dashed ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}></div>
-                        <div className={`relative px-4 font-pixel text-[10px] uppercase tracking-widest flex items-center gap-2 ${theme === 'dark' ? 'bg-black text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
-                            <Sparkles size={12} /> ВАМ МОЖЕТ БЫТЬ ИНТЕРЕСНО
-                        </div>
-                    </div>
-                )}
-
-                {/* Recommended / All Items */}
                 {recommendedItems.length > 0 && (
+                    <>
+                    {followedItems.length > 0 && (
+                        <div className="relative flex items-center justify-center mb-10 opacity-70">
+                            <div className={`absolute w-full border-t border-dashed ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}></div>
+                            <div className={`relative px-4 font-pixel text-[10px] uppercase tracking-widest flex items-center gap-2 ${theme === 'dark' ? 'bg-black text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
+                                <Sparkles size={12} /> ОБЩАЯ ЛЕНТА
+                            </div>
+                        </div>
+                    )}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                         {recommendedItems.slice(0, visibleCount).map((item: Exhibit) => (
                             <ExhibitCard 
@@ -190,6 +198,7 @@ const FeedView: React.FC<FeedViewProps> = ({
                             />
                         ))}
                     </div>
+                    </>
                 )}
                 
                 <div ref={loadMoreRef} className="h-20 w-full flex items-center justify-center mt-8">
@@ -207,7 +216,6 @@ const FeedView: React.FC<FeedViewProps> = ({
                     </div>
                 )}
 
-                {/* Followed Collections */}
                 {followedCollections.length > 0 && (
                     <div className="mb-10">
                         <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2">
@@ -219,21 +227,20 @@ const FeedView: React.FC<FeedViewProps> = ({
                     </div>
                 )}
 
-                {/* Divider */}
-                {recommendedCollections.length > 0 && followedCollections.length > 0 && (
-                    <div className="relative flex items-center justify-center mb-10 opacity-70">
-                        <div className={`absolute w-full border-t border-dashed ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}></div>
-                        <div className={`relative px-4 font-pixel text-[10px] uppercase tracking-widest flex items-center gap-2 ${theme === 'dark' ? 'bg-black text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
-                            <Sparkles size={12} /> ВАМ МОЖЕТ БЫТЬ ИНТЕРЕСНО
-                        </div>
-                    </div>
-                )}
-
-                {/* Recommended Collections */}
                 {recommendedCollections.length > 0 && (
+                    <>
+                    {followedCollections.length > 0 && (
+                        <div className="relative flex items-center justify-center mb-10 opacity-70">
+                            <div className={`absolute w-full border-t border-dashed ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}></div>
+                            <div className={`relative px-4 font-pixel text-[10px] uppercase tracking-widest flex items-center gap-2 ${theme === 'dark' ? 'bg-black text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
+                                <Sparkles size={12} /> ОБЩАЯ ЛЕНТА
+                            </div>
+                        </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {recommendedCollections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
                     </div>
+                    </>
                 )}
                 </>
             )}

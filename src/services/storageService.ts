@@ -1,3 +1,4 @@
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -56,7 +57,10 @@ const saveToLocalCache = () => {
     try {
         const payload = { version: CACHE_VERSION, data: cache };
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
-    } catch (e) { console.error("Cache Error", e); }
+    } catch (e: any) { 
+        console.warn("⚠️ [Storage] Cache save failed (Quota Exceeded?):", e.name); 
+        // We do not throw here to prevent app crash. The app continues in-memory.
+    }
 };
 
 const loadFromLocalCache = (): boolean => {
@@ -97,8 +101,9 @@ export const compressImage = async (file: File): Promise<string> => {
             img.src = event.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 1080;
-                const MAX_HEIGHT = 1080;
+                // Reduced resolution for better storage management
+                const MAX_WIDTH = 800; 
+                const MAX_HEIGHT = 800;
                 let width = img.width;
                 let height = img.height;
                 if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
@@ -108,7 +113,8 @@ export const compressImage = async (file: File): Promise<string> => {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.drawImage(img, 0, 0, width, height);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                    // Reduced quality to 0.5 to save space
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
                     resolve(dataUrl);
                 } else { reject(new Error("Canvas context is null")); }
             };
@@ -293,3 +299,4 @@ export const markMessagesRead = async (sender: string, receiver: string) => {
     cache.messages.forEach(m => { if(m.sender === sender && m.receiver === receiver) m.isRead = true; });
     saveToLocalCache();
 };
+    

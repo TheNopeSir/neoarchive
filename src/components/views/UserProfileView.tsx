@@ -6,6 +6,7 @@ import * as db from '../../services/storageService';
 import { getUserAvatar } from '../../services/storageService';
 import ExhibitCard from '../ExhibitCard';
 import CollectionCard from '../CollectionCard';
+import SEO from '../SEO';
 
 interface UserProfileViewProps {
     user: UserProfile;
@@ -83,6 +84,14 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32">
+            <SEO 
+                title={`@${profileUser.username} | Профиль NeoArchive`}
+                description={profileUser.tagline || `Посмотрите коллекцию пользователя @${profileUser.username}`}
+                image={profileUser.avatarUrl}
+                path={`/profile/${profileUser.username}`}
+                type="profile"
+            />
+
             <button onClick={onBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
                  <ArrowLeft size={16} /> НАЗАД
             </button>

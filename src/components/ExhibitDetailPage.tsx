@@ -17,7 +17,8 @@ import {
 import { Exhibit } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
 import useSwipe from '../hooks/useSwipe';
-import { getUserAvatar } from '../services/storageService'; // Use this
+import { getUserAvatar } from '../services/storageService';
+import SEO from './SEO';
 
 interface ExhibitDetailPageProps {
   exhibit: Exhibit;
@@ -29,7 +30,7 @@ interface ExhibitDetailPageProps {
   isFavorited: boolean;
   isLiked: boolean;
   onPostComment: (id: string, text: string) => void;
-  onLikeComment?: (exhibitId: string, commentId: string) => void; // New prop
+  onLikeComment?: (exhibitId: string, commentId: string) => void;
   onAuthorClick: (author: string) => void;
   onFollow: (username: string) => void;
   onMessage: (username: string) => void;
@@ -134,6 +135,14 @@ export default function ExhibitDetailPage({
   return (
     <div className={`w-full min-h-full pb-20 animate-in fade-in duration-300 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
       
+      <SEO 
+        title={`${exhibit.title} | ${exhibit.category} | NeoArchive`}
+        description={exhibit.description}
+        image={images[0]}
+        type="article"
+        path={`/exhibit/${exhibit.slug || exhibit.id}`}
+      />
+
       {/* Top Navigation Bar */}
       <div className="flex items-center justify-between mb-4 pb-2 border-b border-dashed border-opacity-20 border-gray-500">
         <button 
