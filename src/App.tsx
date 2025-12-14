@@ -1,37 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, 
-  MessageSquare, Search, Database, Trash2, Home, Activity, 
-  User, ArrowLeft, Trophy, CheckCircle2, Bell, 
-  MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, 
-  Share2, Award, ChevronRight, Camera, Edit2, Save, Check, 
-  Send, Video, Image as ImageIcon, WifiOff, Download, Box,
-  Package, Reply, Plus, Trash
+  Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
+  MessageSquare, Search, Database, Trash2, Settings, Home, Activity, Zap, Sparkles, 
+  User, ArrowLeft, Shuffle, Trophy, CheckCircle2, Bell, 
+  MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
+  Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
+  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download, Box,
+  Package, FileEdit, Reply, Plus
 } from 'lucide-react';
-
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
 import ExhibitCard from './components/ExhibitCard';
 import RetroLoader from './components/RetroLoader';
+import ExhibitDetailPage from './components/ExhibitDetailPage';
+import ErrorBoundary from './components/ErrorBoundary';
 import MatrixLogin from './components/MatrixLogin';
 import HallOfFame from './components/HallOfFame';
 import MyCollection from './components/MyCollection';
+import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
+import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
+import { moderateContent, moderateImage } from './services/geminiService';
+import * as db from './services/storageService';
+import { compressImage, isOffline, getUserAvatar } from './services/storageService';
+import useSwipe from './hooks/useSwipe';
 
-// Imported Extracted Components
+// SIMPLIFIED IMPORTS (Flat Structure)
 import HeroSection from './components/HeroSection';
 import CollectionCard from './components/CollectionCard';
 import MobileNavigation from './components/MobileNavigation';
 import LoginTransition from './components/LoginTransition';
 import InstallBanner from './components/InstallBanner';
-import FeedView from './components/views/FeedView';
-import UserProfileView from './components/views/UserProfileView';
-
-import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
-import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
-import { moderateContent, moderateImage } from './services/geminiService';
-import * as db from './services/storageService';
-import { compressImage, isOffline, getUserAvatar, getSystemStats } from './services/storageService';
-import useSwipe from './hooks/useSwipe';
+import FeedView from './components/FeedView';
+import UserProfileView from './components/UserProfileView';
 
 // Helper to generate specs based on category
 const generateSpecsForCategory = (cat: string) => {
@@ -187,7 +187,7 @@ export default function App() {
         } finally {
             setIsInitializing(false);
         }
-        };
+    };
     init();
 
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -1074,7 +1074,7 @@ export default function App() {
                                             }}
                                             className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                          >
-                                             <Trash size={10} />
+                                             <Trash2 size={10} />
                                          </button>
                                      </div>
                                      <input 
@@ -1237,6 +1237,31 @@ export default function App() {
               </div>
           );
 
+      case 'EXHIBIT':
+          if (!selectedExhibit) return <div className="p-10 text-center font-pixel text-red-500">ERROR: ARTIFACT_NOT_FOUND</div>;
+          return (
+              <ExhibitDetailPage
+                  exhibit={selectedExhibit}
+                  theme={theme}
+                  onBack={handleBack}
+                  onShare={(id) => console.log("Share", id)} 
+                  onFavorite={(id) => toggleFavorite(id)}
+                  onLike={(id) => toggleLike(id)}
+                  isFavorited={false}
+                  isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
+                  onPostComment={handlePostComment}
+                  onLikeComment={handleLikeComment}
+                  onAuthorClick={handleAuthorClick}
+                  onFollow={handleFollow}
+                  onMessage={handleOpenChat}
+                  onDelete={handleDeleteExhibit}
+                  onEdit={handleEditExhibit}
+                  isFollowing={user?.following.includes(selectedExhibit.owner) || false}
+                  currentUser={user?.username || ''}
+                  isAdmin={user?.isAdmin || false}
+              />
+          );
+
       case 'AUTH': return <MatrixLogin theme={theme} onLogin={handleLogin} />;
       case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
       case 'MY_COLLECTION':
@@ -1290,12 +1315,6 @@ export default function App() {
       case 'ACTIVITY':
           const myNotifications = notifications.filter(n => n.recipient === user?.username);
           
-          // Ensure myNotifications is sorted NEWEST first before grouping
-          // Note: `cache.notifications` from storageService is already sorted by timestamp via mergeData,
-          // but local unshift operations might keep it sorted. To be safe:
-          // We rely on the `notifications` state being correctly ordered from `refreshData`.
-          // If strictly consecutive grouping is desired for ANY consecutive items:
-          
           const groupedNotifications: any[] = [];
           if (myNotifications.length > 0) {
               let currentGroup = { 
@@ -1308,7 +1327,6 @@ export default function App() {
               
               for (let i = 1; i < myNotifications.length; i++) {
                   const n = myNotifications[i];
-                  // Group if same actor AND relatively consecutive (just check adjacent for now)
                   if (n.actor === currentGroup.actor) {
                       currentGroup.count++;
                       currentGroup.items.push(n);
@@ -1357,7 +1375,6 @@ export default function App() {
                                               )}
                                           </div>
                                           
-                                          {/* Collapsed Items Logic - Linking to Exhibit */}
                                           <div className="mt-2 text-xs opacity-80 space-y-1">
                                               {group.items.map((n: Notification) => (
                                                   <div 
