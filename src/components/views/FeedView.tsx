@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, Grid, Sparkles, UserCheck } from 'lucide-react';
+import { Box, Grid, Sparkles, UserCheck, FolderOpen } from 'lucide-react';
 import { Exhibit, Collection, UserProfile, ViewState } from '../../types';
 import ExhibitCard from '../ExhibitCard';
 import CollectionCard from '../CollectionCard';
@@ -54,6 +54,18 @@ const FeedView: React.FC<FeedViewProps> = ({
             recommendedItems: shuffleArray(others) // Random freshness
         };
     }, [exhibits, selectedCategory, user]);
+
+    const { followedCollections, recommendedCollections } = useMemo(() => {
+        if (!user) return { followedCollections: [], recommendedCollections: shuffleArray(collections) };
+
+        const followed = collections.filter(c => user.following.includes(c.owner));
+        const others = collections.filter(c => !user.following.includes(c.owner) && c.owner !== user.username);
+
+        return {
+            followedCollections: followed.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+            recommendedCollections: shuffleArray(others)
+        };
+    }, [collections, user]);
 
     return (
         <div className="max-w-7xl mx-auto animate-in fade-in">
@@ -187,9 +199,43 @@ const FeedView: React.FC<FeedViewProps> = ({
             )}
 
             {feedMode === 'COLLECTIONS' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {collections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
-                </div>
+                <>
+                {followedCollections.length === 0 && recommendedCollections.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
+                        <FolderOpen size={48} className="mb-4 opacity-50" />
+                        <p className="font-mono text-sm">Коллекции не найдены</p>
+                    </div>
+                )}
+
+                {/* Followed Collections */}
+                {followedCollections.length > 0 && (
+                    <div className="mb-10">
+                        <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2">
+                            <UserCheck size={14} /> ПОДПИСКИ
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {followedCollections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
+                        </div>
+                    </div>
+                )}
+
+                {/* Divider */}
+                {recommendedCollections.length > 0 && followedCollections.length > 0 && (
+                    <div className="relative flex items-center justify-center mb-10 opacity-70">
+                        <div className={`absolute w-full border-t border-dashed ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}></div>
+                        <div className={`relative px-4 font-pixel text-[10px] uppercase tracking-widest flex items-center gap-2 ${theme === 'dark' ? 'bg-black text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
+                            <Sparkles size={12} /> ВАМ МОЖЕТ БЫТЬ ИНТЕРЕСНО
+                        </div>
+                    </div>
+                )}
+
+                {/* Recommended Collections */}
+                {recommendedCollections.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {recommendedCollections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
+                    </div>
+                )}
+                </>
             )}
         </div>
     );

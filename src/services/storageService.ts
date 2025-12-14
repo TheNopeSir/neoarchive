@@ -16,7 +16,8 @@ let cache = {
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '2.4.0-GlobalForceUpdate'; 
+// Updated version to force cache clear
+const CACHE_VERSION = '2.5.0-AggregatedActivityRefactor'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -51,6 +52,28 @@ const slugify = (text: string): string => {
         .replace(/-+$/, '');
 };
 
+// --- DATE PARSER FOR SORTING ---
+// Parses "dd.mm.yyyy, hh:mm:ss" to timestamp
+const parseRuDate = (dateStr: string): number => {
+    if (!dateStr) return 0;
+    try {
+        // Check if standard Date works first (ISO)
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) return d.getTime();
+
+        // Try RU format parsing
+        const [datePart, timePart] = dateStr.split(', ');
+        if (!datePart || !timePart) return 0;
+        
+        const [day, month, year] = datePart.split('.').map(Number);
+        const [hours, minutes, seconds] = timePart.split(':').map(Number);
+        
+        return new Date(year, month - 1, day, hours, minutes, seconds).getTime();
+    } catch (e) {
+        return 0;
+    }
+};
+
 // --- CLIENT CACHE ---
 const saveToLocalCache = () => {
     try {
@@ -68,7 +91,7 @@ const loadFromLocalCache = (): boolean => {
         try {
             const parsed = JSON.parse(json);
             if (!parsed.version || parsed.version !== CACHE_VERSION) {
-                console.log(`♻️ [Cache] Version mismatch. Clearing.`);
+                console.log(`♻️ [Cache] Version mismatch (${parsed.version} vs ${CACHE_VERSION}). Clearing cache.`);
                 localStorage.removeItem(LOCAL_STORAGE_KEY);
                 return false;
             }
@@ -170,9 +193,9 @@ const mergeData = <T extends { id: string, timestamp?: string }>(local: T[], clo
     local.forEach(item => { if (!deletedIds.includes(item.id)) map.set(item.id, item); });
     cloud.forEach(item => { if (!deletedIds.includes(item.id)) map.set(item.id, item); });
     return Array.from(map.values()).sort((a, b) => {
-        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return tB - tA;
+        const tA = parseRuDate(a.timestamp || '');
+        const tB = parseRuDate(b.timestamp || '');
+        return tB - tA; // Descending (Newest first)
     });
 };
 
@@ -191,7 +214,7 @@ const performCloudSync = async () => {
     if (exhibits.length > 0) cache.exhibits = mergeData(cache.exhibits, exhibits, cache.deletedIds);
     if (collections.length > 0) cache.collections = mergeData(cache.collections, collections, cache.deletedIds);
     if (notifications.length > 0) cache.notifications = mergeData(cache.notifications, notifications, []);
-    if (messages.length > 0) cache.messages = mergeData(cache.messages, messages, []).sort((a,b) => a.timestamp.localeCompare(b.timestamp)); 
+    if (messages.length > 0) cache.messages = mergeData(cache.messages, messages, []).sort((a,b) => parseRuDate(a.timestamp) - parseRuDate(b.timestamp)); 
     if (guestbook.length > 0) cache.guestbook = mergeData(cache.guestbook, guestbook, []);
     
     saveToLocalCache();

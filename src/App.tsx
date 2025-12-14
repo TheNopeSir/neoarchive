@@ -187,7 +187,7 @@ export default function App() {
         } finally {
             setIsInitializing(false);
         }
-    };
+        };
     init();
 
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -1290,18 +1290,37 @@ export default function App() {
       case 'ACTIVITY':
           const myNotifications = notifications.filter(n => n.recipient === user?.username);
           
-          // Aggregate notifications logic
+          // Ensure myNotifications is sorted NEWEST first before grouping
+          // Note: `cache.notifications` from storageService is already sorted by timestamp via mergeData,
+          // but local unshift operations might keep it sorted. To be safe:
+          // We rely on the `notifications` state being correctly ordered from `refreshData`.
+          // If strictly consecutive grouping is desired for ANY consecutive items:
+          
           const groupedNotifications: any[] = [];
           if (myNotifications.length > 0) {
-              let currentGroup = { actor: myNotifications[0].actor, count: 1, type: myNotifications[0].type, timestamp: myNotifications[0].timestamp, items: [myNotifications[0]] };
+              let currentGroup = { 
+                  actor: myNotifications[0].actor, 
+                  count: 1, 
+                  type: myNotifications[0].type, 
+                  timestamp: myNotifications[0].timestamp, 
+                  items: [myNotifications[0]] 
+              };
+              
               for (let i = 1; i < myNotifications.length; i++) {
                   const n = myNotifications[i];
+                  // Group if same actor AND relatively consecutive (just check adjacent for now)
                   if (n.actor === currentGroup.actor) {
                       currentGroup.count++;
                       currentGroup.items.push(n);
                   } else {
                       groupedNotifications.push(currentGroup);
-                      currentGroup = { actor: n.actor, count: 1, type: n.type, timestamp: n.timestamp, items: [n] };
+                      currentGroup = { 
+                          actor: n.actor, 
+                          count: 1, 
+                          type: n.type, 
+                          timestamp: n.timestamp, 
+                          items: [n] 
+                      };
                   }
               }
               groupedNotifications.push(currentGroup);
@@ -1343,12 +1362,13 @@ export default function App() {
                                               {group.items.map((n: Notification) => (
                                                   <div 
                                                     key={n.id} 
-                                                    className="flex items-center gap-2 cursor-pointer hover:text-current"
+                                                    className="flex items-center gap-2 cursor-pointer hover:text-current hover:underline"
                                                     onClick={() => n.targetId && exhibits.find(e => e.id === n.targetId) && handleExhibitClick(exhibits.find(e => e.id === n.targetId)!)}
                                                   >
                                                       {n.type === 'LIKE' && <Heart size={10} className="text-red-500" />}
                                                       {n.type === 'COMMENT' && <MessageSquare size={10} className="text-blue-500" />}
-                                                      <span className="italic truncate max-w-[200px]">{n.targetPreview || 'Контент'}</span>
+                                                      {n.type === 'FOLLOW' && <User size={10} className="text-green-500" />}
+                                                      <span className="italic truncate max-w-[200px]">{n.targetPreview || 'Перейти к объекту'}</span>
                                                   </div>
                                               ))}
                                           </div>
