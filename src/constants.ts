@@ -1,4 +1,3 @@
-
 import { Exhibit, UserProfile, Collection, Notification, Message } from './types';
 import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle } from 'lucide-react';
 import React from 'react';
@@ -42,34 +41,34 @@ export const CATEGORY_CONDITIONS: Record<string, string[]> = {
   [DefaultCategory.MISC]: ['Новый', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Нерабочий']
 };
 
-// 4. Specs Templates
+// 4. Specs Templates - More generic starting points, user can add/remove
 export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
   [DefaultCategory.PHONES]: [
-      'Производитель', 'Модель', 'Год выпуска', 'ОС', 'Тип корпуса', 'Цвет', 'Комплектация'
+      'Бренд', 'Модель', 'Год'
   ],
   [DefaultCategory.GAMES]: [
-      'Платформа', 'Название игры', 'Выпуск картриджа', 'Регион', 'Год', 'Комплектация (CIB/Loose)'
+      'Платформа', 'Название', 'Регион', 'Год'
   ],
   [DefaultCategory.MAGAZINES]: [
-      'Название', 'Номер', 'Год/Месяц', 'Издательство', 'Страниц', 'Язык'
+      'Название', 'Номер', 'Год'
   ],
   [DefaultCategory.MUSIC]: [
-      'Исполнитель', 'Альбом', 'Формат', 'Год издания', 'Лейбл', 'Страна'
+      'Исполнитель/Бренд', 'Название', 'Формат', 'Год'
   ],
   [DefaultCategory.VIDEO]: [
-      'Название', 'Формат', 'Год выхода', 'Перевод', 'Дистрибьютор'
+      'Название', 'Формат', 'Год'
   ],
   [DefaultCategory.TOYS]: [
-      'Название', 'Производитель', 'Год', 'Серия', 'Материал', 'Размер'
+      'Название', 'Производитель', 'Год', 'Материал'
   ],
   [DefaultCategory.COMPUTERS]: [
-      'Производитель', 'Модель', 'Процессор', 'ОЗУ', 'HDD', 'ОС', 'Год'
+      'Производитель', 'Модель', 'Процессор', 'ОЗУ', 'Год'
   ],
   [DefaultCategory.CAMERAS]: [
-      'Бренд', 'Модель', 'Тип', 'Объектив', 'Год', 'Работоспособность'
+      'Бренд', 'Модель', 'Тип', 'Год'
   ],
   [DefaultCategory.MISC]: [
-      'Предмет', 'Производитель', 'Год', 'Материал', 'Описание'
+      'Предмет', 'Производитель', 'Год'
   ]
 };
 

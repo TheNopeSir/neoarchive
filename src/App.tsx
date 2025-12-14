@@ -1,27 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
-  MessageSquare, Search, Database, Trash2, Settings, Home, Activity, Zap, Sparkles, 
-  User, ArrowLeft, Shuffle, Trophy, Star, SlidersHorizontal, CheckCircle2, Bell, 
-  MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
-  Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
-  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download, Box,
-  Package, FileEdit, Reply
+  Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, 
+  MessageSquare, Search, Database, Trash2, Home, Activity, 
+  User, ArrowLeft, Trophy, CheckCircle2, Bell, 
+  MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, 
+  Share2, Award, ChevronRight, Camera, Edit2, Save, Check, 
+  Send, Video, Image as ImageIcon, WifiOff, Download, Box,
+  Package, Reply, Plus, Trash
 } from 'lucide-react';
+
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
 import ExhibitCard from './components/ExhibitCard';
 import RetroLoader from './components/RetroLoader';
-import ExhibitDetailPage from './components/ExhibitDetailPage';
-import ErrorBoundary from './components/ErrorBoundary';
 import MatrixLogin from './components/MatrixLogin';
 import HallOfFame from './components/HallOfFame';
 import MyCollection from './components/MyCollection';
+
+// Imported Extracted Components
+import HeroSection from './components/HeroSection';
+import CollectionCard from './components/CollectionCard';
+import MobileNavigation from './components/MobileNavigation';
+import LoginTransition from './components/LoginTransition';
+import InstallBanner from './components/InstallBanner';
+import FeedView from './components/views/FeedView';
+import UserProfileView from './components/views/UserProfileView';
+
 import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
-import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
+import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
-import { compressImage, isOffline, getUserAvatar } from './services/storageService';
+import { compressImage, isOffline, getUserAvatar, getSystemStats } from './services/storageService';
 import useSwipe from './hooks/useSwipe';
 
 // Helper to generate specs based on category
@@ -37,496 +46,6 @@ const getDefaultCondition = (cat: string) => {
     const conditions = CATEGORY_CONDITIONS[cat] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
     return conditions[0];
 };
-
-const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null }> = ({ theme, user }) => (
-    <div className={`hidden md:block relative mb-6 p-6 rounded-lg border-2 border-dashed overflow-hidden group ${
-        theme === 'dark' 
-        ? 'border-dark-dim bg-dark-surface/50 hover:border-dark-primary transition-colors' 
-        : 'border-light-dim bg-white/50 hover:border-light-accent transition-colors'
-    }`}>
-        <div className={`absolute top-0 left-0 w-1 h-full opacity-50 ${theme === 'dark' ? 'bg-dark-primary' : 'bg-light-accent'}`}></div>
-        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-                <h1 className={`text-sm md:text-2xl lg:text-3xl font-pixel mb-2 break-words ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                    NEO_ARCHIVE
-                </h1>
-                <p className={`font-mono text-[10px] md:text-sm max-w-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Цифровой ковчег для сохранения артефактов прошлого в облачной вечности.
-                </p>
-            </div>
-        </div>
-        {/* Decorative scanline inside hero */}
-        <div className={`absolute inset-0 pointer-events-none opacity-5 bg-gradient-to-r from-transparent via-current to-transparent animate-[shimmer_2s_infinite] ${
-            theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'
-        }`} />
-    </div>
-);
-
-const CollectionCard: React.FC<{ col: Collection; theme: 'dark' | 'light'; onClick: (c: Collection) => void; onShare: (c: Collection) => void }> = ({ col, theme, onClick, onShare }) => (
-    <div 
-       key={col.id} 
-       onClick={() => onClick(col)}
-       className={`group relative aspect-[4/3] rounded-xl overflow-hidden cursor-pointer border-2 transition-transform hover:-translate-y-1 ${
-           theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'
-       }`}
-    >
-        <img src={col.coverImage} alt={col.title} className="w-full h-full object-cover transition-transform group-hover:scale-105"/>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-4">
-            <div className="font-pixel text-[10px] text-white/70 mb-1 flex items-center gap-1">
-                <FolderOpen size={10}/> КОЛЛЕКЦИЯ
-            </div>
-            <h3 className="text-white font-pixel text-sm md:text-lg font-bold leading-tight mb-1">{col.title}</h3>
-            <div className="flex justify-between items-end">
-                <span className="text-[10px] font-mono text-white/60">@{col.owner}</span>
-                <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-white/20 backdrop-blur rounded text-[9px] font-bold text-white">
-                        {col.exhibitIds.length} ITEMS
-                    </span>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onShare(col); }}
-                        className="bg-white/20 p-1.5 rounded hover:bg-white/40 text-white transition-colors"
-                        title="Поделиться"
-                    >
-                        <Share2 size={12} />
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-);
-
-interface UserProfileViewProps {
-    user: UserProfile;
-    viewedProfileUsername: string;
-    exhibits: Exhibit[];
-    collections: Collection[];
-    guestbook: GuestbookEntry[];
-    theme: 'dark' | 'light';
-    onBack: () => void;
-    onLogout: () => void;
-    onFollow: (username: string) => void;
-    onChat: (username: string) => void;
-    onExhibitClick: (item: Exhibit) => void;
-    onLike: (id: string, e?: React.MouseEvent) => void;
-    onFavorite: (id: string, e?: React.MouseEvent) => void;
-    onAuthorClick: (author: string) => void;
-    onCollectionClick: (col: Collection) => void;
-    onShareCollection: (col: Collection) => void;
-    onViewHallOfFame: () => void;
-    onGuestbookPost: () => void;
-    refreshData: () => void;
-    isEditingProfile: boolean;
-    setIsEditingProfile: (v: boolean) => void;
-    editTagline: string;
-    setEditTagline: (v: string) => void;
-    editStatus: UserStatus;
-    setEditStatus: (v: UserStatus) => void;
-    editTelegram: string;
-    setEditTelegram: (v: string) => void;
-    onSaveProfile: () => void;
-    onProfileImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    guestbookInput: string;
-    setGuestbookInput: (v: string) => void;
-    guestbookInputRef: React.RefObject<HTMLInputElement>;
-    profileTab: 'ARTIFACTS' | 'COLLECTIONS';
-    setProfileTab: (v: 'ARTIFACTS' | 'COLLECTIONS') => void;
-}
-
-const UserProfileView: React.FC<UserProfileViewProps> = ({ 
-    user, viewedProfileUsername, exhibits, collections, guestbook, theme, 
-    onBack, onLogout, onFollow, onChat, onExhibitClick, onLike, onFavorite, onAuthorClick, 
-    onCollectionClick, onShareCollection, onViewHallOfFame, onGuestbookPost, 
-    isEditingProfile, setIsEditingProfile, editTagline, setEditTagline, editStatus, setEditStatus, editTelegram, setEditTelegram, 
-    onSaveProfile, onProfileImageUpload, guestbookInput, setGuestbookInput, guestbookInputRef, profileTab, setProfileTab 
-}) => {
-    const profileUser = db.getFullDatabase().users.find(u => u.username === viewedProfileUsername) || { username: viewedProfileUsername, email: 'ghost@matrix.net', tagline: 'Цифровой призрак', avatarUrl: getUserAvatar(viewedProfileUsername), joinedDate: 'Unknown', following: [], achievements: [], telegram: '' } as UserProfile;
-    const profileArtifacts = exhibits.filter(e => e.owner === viewedProfileUsername && !e.isDraft);
-    const profileCollections = collections.filter(c => c.owner === viewedProfileUsername);
-    const isCurrentUser = user?.username === viewedProfileUsername;
-    const isSubscribed = user?.following.includes(viewedProfileUsername) || false;
-
-    return (
-        <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32">
-            <button onClick={onBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
-                 <ArrowLeft size={16} /> НАЗАД
-            </button>
-            <div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                <div className="relative">
-                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-gray-500">
-                        <img src={profileUser.avatarUrl} alt={profileUser.username || ''} className="w-full h-full object-cover"/>
-                    </div>
-                    {isCurrentUser && (
-                        <label className="absolute bottom-0 right-0 bg-gray-800 p-2 rounded-full cursor-pointer hover:bg-gray-700 text-white border border-gray-600">
-                            <Edit2 size={14} />
-                            <input type="file" accept="image/*" className="hidden" onChange={onProfileImageUpload} />
-                        </label>
-                    )}
-                </div>
-                <div className="flex-1 text-center md:text-left space-y-2">
-                    {isEditingProfile && isCurrentUser ? (
-                        <div className="space-y-2 max-w-sm">
-                            <input value={editTagline} onChange={e => setEditTagline(e.target.value)} placeholder="Статус..." className="w-full bg-transparent border-b p-1 font-mono text-sm" />
-                            <input value={editTelegram} onChange={e => setEditTelegram(e.target.value)} placeholder="Telegram (без @)" className="w-full bg-transparent border-b p-1 font-mono text-sm" />
-                            <div className="flex gap-2">
-                                {(Object.keys(STATUS_OPTIONS) as UserStatus[]).map(s => (
-                                    <button key={s} onClick={() => setEditStatus(s)} className={`p-1 rounded border ${editStatus === s ? 'border-green-500 bg-green-500/20' : 'border-transparent'}`} title={STATUS_OPTIONS[s].label}>
-                                        {React.createElement(STATUS_OPTIONS[s].icon, { size: 16 })}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="flex gap-2 justify-center md:justify-start">
-                                <button onClick={onSaveProfile} className="bg-green-600 text-white px-3 py-1 rounded text-xs">OK</button>
-                                <button onClick={() => setIsEditingProfile(false)} className="bg-gray-600 text-white px-3 py-1 rounded text-xs">CANCEL</button>
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            <h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2>
-                            <p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">
-                                {profileUser.tagline}
-                                {isCurrentUser && (
-                                    <button onClick={() => { setEditTagline(user?.tagline || ''); setEditStatus(user?.status || 'ONLINE'); setEditTelegram(user?.telegram || ''); setIsEditingProfile(true); }} className="opacity-50 hover:opacity-100">
-                                        <Edit2 size={12} />
-                                    </button>
-                                )}
-                            </p>
-                            {profileUser.status && (
-                                <div className={`flex items-center gap-1 text-xs font-bold ${STATUS_OPTIONS[profileUser.status].color} justify-center md:justify-start`}>
-                                    {React.createElement(STATUS_OPTIONS[profileUser.status].icon, { size: 12 })}
-                                    {STATUS_OPTIONS[profileUser.status].label}
-                                </div>
-                            )}
-                            {profileUser.telegram && (
-                                <a href={`https://t.me/${profileUser.telegram.replace('@', '')}`} target="_blank" rel="nofollow noreferrer" className={`flex items-center gap-1 text-xs font-bold justify-center md:justify-start hover:underline ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>
-                                    <Send size={12} /> Telegram
-                                </a>
-                            )}
-                        </>
-                    )}
-                    {!isCurrentUser && (
-                        <div className="flex gap-2 justify-center md:justify-start pt-2">
-                            <button onClick={() => onFollow(profileUser.username)} className={`px-4 py-2 rounded font-bold font-pixel text-xs ${isSubscribed ? 'border border-gray-500 opacity-70' : (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white')}`}>
-                                {isSubscribed ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}
-                            </button>
-                            <button onClick={() => onChat(profileUser.username)} className="px-4 py-2 rounded border hover:bg-white/10">
-                                <MessageSquare size={16} />
-                            </button>
-                        </div>
-                    )}
-                    {isCurrentUser && (
-                        <div className="flex justify-center md:justify-start pt-2">
-                            <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-500 rounded hover:bg-red-500/10 text-xs font-pixel font-bold transition-colors">
-                                <LogOut size={14} /> ВЫЙТИ ИЗ СИСТЕМЫ
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-            {profileUser.achievements && profileUser.achievements.length > 0 && (
-                <div className="flex gap-2 flex-wrap justify-center md:justify-start">
-                    {profileUser.achievements.map(badgeId => { 
-                        const b = BADGES[badgeId as keyof typeof BADGES]; 
-                        if(!b) return null; 
-                        return (<div key={badgeId} className={`px-2 py-1 rounded text-[10px] font-bold text-white ${b.color} flex items-center gap-1`} title={b.desc}>{b.label}</div>) 
-                    })}
-                </div>
-            )}
-            <button onClick={onViewHallOfFame} className="w-full py-3 border border-dashed border-gray-500/30 text-xs font-pixel opacity-70 hover:opacity-100 flex items-center justify-center gap-2">
-                <Trophy size={14} /> ОТКРЫТЬ ЗАЛ СЛАВЫ
-            </button>
-            <div className="flex gap-4 border-b border-gray-500/30">
-                <button onClick={() => setProfileTab('ARTIFACTS')} className={`pb-2 font-pixel text-xs ${profileTab === 'ARTIFACTS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>АРТЕФАКТЫ</button>
-                <button onClick={() => setProfileTab('COLLECTIONS')} className={`pb-2 font-pixel text-xs ${profileTab === 'COLLECTIONS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>КОЛЛЕКЦИИ</button>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {profileTab === 'ARTIFACTS' && profileArtifacts.map(item => (
-                    <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={onExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => onLike(item.id, e)} onFavorite={(e) => onFavorite(item.id, e)} onAuthorClick={() => {}} />
-                ))}
-                {profileTab === 'COLLECTIONS' && profileCollections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
-            </div>
-            <div className="pt-8 border-t border-dashed border-gray-500/30">
-                <h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
-                <div className="space-y-4 mb-4">
-                    {guestbook.filter(g => g.targetUser === profileUser.username).map(entry => (
-                        <div key={entry.id} className="p-3 border rounded border-gray-500/30 text-xs relative group">
-                            <div className="flex justify-between mb-1">
-                                <span className="font-bold font-pixel cursor-pointer" onClick={() => onAuthorClick(entry.author)}>@{entry.author}</span>
-                                <span className="opacity-50">{entry.timestamp}</span>
-                            </div>
-                            <p className="font-mono mb-2">{entry.text}</p>
-                            <button onClick={() => { setGuestbookInput(`@${entry.author} `); guestbookInputRef.current?.focus(); }} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity">
-                                <Reply size={10} /> ОТВЕТИТЬ
-                            </button>
-                        </div>
-                    ))}
-                </div>
-                {user && (
-                    <div className="flex gap-2">
-                        <input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className="flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none" />
-                        <button onClick={onGuestbookPost} className="p-2 border rounded hover:bg-white/10"><Send size={16} /></button>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
-interface FeedViewProps {
-    theme: 'dark' | 'light';
-    feedMode: 'ARTIFACTS' | 'COLLECTIONS';
-    setFeedMode: (v: 'ARTIFACTS' | 'COLLECTIONS') => void;
-    selectedCategory: string;
-    setSelectedCategory: (v: string) => void;
-    exhibits: Exhibit[];
-    collections: Collection[];
-    user: UserProfile | null;
-    visibleCount: number;
-    loadMoreRef: React.RefObject<HTMLDivElement>;
-    onExhibitClick: (item: Exhibit) => void;
-    onLike: (id: string, e?: React.MouseEvent) => void;
-    onFavorite: (id: string, e?: React.MouseEvent) => void;
-    onAuthorClick: (author: string) => void;
-    onCollectionClick: (col: Collection) => void;
-    onShareCollection: (col: Collection) => void;
-    setView: (v: ViewState) => void;
-    updateHash: (path: string) => void;
-}
-
-const FeedView: React.FC<FeedViewProps> = ({ 
-    theme, feedMode, setFeedMode, selectedCategory, setSelectedCategory, exhibits, collections, user, visibleCount, loadMoreRef, 
-    onExhibitClick, onLike, onFavorite, onAuthorClick, onCollectionClick, onShareCollection, setView, updateHash 
-}) => {
-    return (
-        <div className="max-w-7xl mx-auto animate-in fade-in">
-            <div className="flex items-center justify-center gap-4 mb-8">
-                <button 
-                    onClick={() => { setFeedMode('ARTIFACTS'); if(window.location.hash !== '#/feed') { setView('FEED'); updateHash('/feed'); }}}
-                    className={`px-4 py-2 font-pixel text-xs md:text-sm rounded-full transition-all ${
-                        feedMode === 'ARTIFACTS' 
-                        ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') 
-                        : 'opacity-50 hover:opacity-100'
-                    }`}
-                >
-                    АРТЕФАКТЫ
-                </button>
-                <button 
-                    onClick={() => setFeedMode('COLLECTIONS')}
-                    className={`px-4 py-2 font-pixel text-xs md:text-sm rounded-full transition-all ${
-                        feedMode === 'COLLECTIONS' 
-                        ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') 
-                        : 'opacity-50 hover:opacity-100'
-                    }`}
-                >
-                    КОЛЛЕКЦИИ
-                </button>
-            </div>
-
-            {feedMode === 'ARTIFACTS' && (
-                <>
-                <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 md:justify-center">
-                    <button 
-                        onClick={() => { setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
-                        className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border flex-shrink-0 ${
-                            selectedCategory === 'ВСЕ'
-                            ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
-                            : 'border-transparent opacity-60 hover:opacity-100'
-                        }`}
-                    >
-                        [ ВСЕ ]
-                    </button>
-                    {Object.values(DefaultCategory).map((cat: string) => (
-                        <button
-                            key={cat}
-                            onClick={() => { setSelectedCategory(cat); updateHash('/feed'); }}
-                            className={`px-3 py-1 rounded text-xs font-pixel whitespace-nowrap border flex-shrink-0 ${
-                                selectedCategory === cat
-                                ? (theme === 'dark' ? 'bg-dark-surface border-dark-primary text-dark-primary' : 'bg-white border-light-accent text-light-accent')
-                                : 'border-transparent opacity-60 hover:opacity-100'
-                            }`}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-                </div>
-
-                {exhibits.filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory)).length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
-                        <Box size={48} className="mb-4 opacity-50" />
-                        <p className="font-mono text-sm mb-6">Эта полка пока что пустует...</p>
-                        <button 
-                            onClick={() => { setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
-                            className={`px-6 py-3 rounded font-pixel text-[10px] md:text-xs font-bold border transition-all hover:scale-105 ${
-                                theme === 'dark' 
-                                ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' 
-                                : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'
-                            }`}
-                        >
-                            ВЕРНУТЬСЯ В ОБЩУЮ ЛЕНТУ
-                        </button>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                        {exhibits
-                            .filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory))
-                            .slice(0, visibleCount)
-                            .map((item: Exhibit) => (
-                                <ExhibitCard 
-                                    key={item.id} 
-                                    item={item} 
-                                    theme={theme}
-                                    similarExhibits={[]}
-                                    onClick={onExhibitClick}
-                                    isLiked={item.likedBy?.includes(user?.username || '') || false}
-                                    isFavorited={false}
-                                    onLike={(e) => onLike(item.id, e)}
-                                    onFavorite={(e) => onFavorite(item.id, e)}
-                                    onAuthorClick={onAuthorClick}
-                                />
-                            ))
-                        }
-                    </div>
-                )}
-                
-                <div ref={loadMoreRef} className="h-20 w-full flex items-center justify-center mt-8">
-                        {exhibits.filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory)).length > visibleCount && <RetroLoader />}
-                </div>
-                </>
-            )}
-
-            {feedMode === 'COLLECTIONS' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {collections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
-                </div>
-            )}
-        </div>
-    );
-};
-
-const MobileNavigation: React.FC<{
-    theme: 'dark' | 'light';
-    view: ViewState;
-    setView: (v: ViewState) => void;
-    updateHash: (path: string) => void;
-    hasNotifications: boolean;
-    username: string;
-    onResetFeed: () => void;
-    onProfileClick: () => void;
-}> = ({ theme, view, setView, updateHash, hasNotifications, username, onResetFeed, onProfileClick }) => {
-    const navItems = [
-        { id: 'FEED', icon: Home, label: 'ГЛАВНАЯ', action: () => { onResetFeed(); setView('FEED'); updateHash('/feed'); } },
-        { id: 'MY_COLLECTION', icon: Package, label: 'ПОЛКА', action: () => { setView('MY_COLLECTION'); updateHash('/my-collection'); } },
-        { id: 'ADD', icon: PlusCircle, label: 'ДОБАВИТЬ', action: () => { setView('CREATE_HUB'); updateHash('/create'); }, highlight: true },
-        { id: 'ACTIVITY', icon: Bell, label: 'АКТИВНОСТЬ', action: () => { setView('ACTIVITY'); updateHash('/activity'); }, hasBadge: hasNotifications },
-        { id: 'PROFILE', icon: User, label: 'ПРОФИЛЬ', action: onProfileClick }
-    ];
-
-    return (
-        <div className={`md:hidden fixed bottom-0 left-0 w-full z-50 border-t pb-safe ${
-            theme === 'dark' ? 'bg-black/95 border-dark-dim text-gray-400' : 'bg-white/95 border-light-dim text-gray-500'
-        }`}>
-            <div className="flex justify-around items-center h-16">
-                {navItems.map(item => {
-                    const isActive = view === item.id || (item.id === 'PROFILE' && view === 'USER_PROFILE') || (item.id === 'ADD' && ['CREATE_HUB', 'CREATE_ARTIFACT', 'CREATE_COLLECTION'].includes(view)) || (item.id === 'ACTIVITY' && ['ACTIVITY', 'DIRECT_CHAT'].includes(view));
-                    return (
-                        <button 
-                            key={item.id}
-                            onClick={item.action}
-                            className={`flex flex-col items-center justify-center w-full h-full gap-1 relative ${
-                                isActive 
-                                ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') 
-                                : ''
-                            }`}
-                        >
-                            <item.icon 
-                                size={item.highlight ? 28 : 20} 
-                                strokeWidth={item.highlight ? 2 : 1.5}
-                                className={item.highlight ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}
-                            />
-                            {!item.highlight && <span className="text-[8px] font-pixel mt-1">{item.label}</span>}
-                            {item.hasBadge && (
-                                <span className="absolute top-3 right-6 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                            )}
-                        </button>
-                    );
-                })}
-            </div>
-        </div>
-    );
-};
-
-const LoginTransition: React.FC = () => (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center text-green-500 font-pixel">
-      <div className="space-y-4 text-center p-4">
-        <div className="text-3xl md:text-5xl animate-pulse font-bold tracking-widest text-shadow-glow">
-            ACCESS GRANTED
-        </div>
-        <div className="font-mono text-xs md:text-sm opacity-80 flex flex-col gap-1">
-            <span className="animate-[fade_0.5s_ease-in-out_infinite]">DECRYPTING USER DATA...</span>
-            <span className="text-[10px] opacity-60">KEY: RSA-4096-VERIFIED</span>
-        </div>
-        
-        {/* Progress Bar */}
-        <div className="w-64 h-3 border-2 border-green-900 p-0.5 mx-auto rounded relative overflow-hidden bg-green-900/20">
-           <div 
-             className="h-full bg-green-500 animate-[width_2.5s_cubic-bezier(0.4,0,0.2,1)_forwards]" 
-             style={{width: '0%', boxShadow: '0 0 10px #22c55e'}}
-           ></div>
-        </div>
-
-        <div className="font-mono text-[10px] opacity-50 mt-4 animate-pulse">
-           ESTABLISHING SECURE CONNECTION TO MATRIX...
-        </div>
-      </div>
-      <style>{`
-        @keyframes width {
-          0% { width: 5%; }
-          30% { width: 45%; }
-          60% { width: 55%; }
-          80% { width: 90%; }
-          100% { width: 100%; }
-        }
-        .text-shadow-glow {
-            text-shadow: 0 0 10px #22c55e, 0 0 20px #22c55e;
-        }
-      `}</style>
-    </div>
-);
-
-// Install Banner Component
-const InstallBanner: React.FC<{ theme: 'dark' | 'light'; onInstall: () => void; onClose: () => void }> = ({ theme, onInstall, onClose }) => (
-    <div className={`fixed top-14 left-0 w-full z-40 p-2 flex justify-center animate-in slide-in-from-top-2`}>
-        <div className={`flex items-center gap-3 p-3 rounded border-2 shadow-lg backdrop-blur-md max-w-sm w-full justify-between ${
-            theme === 'dark' 
-            ? 'bg-black/90 border-dark-primary text-white shadow-dark-primary/20' 
-            : 'bg-white/90 border-light-accent text-black shadow-light-accent/20'
-        }`}>
-            <div className="flex items-center gap-3">
-                <div className={`p-2 rounded border ${
-                    theme === 'dark' ? 'border-dark-primary bg-dark-primary/20' : 'border-light-accent bg-light-accent/20'
-                }`}>
-                    <Download size={20} className="animate-bounce" />
-                </div>
-                <div>
-                    <h3 className="font-pixel text-[10px] font-bold">SYSTEM UPDATE</h3>
-                    <p className="font-mono text-[9px] opacity-80">Установить приложение?</p>
-                </div>
-            </div>
-            <div className="flex gap-2">
-                <button 
-                    onClick={onInstall}
-                    className={`px-3 py-1 font-pixel text-[9px] font-bold uppercase border hover:bg-current hover:text-black transition-colors ${
-                        theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent'
-                    }`}
-                >
-                    INSTALL
-                </button>
-                <button onClick={onClose} className="opacity-50 hover:opacity-100">
-                    <X size={16} />
-                </button>
-            </div>
-        </div>
-    </div>
-);
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -545,6 +64,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [guestbook, setGuestbook] = useState<GuestbookEntry[]>([]);
+  const [systemStats, setSystemStats] = useState({ totalUsers: 0, onlineUsers: 0 });
 
   // UI State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
@@ -613,6 +133,7 @@ export default function App() {
       setNotifications([...db.getNotifications()]);
       setMessages([...db.getMessages()]);
       setGuestbook([...db.getGuestbook()]);
+      setSystemStats(db.getSystemStats());
   };
 
   // Background Sync Polling
@@ -918,6 +439,16 @@ export default function App() {
          }
      }
 
+     // Remove empty specs before saving
+     const cleanedSpecs: Record<string, string> = {};
+     if (newExhibit.specs) {
+         Object.entries(newExhibit.specs).forEach(([key, val]) => {
+             if (key.trim() && val && val.toString().trim()) {
+                 cleanedSpecs[key] = val;
+             }
+         });
+     }
+
      const exhibit: Exhibit = {
          id: editingExhibitId || Date.now().toString(),
          title: newExhibit.title,
@@ -931,7 +462,7 @@ export default function App() {
          likes: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likes || 0 : 0,
          likedBy: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likedBy || [] : [],
          views: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.views || 0 : 0,
-         specs: newExhibit.specs || {},
+         specs: cleanedSpecs,
          comments: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.comments || [] : [],
          quality: newExhibit.quality || 'Не указано',
          condition: newExhibit.condition || getDefaultCondition(newExhibit.category || DefaultCategory.MISC),
@@ -1483,12 +1014,6 @@ export default function App() {
                                  <option key={cat} value={cat}>{cat}</option>
                              ))}
                          </select>
-                         <ChevronDown 
-                             size={16} 
-                             className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
-                                 theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
-                             }`} 
-                         />
                      </div>
                  </div>
 
@@ -1511,39 +1036,75 @@ export default function App() {
                                      <option key={sub} value={sub}>{sub}</option>
                                  ))}
                              </select>
-                             <ChevronDown 
-                                 size={16} 
-                                 className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
-                                     theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
-                                 }`} 
-                             />
                          </div>
                      </div>
                  )}
 
-                 {/* Condition Selector */}
-                 <div className="space-y-1">
-                     <label className="text-[10px] font-pixel uppercase opacity-70">СОСТОЯНИЕ / GRADE</label>
-                     <div className="relative">
-                         <select 
-                            value={newExhibit.condition || ''}
-                            onChange={(e) => setNewExhibit({...newExhibit, condition: e.target.value})}
-                            className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer ${
-                                theme === 'dark' 
-                                ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
-                                : 'bg-white text-black border-light-dim focus:border-light-accent'
-                            }`}
+                 {/* Dynamic Specs Fields */}
+                 <div className="space-y-3">
+                     <div className="flex justify-between items-center border-b pb-1">
+                         <label className="text-[10px] font-pixel uppercase opacity-70">ХАРАКТЕРИСТИКИ</label>
+                         <button 
+                            onClick={() => {
+                                const keyName = prompt("Введите название характеристики:");
+                                if (keyName) {
+                                    setNewExhibit(prev => ({
+                                        ...prev,
+                                        specs: { ...prev.specs, [keyName]: '' }
+                                    }));
+                                }
+                            }}
+                            className="text-[10px] font-bold flex items-center gap-1 hover:underline"
                          >
-                             {(CATEGORY_CONDITIONS[newExhibit.category || DefaultCategory.MISC] || []).map(cond => (
-                                 <option key={cond} value={cond}>{cond}</option>
-                             ))}
-                         </select>
-                         <ChevronDown 
-                             size={16} 
-                             className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
-                                 theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
-                             }`} 
-                         />
+                             <Plus size={10} /> ДОБАВИТЬ ПОЛЕ
+                         </button>
+                     </div>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         {newExhibit.specs && Object.keys(newExhibit.specs).length > 0 ? (
+                             Object.entries(newExhibit.specs).map(([key, val]) => (
+                                 <div key={key} className="space-y-1 relative group">
+                                     <div className="flex justify-between">
+                                         <label className="text-[10px] font-mono uppercase opacity-60 truncate block">{key}</label>
+                                         <button 
+                                            onClick={() => {
+                                                const updated = { ...newExhibit.specs };
+                                                delete updated[key];
+                                                setNewExhibit({ ...newExhibit, specs: updated });
+                                            }}
+                                            className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                         >
+                                             <Trash size={10} />
+                                         </button>
+                                     </div>
+                                     <input 
+                                         list={`list-${key}`}
+                                         className={`w-full bg-transparent border rounded p-2 text-sm focus:outline-none font-mono ${
+                                             theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
+                                         }`}
+                                         placeholder="..."
+                                         value={val as string}
+                                         onChange={e => {
+                                             setNewExhibit({
+                                                 ...newExhibit,
+                                                 specs: { ...newExhibit.specs, [key]: e.target.value }
+                                             });
+                                         }}
+                                     />
+                                     {COMMON_SPEC_VALUES[key] && (
+                                         <datalist id={`list-${key}`}>
+                                             {COMMON_SPEC_VALUES[key].map(opt => (
+                                                 <option key={opt} value={opt} />
+                                             ))}
+                                         </datalist>
+                                     )}
+                                 </div>
+                             ))
+                         ) : (
+                             <div className="col-span-2 text-center opacity-50 text-xs py-4 font-mono">
+                                 Добавьте характеристики для детального описания
+                             </div>
+                         )}
                      </div>
                  </div>
 
@@ -1575,20 +1136,6 @@ export default function App() {
                                 onChange={handleImageUpload}
                             />
                         </label>
-
-                        <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
-                            theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'
-                        }`}>
-                            <Camera size={20} className="opacity-50" />
-                            <span className="text-[8px] font-pixel mt-1 opacity-50">КАМЕРА</span>
-                            <input 
-                                type="file" 
-                                accept="image/*" 
-                                capture="environment"
-                                className="hidden" 
-                                onChange={handleImageUpload}
-                            />
-                        </label>
                     </div>
                  </div>
 
@@ -1604,45 +1151,6 @@ export default function App() {
                        value={newExhibit.videoUrl || ''}
                        onChange={e => setNewExhibit({...newExhibit, videoUrl: e.target.value})}
                      />
-                 </div>
-
-                 {/* Dynamic Specs Fields with Datalist */}
-                 <div className="space-y-3">
-                     <label className="text-[10px] font-pixel uppercase opacity-70 block border-b pb-1">ХАРАКТЕРИСТИКИ</label>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         {newExhibit.specs && Object.keys(newExhibit.specs).length > 0 ? (
-                             Object.keys(newExhibit.specs).map(key => (
-                                 <div key={key} className="space-y-1">
-                                     <label className="text-[10px] font-mono uppercase opacity-60 truncate block">{key}</label>
-                                     <input 
-                                         list={`list-${key}`}
-                                         className={`w-full bg-transparent border rounded p-2 text-sm focus:outline-none font-mono ${
-                                             theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
-                                         }`}
-                                         placeholder="..."
-                                         value={newExhibit.specs?.[key] || ''}
-                                         onChange={e => {
-                                             setNewExhibit({
-                                                 ...newExhibit,
-                                                 specs: { ...newExhibit.specs, [key]: e.target.value }
-                                             });
-                                         }}
-                                     />
-                                     {COMMON_SPEC_VALUES[key] && (
-                                         <datalist id={`list-${key}`}>
-                                             {COMMON_SPEC_VALUES[key].map(opt => (
-                                                 <option key={opt} value={opt} />
-                                             ))}
-                                         </datalist>
-                                     )}
-                                 </div>
-                             ))
-                         ) : (
-                             <div className="col-span-2 text-center opacity-50 text-xs py-4 font-mono">
-                                 Выберите категорию для заполнения характеристик
-                             </div>
-                         )}
-                     </div>
                  </div>
 
                  <div className="space-y-1">
@@ -1774,59 +1282,82 @@ export default function App() {
                    )}
                    {searchMode === 'ARTIFACTS' && (
                        <div className="animate-in fade-in slide-in-from-bottom-2">
-                           {!searchQuery && (
-                               <>
-                                   <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2"><Grid size={14}/> КАТЕГОРИИ</h3>
-                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">{Object.values(DefaultCategory).map((cat: string) => (<button key={cat} onClick={() => { setSelectedCategory(cat); setView('FEED'); updateHash('/feed'); }} className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span></button>))}</div>
-                               </>
-                           )}
                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{(searchQuery ? exhibits.filter(ex => !ex.isDraft && (ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))) : exhibits.filter(ex => !ex.isDraft).sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)).map((item: Exhibit) => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />))}</div>
                        </div>
                    )}
               </div>
           );
-      case 'EDIT_COLLECTION':
-          if (!collectionToEdit) return <div>Error</div>;
-          return (
-              <div className="max-w-2xl mx-auto animate-in fade-in pb-32">
-                  <div className="flex items-center justify-between mb-6">
-                     <div className="flex items-center gap-2"><button onClick={handleBack} className="hover:underline font-pixel text-xs"><ArrowLeft size={16}/></button><h2 className="text-lg font-pixel">РЕДАКТОР КОЛЛЕКЦИИ</h2></div>
-                     <button onClick={handleDeleteCollection} className="text-red-500 p-2 border border-red-500 rounded hover:bg-red-500/10 transition-colors"><Trash2 size={16} /></button>
-                  </div>
-                  <div className="space-y-6">
-                      <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
-                          {collectionToEdit.coverImage ? (<img src={collectionToEdit.coverImage} className="w-full h-full object-cover" />) : (<div className="flex items-center justify-center w-full h-full text-xs font-mono opacity-50">NO COVER</div>)}
-                          <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"><div className="flex flex-col items-center gap-2 text-white"><Upload size={24} /><span className="font-pixel text-[10px]">CHANGE COVER</span></div><input type="file" accept="image/*" className="hidden" onChange={handleCollectionCoverUpload} /></label>
-                      </div>
-                      <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label><input className="w-full bg-transparent border-b p-2 font-pixel text-lg focus:outline-none" value={collectionToEdit.title} onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})} /></div>
-                      <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 font-mono text-sm rounded h-24 focus:outline-none" value={collectionToEdit.description} onChange={e => setCollectionToEdit({...collectionToEdit, description: e.target.value})} /></div>
-                      <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label><div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">{exhibits.filter(e => e.owner === user?.username).map(ex => { const isSelected = collectionToEdit.exhibitIds.includes(ex.id); return (<div key={ex.id} onClick={() => { const newIds = isSelected ? collectionToEdit.exhibitIds.filter(id => id !== ex.id) : [...collectionToEdit.exhibitIds, ex.id]; setCollectionToEdit({...collectionToEdit, exhibitIds: newIds}); }} className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${isSelected ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent') : 'opacity-60 hover:opacity-100'}`}><div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>{isSelected && <Check size={12} strokeWidth={4} />}</div><div className="truncate font-mono text-xs">{ex.title}</div></div>)})}</div></div>
-                      <button onClick={handleSaveCollection} className="w-full py-4 font-bold font-pixel bg-green-500 text-black uppercase">СОХРАНИТЬ ИЗМЕНЕНИЯ</button>
-                  </div>
-              </div>
-          );
-      case 'CREATE_COLLECTION':
-          return (
-              <div className="max-w-xl mx-auto animate-in fade-in">
-                 <button onClick={() => setView('CREATE_HUB')} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100"><ArrowLeft size={16} /> НАЗАД</button>
-                 <h2 className="text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
-                 <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                     <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">{newCollection.coverImage ? (<img src={newCollection.coverImage} className="w-full h-full object-cover" />) : (<div className="flex flex-col items-center justify-center w-full h-full text-xs font-mono opacity-50 gap-2"><Camera size={24} /><span>ЗАГРУЗИТЬ ОБЛОЖКУ *</span></div>)}<label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"><input type="file" accept="image/*" className="hidden" onChange={handleNewCollectionCoverUpload} /><div className="text-white font-pixel text-xs">ВЫБРАТЬ ФОТО</div></label></div>
-                     <div><label className="text-xs font-pixel uppercase opacity-70">НАЗВАНИЕ ПОДБОРКИ *</label><input className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-base mt-1" placeholder="Например: Мои консоли" value={newCollection.title} onChange={e => setNewCollection({...newCollection, title: e.target.value})} /></div>
-                     <div><label className="text-xs font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 focus:outline-none font-mono text-sm mt-1 rounded h-32" placeholder="О чем эта коллекция?" value={newCollection.description} onChange={e => setNewCollection({...newCollection, description: e.target.value})} /></div>
-                     <button onClick={handleCreateCollection} disabled={isLoading} className={`w-full py-3 mt-4 font-pixel font-bold uppercase tracking-widest ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? '...' : 'СОЗДАТЬ И ДОБАВИТЬ ПРЕДМЕТЫ'}</button>
-                 </div>
-              </div>
-          );
       case 'ACTIVITY':
           const myNotifications = notifications.filter(n => n.recipient === user?.username);
+          
+          // Aggregate notifications logic
+          const groupedNotifications: any[] = [];
+          if (myNotifications.length > 0) {
+              let currentGroup = { actor: myNotifications[0].actor, count: 1, type: myNotifications[0].type, timestamp: myNotifications[0].timestamp, items: [myNotifications[0]] };
+              for (let i = 1; i < myNotifications.length; i++) {
+                  const n = myNotifications[i];
+                  if (n.actor === currentGroup.actor) {
+                      currentGroup.count++;
+                      currentGroup.items.push(n);
+                  } else {
+                      groupedNotifications.push(currentGroup);
+                      currentGroup = { actor: n.actor, count: 1, type: n.type, timestamp: n.timestamp, items: [n] };
+                  }
+              }
+              groupedNotifications.push(currentGroup);
+          }
+
           return (
               <div className="max-w-2xl mx-auto animate-in fade-in">
                   <div className="flex justify-center mb-6 border-b border-gray-500/30">
                       <button onClick={handleOpenUpdates} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'UPDATES' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ОБНОВЛЕНИЯ {myNotifications.some(n => !n.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
                       <button onClick={() => setActivityTab('DIALOGS')} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'DIALOGS' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ДИАЛОГИ {messages.some(m => m.receiver === user?.username && !m.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
                   </div>
-                  {activityTab === 'UPDATES' && (<div className="space-y-4">{myNotifications.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>) : (myNotifications.map(notif => (<div key={notif.id} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}><div className="mt-1">{notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}{notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}{notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}{notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}</div><div className="flex-1"><div className="font-pixel text-xs opacity-50 mb-1 flex justify-between"><span>{notif.timestamp}</span>{!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}</div><div className="font-mono text-sm"><span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(notif.actor)}>@{notif.actor}</span>{notif.type === 'LIKE' && ' оценил ваш артефакт.'}{notif.type === 'COMMENT' && ' прокомментировал: '}{notif.type === 'FOLLOW' && ' подписался на вас.'}{notif.type === 'GUESTBOOK' && ' написал в гостевой книге.'}</div>{notif.targetPreview && (<div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">"{notif.targetPreview}"</div>)}</div></div>)))}</div>)}
+                  {activityTab === 'UPDATES' && (
+                      <div className="space-y-4">
+                          {groupedNotifications.length === 0 ? (
+                              <div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>
+                          ) : (
+                              groupedNotifications.map((group, idx) => (
+                                  <div key={idx} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
+                                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 flex-shrink-0 cursor-pointer" onClick={() => handleAuthorClick(group.actor)}>
+                                          <img src={getUserAvatar(group.actor)} alt="Avatar" />
+                                      </div>
+                                      <div className="flex-1">
+                                          <div className="font-pixel text-xs opacity-50 mb-1 flex justify-between">
+                                              <span>{group.timestamp}</span>
+                                              {group.items.some((n: Notification) => !n.isRead) && <span className="text-red-500 font-bold">NEW</span>}
+                                          </div>
+                                          <div className="font-mono text-sm">
+                                              <span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(group.actor)}>@{group.actor}</span>
+                                              {group.count > 1 ? ` совершил(а) ${group.count} действий` : (
+                                                  group.type === 'LIKE' ? ' оценил ваш артефакт.' :
+                                                  group.type === 'COMMENT' ? ' оставил комментарий.' :
+                                                  group.type === 'FOLLOW' ? ' подписался на вас.' :
+                                                  group.type === 'GUESTBOOK' ? ' написал в гостевой.' : ' обновил статус.'
+                                              )}
+                                          </div>
+                                          
+                                          {/* Collapsed Items Logic - Linking to Exhibit */}
+                                          <div className="mt-2 text-xs opacity-80 space-y-1">
+                                              {group.items.map((n: Notification) => (
+                                                  <div 
+                                                    key={n.id} 
+                                                    className="flex items-center gap-2 cursor-pointer hover:text-current"
+                                                    onClick={() => n.targetId && exhibits.find(e => e.id === n.targetId) && handleExhibitClick(exhibits.find(e => e.id === n.targetId)!)}
+                                                  >
+                                                      {n.type === 'LIKE' && <Heart size={10} className="text-red-500" />}
+                                                      {n.type === 'COMMENT' && <MessageSquare size={10} className="text-blue-500" />}
+                                                      <span className="italic truncate max-w-[200px]">{n.targetPreview || 'Контент'}</span>
+                                                  </div>
+                                              ))}
+                                          </div>
+                                      </div>
+                                  </div>
+                              ))
+                          )}
+                      </div>
+                  )}
                   {activityTab === 'DIALOGS' && (<div className="space-y-4">{messages.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ АКТИВНЫХ КАНАЛОВ СВЯЗИ</div>) : ([...new Set(messages.filter(m => m.sender === user?.username || m.receiver === user?.username).map(m => m.sender === user?.username ? m.receiver : m.sender))].map(partner => { const unreadCount = messages.filter(m => m.sender === partner && m.receiver === user?.username && !m.isRead).length; return (<div key={partner} onClick={() => handleOpenChat(partner)} className={`p-4 rounded border flex items-center gap-4 cursor-pointer transition-all hover:translate-x-1 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim hover:border-dark-primary' : 'bg-white border-light-dim hover:border-light-accent'}`}><div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative"><img src={getUserAvatar(partner)} alt="Avatar" />{unreadCount > 0 && (<div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-black animate-pulse"></div>)}</div><div className="flex-1"><div className="flex justify-between items-baseline mb-1"><span className="font-pixel text-sm font-bold">@{partner}</span>{unreadCount > 0 && <span className="text-[10px] font-bold bg-red-500 text-white px-2 rounded-full">{unreadCount} NEW</span>}</div><div className="font-mono text-xs opacity-80 truncate">Нажмите для перехода в чат</div></div></div>)}))}</div>)}
               </div>
           );
@@ -1997,8 +1528,18 @@ export default function App() {
 
       {view !== 'AUTH' && (
           <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
+              <div className="flex justify-center gap-8 mb-4">
+                  <div className="flex flex-col items-center">
+                      <span className="font-bold text-lg font-pixel">{systemStats.totalUsers}</span>
+                      <span className="text-[10px] uppercase tracking-widest">ПОЛЬЗОВАТЕЛЕЙ</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                      <span className="font-bold text-lg font-pixel text-green-500 animate-pulse">{systemStats.onlineUsers}</span>
+                      <span className="text-[10px] uppercase tracking-widest">ОНЛАЙН</span>
+                  </div>
+              </div>
               <p>
-                  NEO_ARCHIVE SYSTEM v2.4 | POWERED BY <a href="https://t.me/truester1337" target="_blank" rel="noopener noreferrer" className="hover:text-current hover:underline font-bold">TRUESTER</a>
+                  NEO_ARCHIVE SYSTEM v2.5 | POWERED BY <a href="https://t.me/truester1337" target="_blank" rel="noopener noreferrer" className="hover:text-current hover:underline font-bold">TRUESTER</a>
               </p>
           </footer>
       )}

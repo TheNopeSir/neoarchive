@@ -264,6 +264,11 @@ export const backgroundSync = async (): Promise<boolean> => {
 
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
+export const getSystemStats = () => ({
+    totalUsers: cache.users.length,
+    onlineUsers: Math.floor(Math.random() * (cache.users.length / 3)) + 1 // Mock simulation
+});
+
 // --- AUTH & CRUD ---
 export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string): Promise<UserProfile> => {
     const usernameExists = cache.users.some(u => u.username.toLowerCase() === username.toLowerCase());
@@ -456,6 +461,21 @@ export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
     saveToLocalCache();
     await supabase.from('guestbook').upsert(toDbPayload(entry));
+};
+
+export const updateGuestbookEntry = async (entry: GuestbookEntry) => {
+    const idx = cache.guestbook.findIndex(g => g.id === entry.id);
+    if (idx !== -1) {
+        cache.guestbook[idx] = entry;
+        saveToLocalCache();
+        await supabase.from('guestbook').upsert(toDbPayload(entry));
+    }
+};
+
+export const deleteGuestbookEntry = async (id: string) => {
+    cache.guestbook = cache.guestbook.filter(g => g.id !== id);
+    saveToLocalCache();
+    await supabase.from('guestbook').delete().eq('id', id);
 };
 
 export const getMessages = (): Message[] => cache.messages;
