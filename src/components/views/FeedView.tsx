@@ -50,8 +50,7 @@ const FeedView: React.FC<FeedViewProps> = ({
         // Items from people I follow
         const followed = allItems.filter(item => user.following.includes(item.owner));
         
-        // Everything else (including my own items if I'm not following myself, which is standard)
-        // Removed `&& item.owner !== user.username` to allow own items in feed
+        // Include everything else (including my own items) that I'm not following
         const others = allItems.filter(item => !user.following.includes(item.owner));
         
         return {
@@ -64,7 +63,6 @@ const FeedView: React.FC<FeedViewProps> = ({
         if (!user) return { followedCollections: [], recommendedCollections: shuffleArray(collections) };
 
         const followed = collections.filter(c => user.following.includes(c.owner));
-        // Removed exclusion of own collections
         const others = collections.filter(c => !user.following.includes(c.owner));
 
         return {

@@ -16,7 +16,7 @@ let cache = {
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '2.5.2-ForceSync'; 
+const CACHE_VERSION = '2.5.3-QuotaFix'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -101,7 +101,7 @@ export const compressImage = async (file: File): Promise<string> => {
             img.src = event.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                // Reduced resolution for better storage management
+                // Aggressive compression: 800px max, 0.5 quality
                 const MAX_WIDTH = 800; 
                 const MAX_HEIGHT = 800;
                 let width = img.width;
@@ -113,7 +113,6 @@ export const compressImage = async (file: File): Promise<string> => {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.drawImage(img, 0, 0, width, height);
-                    // Reduced quality to 0.5 to save space
                     const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
                     resolve(dataUrl);
                 } else { reject(new Error("Canvas context is null")); }

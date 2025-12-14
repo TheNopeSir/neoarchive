@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
@@ -127,7 +128,7 @@ export default function App() {
   });
 
   const refreshData = () => {
-      console.log("🔄 [App] Refreshing data from cache...");
+      // console.log("🔄 [App] Refreshing data from cache...");
       setExhibits([...db.getExhibits()]);
       setCollections([...db.getCollections()]);
       setNotifications([...db.getNotifications()]);
@@ -211,7 +212,7 @@ export default function App() {
       localStorage.setItem('pwa_dismissed', 'true');
   };
 
-  // --- HASH ROUTING ---
+  // --- HASH ROUTING FIX ---
   useEffect(() => {
       const handleHashChange = () => {
           if (!user) {
@@ -233,14 +234,27 @@ export default function App() {
           }
           if (hash.startsWith('#/exhibit/')) {
               const param = hash.split('/')[2];
+              // Robust check: try to find item, but if data isn't loaded yet, stay on loading or fallback
               const item = exhibits.find(e => e.slug === param || e.id === param);
-              if (item) { setSelectedExhibit(item); setView('EXHIBIT'); }
+              if (item) { 
+                  setSelectedExhibit(item); 
+                  setView('EXHIBIT'); 
+              } else if (exhibits.length > 0) {
+                  // If exhibits are loaded but item not found, maybe invalid link
+                  // Don't redirect immediately to feed if we are already viewing it (state persists)
+                  if (!selectedExhibit) setView('FEED');
+              }
               return;
           } 
           if (hash.startsWith('#/collection/')) {
               const param = hash.split('/')[2];
               const col = collections.find(c => c.slug === param || c.id === param);
-              if (col) { setSelectedCollection(col); setView('COLLECTION_DETAIL'); }
+              if (col) { 
+                  setSelectedCollection(col); 
+                  setView('COLLECTION_DETAIL'); 
+              } else if (collections.length > 0) {
+                  if (!selectedCollection) setView('FEED');
+              }
               return;
           } 
           if (hash.startsWith('#/profile/')) {
@@ -253,7 +267,7 @@ export default function App() {
           }
       };
 
-      if (!isInitializing && exhibits.length > 0) {
+      if (!isInitializing) {
           handleHashChange();
       }
 
@@ -964,7 +978,7 @@ export default function App() {
       case 'CREATE_ARTIFACT':
         // Ensure category defaults to SOMETHING for conditions to load properly
         const currentCategory = newExhibit.category || DefaultCategory.MISC;
-        const availableConditions = CATEGORY_CONDITIONS[currentCategory] || [];
+        const availableConditions = CATEGORY_CONDITIONS[currentCategory] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
 
         return (
           <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
@@ -1078,12 +1092,7 @@ export default function App() {
                         }`}>
                             <ImageIcon size={20} className="opacity-50" />
                             <span className="text-[8px] font-pixel mt-1 opacity-50">ГАЛЕРЕЯ</span>
-                            <input 
-                                type="file" 
-                                accept="image/*" 
-                                className="hidden" 
-                                onChange={handleImageUpload}
-                            />
+                            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
                         </label>
 
                         <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
@@ -1091,13 +1100,7 @@ export default function App() {
                         }`}>
                             <Camera size={20} className="opacity-50" />
                             <span className="text-[8px] font-pixel mt-1 opacity-50">КАМЕРА</span>
-                            <input 
-                                type="file" 
-                                accept="image/*" 
-                                capture="environment"
-                                className="hidden" 
-                                onChange={handleImageUpload}
-                            />
+                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
                         </label>
                     </div>
                  </div>
@@ -1187,8 +1190,10 @@ export default function App() {
         );
 
       case 'COLLECTION_DETAIL':
-          if (!selectedCollection) return <div>Error</div>;
+          if (!selectedCollection) return <div>Error: Collection not found</div>;
           const colExhibits = exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id));
+          const isCollectionOwner = user?.username === selectedCollection.owner;
+
           return (
               <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
                   <div className="flex justify-between items-center mb-6">
@@ -1209,12 +1214,15 @@ export default function App() {
                       <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
                           <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
                           <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
-                          {user?.username === selectedCollection.owner && (
+                          
+                          {/* FIXED: Restored edit button logic */}
+                          {isCollectionOwner && (
                               <button 
                                 onClick={() => handleEditCollection(selectedCollection)}
-                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
+                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white backdrop-blur-md transition-all hover:scale-110"
+                                title="Редактировать коллекцию"
                               >
-                                  <Edit2 size={16} />
+                                  <Edit2 size={18} />
                               </button>
                           )}
                       </div>
@@ -1294,114 +1302,6 @@ export default function App() {
                 onShareCollection={handleShareCollection}
                 setView={setView}
                 updateHash={updateHash}
-             />
-         );
-      case 'AUTH': return <MatrixLogin theme={theme} onLogin={handleLogin} />;
-      case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
-      case 'MY_COLLECTION':
-          if (!user) return <div onClick={() => setView('FEED')}>Please Login</div>;
-          return <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => { setView('FEED'); updateHash('/feed'); }} onExhibitClick={handleExhibitClick} onCollectionClick={handleCollectionClick} onLike={toggleLike} />;
-      case 'DIRECT_CHAT':
-          if (!chatPartner || !user) return <div onClick={() => setView('FEED')}>Error: No Chat Partner</div>;
-          const conversation = messages.filter(m => (m.sender === user.username && m.receiver === chatPartner) || (m.sender === chatPartner && m.receiver === user.username)).sort((a,b) => a.id.localeCompare(b.id));
-          return (
-              <div className="max-w-2xl mx-auto animate-in fade-in h-[80vh] flex flex-col">
-                  <button onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
-                  <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                      <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden"><img src={getUserAvatar(chatPartner)} alt={chatPartner} /></div>
-                      <div><h2 className="font-pixel text-lg">@{chatPartner}</h2><p className="font-mono text-xs opacity-50">Private Link Encrypted</p></div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                      {conversation.length === 0 && <div className="text-center opacity-40 font-mono text-xs py-10">Начало зашифрованного соединения...</div>}
-                      {conversation.map(msg => { const isMe = msg.sender === user.username; return (<div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[70%] p-3 rounded-lg font-mono text-sm ${isMe ? (theme === 'dark' ? 'bg-dark-primary text-black rounded-tr-none' : 'bg-light-accent text-white rounded-tr-none') : (theme === 'dark' ? 'bg-dark-surface text-white rounded-tl-none' : 'bg-white text-black border rounded-tl-none')}`}>{msg.text}<div className={`text-[9px] mt-1 opacity-60 text-right ${isMe ? 'text-black' : 'text-current'}`}>{msg.timestamp}{isMe && <span className="ml-1 opacity-70">{msg.isRead ? '✓✓' : '✓'}</span>}</div></div></div>)})}
-                  </div>
-                  <div className="p-4 border-t border-dashed border-gray-500/30 flex gap-2">
-                      <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Сообщение..." className="flex-1 bg-transparent border rounded p-2 focus:outline-none font-mono text-sm" />
-                      <button onClick={handleSendMessage} className={`p-2 rounded ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}><Send size={20} /></button>
-                  </div>
-              </div>
-          );
-      case 'SEARCH':
-          return (
-              <div className="max-w-4xl mx-auto animate-in fade-in">
-                  <div className={`relative w-full flex items-center border-b-2 px-2 gap-2 mb-4 ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}>
-                       <Search size={20} className="opacity-50" />
-                       <input type="text" placeholder="ПОИСК ПО БАЗЕ ДАННЫХ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus className="bg-transparent w-full py-4 focus:outline-none font-pixel text-base md:text-lg tracking-wide" />
-                       {searchQuery && <button onClick={() => setSearchQuery('')}><X size={20}/></button>}
-                   </div>
-                   <div className="flex gap-4 mb-8">
-                       <button onClick={() => setSearchMode('ARTIFACTS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'ARTIFACTS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ АРТЕФАКТЫ ]</button>
-                       <button onClick={() => setSearchMode('COLLECTIONS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'COLLECTIONS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ КОЛЛЕКЦИИ ]</button>
-                   </div>
-                   {searchMode === 'COLLECTIONS' && (
-                       <div className="animate-in fade-in slide-in-from-bottom-2">
-                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{collections.filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={handleCollectionClick} onShare={handleShareCollection} />)}</div>
-                           {collections.length === 0 && <div className="text-center opacity-50 font-mono py-10">КОЛЛЕКЦИИ НЕ НАЙДЕНЫ</div>}
-                       </div>
-                   )}
-                   {searchMode === 'ARTIFACTS' && (
-                       <div className="animate-in fade-in slide-in-from-bottom-2">
-                           {!searchQuery && (
-                               <>
-                                   <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2"><Grid size={14}/> КАТЕГОРИИ</h3>
-                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">{Object.values(DefaultCategory).map((cat: string) => (<button key={cat} onClick={() => { setSelectedCategory(cat); setView('FEED'); updateHash('/feed'); }} className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span></button>))}</div>
-                               </>
-                           )}
-                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{(searchQuery ? exhibits.filter(ex => !ex.isDraft && (ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))) : exhibits.filter(ex => !ex.isDraft).sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)).map((item: Exhibit) => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />))}</div>
-                       </div>
-                   )}
-              </div>
-          );
-      case 'ACTIVITY':
-          const myNotifications = notifications.filter(n => n.recipient === user?.username);
-          return (
-              <div className="max-w-2xl mx-auto animate-in fade-in">
-                  <div className="flex justify-center mb-6 border-b border-gray-500/30">
-                      <button onClick={handleOpenUpdates} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'UPDATES' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ОБНОВЛЕНИЯ {myNotifications.some(n => !n.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
-                      <button onClick={() => setActivityTab('DIALOGS')} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'DIALOGS' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ДИАЛОГИ {messages.some(m => m.receiver === user?.username && !m.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
-                  </div>
-                  {activityTab === 'UPDATES' && (<div className="space-y-4">{myNotifications.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>) : (myNotifications.map(notif => (<div key={notif.id} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}><div className="mt-1">{notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}{notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}{notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}{notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}</div><div className="flex-1"><div className="font-pixel text-xs opacity-50 mb-1 flex justify-between"><span>{notif.timestamp}</span>{!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}</div><div className="font-mono text-sm"><span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(notif.actor)}>@{notif.actor}</span>{notif.type === 'LIKE' && ' оценил ваш артефакт.'}{notif.type === 'COMMENT' && ' прокомментировал: '}{notif.type === 'FOLLOW' && ' подписался на вас.'}{notif.type === 'GUESTBOOK' && ' написал в гостевой книге.'}</div>{notif.targetPreview && (<div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">"{notif.targetPreview}"</div>)}</div></div>)))}</div>)}
-                  {activityTab === 'DIALOGS' && (<div className="space-y-4">{messages.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ АКТИВНЫХ КАНАЛОВ СВЯЗИ</div>) : ([...new Set(messages.filter(m => m.sender === user?.username || m.receiver === user?.username).map(m => m.sender === user?.username ? m.receiver : m.sender))].map(partner => { const unreadCount = messages.filter(m => m.sender === partner && m.receiver === user?.username && !m.isRead).length; return (<div key={partner} onClick={() => handleOpenChat(partner)} className={`p-4 rounded border flex items-center gap-4 cursor-pointer transition-all hover:translate-x-1 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim hover:border-dark-primary' : 'bg-white border-light-dim hover:border-light-accent'}`}><div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative"><img src={getUserAvatar(partner)} alt="Avatar" />{unreadCount > 0 && (<div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-black animate-pulse"></div>)}</div><div className="flex-1"><div className="flex justify-between items-baseline mb-1"><span className="font-pixel text-sm font-bold">@{partner}</span>{unreadCount > 0 && <span className="text-[10px] font-bold bg-red-500 text-white px-2 rounded-full">{unreadCount} NEW</span>}</div><div className="font-mono text-xs opacity-80 truncate">Нажмите для перехода в чат</div></div></div>)}))}</div>)}
-              </div>
-          );
-      case 'USER_PROFILE':
-         if (!user) return <div onClick={() => setView('FEED')}>Please Login</div>;
-         return (
-             <UserProfileView
-                 user={user}
-                 viewedProfileUsername={viewedProfile || user.username}
-                 exhibits={exhibits}
-                 collections={collections}
-                 guestbook={guestbook}
-                 theme={theme}
-                 onBack={handleBack}
-                 onLogout={handleLogout}
-                 onFollow={handleFollow}
-                 onChat={handleOpenChat}
-                 onExhibitClick={handleExhibitClick}
-                 onLike={toggleLike}
-                 onFavorite={toggleFavorite}
-                 onAuthorClick={handleAuthorClick}
-                 onCollectionClick={handleCollectionClick}
-                 onShareCollection={handleShareCollection}
-                 onViewHallOfFame={() => { setView('HALL_OF_FAME'); updateHash('/hall-of-fame'); }}
-                 onGuestbookPost={handleGuestbookPost}
-                 refreshData={refreshData}
-                 isEditingProfile={isEditingProfile}
-                 setIsEditingProfile={setIsEditingProfile}
-                 editTagline={editTagline}
-                 setEditTagline={setEditTagline}
-                 editStatus={editStatus}
-                 setEditStatus={setEditStatus}
-                 editTelegram={editTelegram}
-                 setEditTelegram={setEditTelegram}
-                 onSaveProfile={handleSaveProfile}
-                 onProfileImageUpload={handleProfileImageUpload}
-                 guestbookInput={guestbookInput}
-                 setGuestbookInput={setGuestbookInput}
-                 guestbookInputRef={guestbookInputRef}
-                 profileTab={profileTab}
-                 setProfileTab={setProfileTab}
              />
          );
     }
