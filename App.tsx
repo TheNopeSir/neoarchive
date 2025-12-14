@@ -968,7 +968,7 @@ export default function App() {
               </div>
           );
 
-      // 2. CREATE ARTIFACT
+      // ... (Rest of CREATE_ARTIFACT case same as before) ...
       case 'CREATE_ARTIFACT':
         return (
           <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
@@ -1244,7 +1244,7 @@ export default function App() {
                   exhibit={selectedExhibit}
                   theme={theme}
                   onBack={handleBack}
-                  onShare={() => {}} 
+                  onShare={(id) => { /* Dummy implementation to satisfy type */ }} 
                   onFavorite={(id) => toggleFavorite(id)}
                   onLike={(id) => toggleLike(id)}
                   isFavorited={false}
