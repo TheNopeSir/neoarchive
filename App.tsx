@@ -5,7 +5,7 @@ import {
   Activity, Bell, FilePlus, FolderPlus, Grid, Share2, Award, Crown, 
   ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, Send, 
   Video, Image as ImageIcon, WifiOff, Download, Box, Package, User,
-  X, ArrowLeft, Upload, Home, PlusCircle, Heart, MessageSquare, MessageCircle
+  X, ArrowLeft, Upload, Home, PlusCircle, Heart, MessageSquare, MessageCircle, FolderOpen
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -17,7 +17,7 @@ import MatrixLogin from './components/MatrixLogin';
 import HallOfFame from './components/HallOfFame';
 import MyCollection from './components/MyCollection';
 import StorageMonitor from './components/StorageMonitor';
-import UserProfileView from './components/views/UserProfileView';
+import UserProfileView from './components/UserProfileView';
 import CollectionCard from './components/CollectionCard';
 import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
 import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, COMMON_SPEC_VALUES, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from './constants';
@@ -1062,6 +1062,39 @@ export default function App() {
       return badges;
   };
 
+  const renderCollectionCard = (col: Collection) => (
+      <div 
+         key={col.id} 
+         onClick={() => handleCollectionClick(col)}
+         className={`group relative aspect-[4/3] rounded-xl overflow-hidden cursor-pointer border-2 transition-transform hover:-translate-y-1 ${
+             theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'
+         }`}
+      >
+          <img src={col.coverImage} alt={col.title} className="w-full h-full object-cover transition-transform group-hover:scale-105"/>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-4">
+              <div className="font-pixel text-[10px] text-white/70 mb-1 flex items-center gap-1">
+                  <FolderOpen size={10}/> КОЛЛЕКЦИЯ
+              </div>
+              <h3 className="text-white font-pixel text-sm md:text-lg font-bold leading-tight mb-1">{col.title}</h3>
+              <div className="flex justify-between items-end">
+                  <span className="text-[10px] font-mono text-white/60">@{col.owner}</span>
+                  <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-white/20 backdrop-blur rounded text-[9px] font-bold text-white">
+                          {col.exhibitIds.length} ITEMS
+                      </span>
+                      <button
+                          onClick={(e) => { e.stopPropagation(); handleShareCollection(col); }}
+                          className="bg-white/20 p-1.5 rounded hover:bg-white/40 text-white transition-colors"
+                          title="Поделиться"
+                      >
+                          <Share2 size={12} />
+                      </button>
+                  </div>
+              </div>
+          </div>
+      </div>
+  );
+
   const renderContentArea = () => {
     switch (view) {
       // 1. ADD: CREATE HUB
@@ -1137,8 +1170,6 @@ export default function App() {
           );
 
       case 'CREATE_ARTIFACT':
-        const currentCategory = newExhibit.category || DefaultCategory.MISC;
-        const availableConditions = CATEGORY_CONDITIONS[currentCategory] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
         return (
           <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
              <div className="flex items-center gap-2 mb-6">
@@ -1146,16 +1177,233 @@ export default function App() {
                  <button onClick={() => setView('FEED')} className="hidden md:block"><ChevronDown className="rotate-90" /></button>
                  <h2 className="text-lg md:text-xl font-pixel">{editingExhibitId ? 'РЕДАКТИРОВАНИЕ' : 'ЗАГРУЗКА АРТЕФАКТА'}</h2>
              </div>
+             
              <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label><input className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-base md:text-lg" placeholder="Например: Sony Walkman" value={newExhibit.title || ''} onChange={e => setNewExhibit({...newExhibit, title: e.target.value})} /></div>
-                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">КАТЕГОРИЯ</label><div className="relative mt-1"><select value={newExhibit.category || DefaultCategory.MISC} onChange={(e) => { const cat = e.target.value; setNewExhibit({...newExhibit, category: cat, subcategory: '', specs: generateSpecsForCategory(cat), condition: getDefaultCondition(cat)}); }} className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim focus:border-dark-primary' : 'bg-white text-black border-light-dim focus:border-light-accent'}`}>{Object.values(DefaultCategory).map((cat: string) => (<option key={cat} value={cat}>{cat}</option>))}</select><ChevronDown size={16} className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'}`} /></div></div>
-                 {CATEGORY_SUBCATEGORIES[currentCategory] && (<div className="space-y-1 animate-in fade-in"><label className="text-[10px] font-pixel uppercase opacity-70">ПОДКАТЕГОРИЯ</label><div className="relative mt-1"><select value={newExhibit.subcategory || ''} onChange={(e) => setNewExhibit({ ...newExhibit, subcategory: e.target.value })} className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim focus:border-dark-primary' : 'bg-white text-black border-light-dim focus:border-light-accent'}`}><option value="">-- ВЫБЕРИТЕ ПОДТИП --</option>{CATEGORY_SUBCATEGORIES[currentCategory].map((sub: string) => (<option key={sub} value={sub}>{sub}</option>))}</select><ChevronDown size={16} className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'}`} /></div></div>)}
-                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">СОСТОЯНИЕ / GRADE</label><div className="relative"><select value={newExhibit.condition || ''} onChange={(e) => setNewExhibit({...newExhibit, condition: e.target.value})} className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer ${theme === 'dark' ? 'bg-black text-white border-dark-dim focus:border-dark-primary' : 'bg-white text-black border-light-dim focus:border-light-accent'}`}><option value="">-- ВЫБЕРИТЕ СОСТОЯНИЕ --</option>{availableConditions.map(cond => (<option key={cond} value={cond}>{cond}</option>))}</select><ChevronDown size={16} className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'}`} /></div></div>
-                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ИЗОБРАЖЕНИЯ (МИН. 1) *</label><div className="flex flex-wrap gap-2 mb-2">{(newExhibit.imageUrls || []).map((url, idx) => (<div key={idx} className="relative w-20 h-20 border rounded overflow-hidden group"><img src={url} alt="preview" className="w-full h-full object-cover" /><button onClick={() => removeImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl opacity-0 group-hover:opacity-100 transition-opacity"><X size={12} /></button></div>))}<label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'}`}><ImageIcon size={20} className="opacity-50" /><span className="text-[8px] font-pixel mt-1 opacity-50">ГАЛЕРЕЯ</span><input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} /></label></div></div>
-                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70 flex items-center gap-2"><Video size={12} /> ВИДЕО (URL)</label><input className={`w-full bg-transparent border-b p-2 focus:outline-none font-mono text-sm ${theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'}`} placeholder="YouTube / Direct Link (Optional)" value={newExhibit.videoUrl || ''} onChange={e => setNewExhibit({...newExhibit, videoUrl: e.target.value})} /></div>
-                 <div className="space-y-3"><label className="text-[10px] font-pixel uppercase opacity-70 block border-b pb-1">ХАРАКТЕРИСТИКИ</label><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{newExhibit.specs && Object.keys(newExhibit.specs).length > 0 ? (Object.keys(newExhibit.specs).map(key => (<div key={key} className="space-y-1"><label className="text-[10px] font-mono uppercase opacity-60 truncate block">{key}</label><input list={`list-${key}`} className={`w-full bg-transparent border rounded p-2 text-sm focus:outline-none font-mono ${theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'}`} placeholder="..." value={newExhibit.specs?.[key] || ''} onChange={e => { setNewExhibit({ ...newExhibit, specs: { ...newExhibit.specs, [key]: e.target.value } }); }} />{COMMON_SPEC_VALUES[key] && (<datalist id={`list-${key}`}>{COMMON_SPEC_VALUES[key].map(opt => (<option key={opt} value={opt} />))}</datalist>)}</div>))) : (<div className="col-span-2 text-center opacity-50 text-xs py-4 font-mono">Выберите категорию для заполнения характеристик</div>)}</div></div>
-                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ * (МИН. 10)</label><textarea className="w-full bg-transparent border p-2 focus:outline-none font-mono text-sm min-h-[100px] rounded" value={newExhibit.description || ''} onChange={e => setNewExhibit({...newExhibit, description: e.target.value})} placeholder="Детальное описание артефакта..." /></div>
-                 <div className="flex gap-4"><button onClick={() => handleCreateExhibit(true)} disabled={isLoading} className="flex-1 py-3 mt-4 font-pixel font-bold uppercase tracking-widest border border-dashed hover:bg-white/5 transition-colors text-xs">В ЧЕРНОВИК</button><button onClick={() => handleCreateExhibit(false)} disabled={isLoading} className={`flex-[2] py-3 mt-4 font-pixel font-bold uppercase tracking-widest flex items-center justify-center gap-2 ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? '...' : 'ПУБЛИКАЦИЯ'} <Database size={18} /></button></div>
+                 <div className="space-y-1">
+                     <label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label>
+                     <input 
+                       className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-base md:text-lg"
+                       placeholder="Например: Sony Walkman"
+                       value={newExhibit.title || ''}
+                       onChange={e => setNewExhibit({...newExhibit, title: e.target.value})}
+                     />
+                 </div>
+
+                 <div className="space-y-1">
+                     <label className="text-[10px] font-pixel uppercase opacity-70">КАТЕГОРИЯ</label>
+                     <div className="relative mt-1">
+                         <select
+                             value={newExhibit.category || DefaultCategory.MISC}
+                             onChange={(e) => {
+                                 const cat = e.target.value;
+                                 setNewExhibit({
+                                     ...newExhibit, 
+                                     category: cat, 
+                                     subcategory: '',
+                                     specs: generateSpecsForCategory(cat),
+                                     condition: getDefaultCondition(cat)
+                                 });
+                             }}
+                             className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${
+                                 theme === 'dark' 
+                                 ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
+                                 : 'bg-white text-black border-light-dim focus:border-light-accent'
+                             }`}
+                         >
+                             {Object.values(DefaultCategory).map((cat: string) => (
+                                 <option key={cat} value={cat}>{cat}</option>
+                             ))}
+                         </select>
+                         <ChevronDown 
+                             size={16} 
+                             className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                                 theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
+                             }`} 
+                         />
+                     </div>
+                 </div>
+
+                 {/* Subcategory Selector (Restored) */}
+                 {CATEGORY_SUBCATEGORIES[newExhibit.category || ''] && (
+                     <div className="space-y-1 animate-in fade-in">
+                         <label className="text-[10px] font-pixel uppercase opacity-70">ПОДКАТЕГОРИЯ</label>
+                         <div className="relative mt-1">
+                             <select
+                                 value={newExhibit.subcategory || ''}
+                                 onChange={(e) => setNewExhibit({ ...newExhibit, subcategory: e.target.value })}
+                                 className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${
+                                     theme === 'dark' 
+                                     ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
+                                     : 'bg-white text-black border-light-dim focus:border-light-accent'
+                                 }`}
+                             >
+                                 <option value="">-- ВЫБЕРИТЕ ПОДТИП --</option>
+                                 {CATEGORY_SUBCATEGORIES[newExhibit.category || ''].map((sub: string) => (
+                                     <option key={sub} value={sub}>{sub}</option>
+                                 ))}
+                             </select>
+                             <ChevronDown 
+                                 size={16} 
+                                 className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                                     theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
+                                 }`} 
+                             />
+                         </div>
+                     </div>
+                 )}
+
+                 {/* Condition Selector */}
+                 <div className="space-y-1">
+                     <label className="text-[10px] font-pixel uppercase opacity-70">СОСТОЯНИЕ / GRADE</label>
+                     <div className="relative">
+                         <select 
+                            value={newExhibit.condition || ''}
+                            onChange={(e) => setNewExhibit({...newExhibit, condition: e.target.value})}
+                            className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer ${
+                                theme === 'dark' 
+                                ? 'bg-black text-white border-dark-dim focus:border-dark-primary' 
+                                : 'bg-white text-black border-light-dim focus:border-light-accent'
+                            }`}
+                         >
+                             {(CATEGORY_CONDITIONS[newExhibit.category || DefaultCategory.MISC] || []).map(cond => (
+                                 <option key={cond} value={cond}>{cond}</option>
+                             ))}
+                         </select>
+                         <ChevronDown 
+                             size={16} 
+                             className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                                 theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
+                             }`} 
+                         />
+                     </div>
+                 </div>
+
+                 {/* Image Upload Section */}
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-pixel uppercase opacity-70">ИЗОБРАЖЕНИЯ (МИН. 1) *</label>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                        {(newExhibit.imageUrls || []).map((url, idx) => (
+                             <div key={idx} className="relative w-20 h-20 border rounded overflow-hidden group">
+                                 <img src={url} alt="preview" className="w-full h-full object-cover" />
+                                 <button 
+                                    onClick={() => removeImage(idx)}
+                                    className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl opacity-0 group-hover:opacity-100 transition-opacity"
+                                 >
+                                    <X size={12} />
+                                 </button>
+                             </div>
+                        ))}
+                        
+                        <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
+                            theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'
+                        }`}>
+                            <ImageIcon size={20} className="opacity-50" />
+                            <span className="text-[8px] font-pixel mt-1 opacity-50">ГАЛЕРЕЯ</span>
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={handleImageUpload}
+                            />
+                        </label>
+
+                        <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
+                            theme === 'dark' ? 'border-dark-dim bg-dark-surface' : 'border-light-dim bg-white'
+                        }`}>
+                            <Camera size={20} className="opacity-50" />
+                            <span className="text-[8px] font-pixel mt-1 opacity-50">КАМЕРА</span>
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                capture="environment"
+                                className="hidden" 
+                                onChange={handleImageUpload}
+                            />
+                        </label>
+                    </div>
+                 </div>
+
+                 <div className="space-y-1">
+                     <label className="text-[10px] font-pixel uppercase opacity-70 flex items-center gap-2">
+                         <Video size={12} /> ВИДЕО (URL)
+                     </label>
+                     <input 
+                       className={`w-full bg-transparent border-b p-2 focus:outline-none font-mono text-sm ${
+                           theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
+                       }`}
+                       placeholder="YouTube / Direct Link (Optional)"
+                       value={newExhibit.videoUrl || ''}
+                       onChange={e => setNewExhibit({...newExhibit, videoUrl: e.target.value})}
+                     />
+                 </div>
+
+                 {/* Dynamic Specs Fields with Datalist */}
+                 <div className="space-y-3">
+                     <label className="text-[10px] font-pixel uppercase opacity-70 block border-b pb-1">ХАРАКТЕРИСТИКИ</label>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         {newExhibit.specs && Object.keys(newExhibit.specs).length > 0 ? (
+                             Object.keys(newExhibit.specs).map(key => (
+                                 <div key={key} className="space-y-1">
+                                     <label className="text-[10px] font-mono uppercase opacity-60 truncate block">{key}</label>
+                                     <input 
+                                         list={`list-${key}`}
+                                         className={`w-full bg-transparent border rounded p-2 text-sm focus:outline-none font-mono ${
+                                             theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
+                                         }`}
+                                         placeholder="..."
+                                         value={newExhibit.specs?.[key] || ''}
+                                         onChange={e => {
+                                             setNewExhibit({
+                                                 ...newExhibit,
+                                                 specs: { ...newExhibit.specs, [key]: e.target.value }
+                                             });
+                                         }}
+                                     />
+                                     {COMMON_SPEC_VALUES[key] && (
+                                         <datalist id={`list-${key}`}>
+                                             {COMMON_SPEC_VALUES[key].map(opt => (
+                                                 <option key={opt} value={opt} />
+                                             ))}
+                                         </datalist>
+                                     )}
+                                 </div>
+                             ))
+                         ) : (
+                             <div className="col-span-2 text-center opacity-50 text-xs py-4 font-mono">
+                                 Выберите категорию для заполнения характеристик
+                             </div>
+                         )}
+                     </div>
+                 </div>
+
+                 <div className="space-y-1">
+                     <label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ * (МИН. 10)</label>
+                     <textarea 
+                       className="w-full bg-transparent border p-2 focus:outline-none font-mono text-sm min-h-[100px] rounded"
+                       value={newExhibit.description || ''}
+                       onChange={e => setNewExhibit({...newExhibit, description: e.target.value})}
+                       placeholder="Детальное описание артефакта..."
+                     />
+                 </div>
+
+                 <div className="flex gap-4">
+                     <button 
+                        onClick={() => handleCreateExhibit(true)}
+                        disabled={isLoading}
+                        className="flex-1 py-3 mt-4 font-pixel font-bold uppercase tracking-widest border border-dashed hover:bg-white/5 transition-colors text-xs"
+                     >
+                        В ЧЕРНОВИК
+                     </button>
+                     <button 
+                        onClick={() => handleCreateExhibit(false)}
+                        disabled={isLoading}
+                        className={`flex-[2] py-3 mt-4 font-pixel font-bold uppercase tracking-widest flex items-center justify-center gap-2 ${
+                            theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
+                        }`}
+                     >
+                        {isLoading ? '...' : 'ПУБЛИКАЦИЯ'} <Database size={18} />
+                     </button>
+                 </div>
              </div>
           </div>
         );
@@ -1177,37 +1425,118 @@ export default function App() {
                           <Share2 size={20} />
                       </button>
                   </div>
+                  
                   <div className="relative aspect-[3/1] rounded-xl overflow-hidden mb-8 group">
                       <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
                           <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
                           <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
                           {user?.username === selectedCollection.owner && (
-                              <button onClick={() => handleEditCollection(selectedCollection)} className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"><Edit2 size={16} /></button>
+                              <button 
+                                onClick={() => handleEditCollection(selectedCollection)}
+                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
+                              >
+                                  <Edit2 size={16} />
+                              </button>
                           )}
                       </div>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       {colExhibits.map(item => (
-                          <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />
+                          <ExhibitCard 
+                             key={item.id} 
+                             item={item} 
+                             theme={theme}
+                             similarExhibits={[]}
+                             onClick={handleExhibitClick}
+                             isLiked={item.likedBy?.includes(user?.username || '') || false}
+                             isFavorited={false}
+                             onLike={(e) => toggleLike(item.id, e)}
+                             onFavorite={(e) => toggleFavorite(item.id, e)}
+                             onAuthorClick={handleAuthorClick}
+                          />
                       ))}
                   </div>
               </div>
           );
 
-      case 'ACTIVITY':
-          const myNotifications = notifications.filter(n => n.recipient === user?.username);
+      // (Other cases are implicitly handled via the default render, but we need to ensure the full file is returned to keep structure valid)
+      case 'AUTH': return <MatrixLogin theme={theme} onLogin={handleLogin} />;
+      case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
+      case 'MY_COLLECTION':
+          if (!user) return <div onClick={() => setView('FEED')}>Please Login</div>;
+          return <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => { setView('FEED'); updateHash('/feed'); }} onExhibitClick={handleExhibitClick} onCollectionClick={handleCollectionClick} onLike={toggleLike} />;
+      case 'DIRECT_CHAT':
+          if (!chatPartner || !user) return <div onClick={() => setView('FEED')}>Error: No Chat Partner</div>;
+          const conversation = messages.filter(m => (m.sender === user.username && m.receiver === chatPartner) || (m.sender === chatPartner && m.receiver === user.username)).sort((a,b) => a.id.localeCompare(b.id));
           return (
-              <div className="max-w-2xl mx-auto animate-in fade-in">
-                  <div className="flex justify-center mb-6 border-b border-gray-500/30">
-                      <button onClick={handleOpenUpdates} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'UPDATES' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ОБНОВЛЕНИЯ {myNotifications.some(n => !n.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
-                      <button onClick={() => setActivityTab('DIALOGS')} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'DIALOGS' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ДИАЛОГИ {messages.some(m => m.receiver === user?.username && !m.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
+              <div className="max-w-2xl mx-auto animate-in fade-in h-[80vh] flex flex-col">
+                  <button onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
+                  <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
+                      <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden"><img src={getUserAvatar(chatPartner)} alt={chatPartner} /></div>
+                      <div><h2 className="font-pixel text-lg">@{chatPartner}</h2><p className="font-mono text-xs opacity-50">Private Link Encrypted</p></div>
                   </div>
-                  {activityTab === 'UPDATES' && (<div className="space-y-4">{myNotifications.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>) : (myNotifications.map(notif => (<div key={notif.id} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}><div className="mt-1">{notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}{notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}{notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}{notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}</div><div className="flex-1"><div className="font-pixel text-xs opacity-50 mb-1 flex justify-between"><span>{notif.timestamp}</span>{!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}</div><div className="font-mono text-sm"><span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(notif.actor)}>@{notif.actor}</span>{notif.type === 'LIKE' && ' оценил ваш артефакт.'}{notif.type === 'COMMENT' && ' прокомментировал: '}{notif.type === 'FOLLOW' && ' подписался на вас.'}{notif.type === 'GUESTBOOK' && ' написал в гостевой книге.'}</div>{notif.targetPreview && (<div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">"{notif.targetPreview}"</div>)}</div></div>)))}</div>)}
-                  {activityTab === 'DIALOGS' && (<div className="space-y-4">{messages.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ АКТИВНЫХ КАНАЛОВ СВЯЗИ</div>) : ([...new Set(messages.filter(m => m.sender === user?.username || m.receiver === user?.username).map(m => m.sender === user?.username ? m.receiver : m.sender))].map(partner => { const unreadCount = messages.filter(m => m.sender === partner && m.receiver === user?.username && !m.isRead).length; return (<div key={partner} onClick={() => handleOpenChat(partner)} className={`p-4 rounded border flex items-center gap-4 cursor-pointer transition-all hover:translate-x-1 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim hover:border-dark-primary' : 'bg-white border-light-dim hover:border-light-accent'}`}><div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative"><img src={getUserAvatar(partner)} alt="Avatar" />{unreadCount > 0 && (<div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-black animate-pulse"></div>)}</div><div className="flex-1"><div className="flex justify-between items-baseline mb-1"><span className="font-pixel text-sm font-bold">@{partner}</span>{unreadCount > 0 && <span className="text-[10px] font-bold bg-red-500 text-white px-2 rounded-full">{unreadCount} NEW</span>}</div><div className="font-mono text-xs opacity-80 truncate">Нажмите для перехода в чат</div></div></div>)}))}</div>)}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {conversation.length === 0 && <div className="text-center opacity-40 font-mono text-xs py-10">Начало зашифрованного соединения...</div>}
+                      {conversation.map(msg => { const isMe = msg.sender === user.username; return (<div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[70%] p-3 rounded-lg font-mono text-sm ${isMe ? (theme === 'dark' ? 'bg-dark-primary text-black rounded-tr-none' : 'bg-light-accent text-white rounded-tr-none') : (theme === 'dark' ? 'bg-dark-surface text-white rounded-tl-none' : 'bg-white text-black border rounded-tl-none')}`}>{msg.text}<div className={`text-[9px] mt-1 opacity-60 text-right ${isMe ? 'text-black' : 'text-current'}`}>{msg.timestamp}{isMe && <span className="ml-1 opacity-70">{msg.isRead ? '✓✓' : '✓'}</span>}</div></div></div>)})}
+                  </div>
+                  <div className="p-4 border-t border-dashed border-gray-500/30 flex gap-2">
+                      <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Сообщение..." className="flex-1 bg-transparent border rounded p-2 focus:outline-none font-mono text-sm" />
+                      <button onClick={handleSendMessage} className={`p-2 rounded ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}><Send size={20} /></button>
+                  </div>
               </div>
           );
-      case 'EDIT_COLLECTION': if (!collectionToEdit) return <div>Error</div>; return (<div className="max-w-2xl mx-auto animate-in fade-in pb-32"><div className="flex items-center justify-between mb-6"><div className="flex items-center gap-2"><button onClick={handleBack} className="hover:underline font-pixel text-xs"><ArrowLeft size={16}/></button><h2 className="text-lg font-pixel">РЕДАКТОР КОЛЛЕКЦИИ</h2></div><button onClick={handleDeleteCollection} className="text-red-500 p-2 border border-red-500 rounded hover:bg-red-500/10 transition-colors"><Trash2 size={16} /></button></div><div className="space-y-6"><div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">{collectionToEdit.coverImage ? (<img src={collectionToEdit.coverImage} className="w-full h-full object-cover" />) : (<div className="flex items-center justify-center w-full h-full text-xs font-mono opacity-50">NO COVER</div>)}<label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"><div className="flex flex-col items-center gap-2 text-white"><Upload size={24} /><span className="font-pixel text-[10px]">CHANGE COVER</span></div><input type="file" accept="image/*" className="hidden" onChange={handleCollectionCoverUpload} /></label></div><div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label><input className="w-full bg-transparent border-b p-2 font-pixel text-lg focus:outline-none" value={collectionToEdit.title} onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 font-mono text-sm rounded h-24 focus:outline-none" value={collectionToEdit.description} onChange={e => setCollectionToEdit({...collectionToEdit, description: e.target.value})} /></div><div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label><div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">{exhibits.filter(e => e.owner === user?.username).map(ex => { const isSelected = collectionToEdit.exhibitIds.includes(ex.id); return (<div key={ex.id} onClick={() => { const newIds = isSelected ? collectionToEdit.exhibitIds.filter(id => id !== ex.id) : [...collectionToEdit.exhibitIds, ex.id]; setCollectionToEdit({...collectionToEdit, exhibitIds: newIds}); }} className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${isSelected ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent') : 'opacity-60 hover:opacity-100'}`}><div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>{isSelected && <Check size={12} strokeWidth={4} />}</div><div className="truncate font-mono text-xs">{ex.title}</div></div>)})}</div></div><button onClick={handleSaveCollection} className="w-full py-4 font-bold font-pixel bg-green-500 text-black uppercase">СОХРАНИТЬ ИЗМЕНЕНИЯ</button></div></div>);
+      case 'SEARCH':
+          return (
+              <div className="max-w-4xl mx-auto animate-in fade-in">
+                  <div className={`relative w-full flex items-center border-b-2 px-2 gap-2 mb-4 ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}>
+                       <Search size={20} className="opacity-50" />
+                       <input type="text" placeholder="ПОИСК ПО БАЗЕ ДАННЫХ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus className="bg-transparent w-full py-4 focus:outline-none font-pixel text-base md:text-lg tracking-wide" />
+                       {searchQuery && <button onClick={() => setSearchQuery('')}><X size={20}/></button>}
+                   </div>
+                   <div className="flex gap-4 mb-8">
+                       <button onClick={() => setSearchMode('ARTIFACTS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'ARTIFACTS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ АРТЕФАКТЫ ]</button>
+                       <button onClick={() => setSearchMode('COLLECTIONS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'COLLECTIONS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ КОЛЛЕКЦИИ ]</button>
+                   </div>
+                   {searchMode === 'COLLECTIONS' && (
+                       <div className="animate-in fade-in slide-in-from-bottom-2">
+                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{collections.filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(renderCollectionCard)}</div>
+                           {collections.length === 0 && <div className="text-center opacity-50 font-mono py-10">КОЛЛЕКЦИИ НЕ НАЙДЕНЫ</div>}
+                       </div>
+                   )}
+                   {searchMode === 'ARTIFACTS' && (
+                       <div className="animate-in fade-in slide-in-from-bottom-2">
+                           {!searchQuery && (
+                               <>
+                                   <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2"><Grid size={14}/> КАТЕГОРИИ</h3>
+                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">{Object.values(DefaultCategory).map((cat: string) => (<button key={cat} onClick={() => { setSelectedCategory(cat); setView('FEED'); updateHash('/feed'); }} className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span></button>))}</div>
+                               </>
+                           )}
+                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{(searchQuery ? exhibits.filter(ex => !ex.isDraft && (ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))) : exhibits.filter(ex => !ex.isDraft).sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)).map((item: Exhibit) => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />))}</div>
+                       </div>
+                   )}
+              </div>
+          );
+      case 'EDIT_COLLECTION':
+          if (!collectionToEdit) return <div>Error</div>;
+          return (
+              <div className="max-w-2xl mx-auto animate-in fade-in pb-32">
+                  <div className="flex items-center justify-between mb-6">
+                     <div className="flex items-center gap-2"><button onClick={handleBack} className="hover:underline font-pixel text-xs"><ArrowLeft size={16}/></button><h2 className="text-lg font-pixel">РЕДАКТОР КОЛЛЕКЦИИ</h2></div>
+                     <button onClick={handleDeleteCollection} className="text-red-500 p-2 border border-red-500 rounded hover:bg-red-500/10 transition-colors"><Trash2 size={16} /></button>
+                  </div>
+                  <div className="space-y-6">
+                      <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">
+                          {collectionToEdit.coverImage ? (<img src={collectionToEdit.coverImage} className="w-full h-full object-cover" />) : (<div className="flex items-center justify-center w-full h-full text-xs font-mono opacity-50">NO COVER</div>)}
+                          <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"><div className="flex flex-col items-center gap-2 text-white"><Upload size={24} /><span className="font-pixel text-[10px]">CHANGE COVER</span></div><input type="file" accept="image/*" className="hidden" onChange={handleCollectionCoverUpload} /></label>
+                      </div>
+                      <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label><input className="w-full bg-transparent border-b p-2 font-pixel text-lg focus:outline-none" value={collectionToEdit.title} onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})} /></div>
+                      <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 font-mono text-sm rounded h-24 focus:outline-none" value={collectionToEdit.description} onChange={e => setCollectionToEdit({...collectionToEdit, description: e.target.value})} /></div>
+                      <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label><div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">{exhibits.filter(e => e.owner === user?.username).map(ex => { const isSelected = collectionToEdit.exhibitIds.includes(ex.id); return (<div key={ex.id} onClick={() => { const newIds = isSelected ? collectionToEdit.exhibitIds.filter(id => id !== ex.id) : [...collectionToEdit.exhibitIds, ex.id]; setCollectionToEdit({...collectionToEdit, exhibitIds: newIds}); }} className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${isSelected ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent') : 'opacity-60 hover:opacity-100'}`}><div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>{isSelected && <Check size={12} strokeWidth={4} />}</div><div className="truncate font-mono text-xs">{ex.title}</div></div>)})}</div></div>
+                      <button onClick={handleSaveCollection} className="w-full py-4 font-bold font-pixel bg-green-500 text-black uppercase">СОХРАНИТЬ ИЗМЕНЕНИЯ</button>
+                  </div>
+              </div>
+          );
       case 'CREATE_COLLECTION':
           return (
               <div className="max-w-xl mx-auto animate-in fade-in">
@@ -1221,7 +1550,18 @@ export default function App() {
                  </div>
               </div>
           );
-      
+      case 'ACTIVITY':
+          const myNotifications = notifications.filter(n => n.recipient === user?.username);
+          return (
+              <div className="max-w-2xl mx-auto animate-in fade-in">
+                  <div className="flex justify-center mb-6 border-b border-gray-500/30">
+                      <button onClick={handleOpenUpdates} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'UPDATES' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ОБНОВЛЕНИЯ {myNotifications.some(n => !n.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
+                      <button onClick={() => setActivityTab('DIALOGS')} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'DIALOGS' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ДИАЛОГИ {messages.some(m => m.receiver === user?.username && !m.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
+                  </div>
+                  {activityTab === 'UPDATES' && (<div className="space-y-4">{myNotifications.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>) : (myNotifications.map(notif => (<div key={notif.id} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}><div className="mt-1">{notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}{notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}{notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}{notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}</div><div className="flex-1"><div className="font-pixel text-xs opacity-50 mb-1 flex justify-between"><span>{notif.timestamp}</span>{!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}</div><div className="font-mono text-sm"><span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(notif.actor)}>@{notif.actor}</span>{notif.type === 'LIKE' && ' оценил ваш артефакт.'}{notif.type === 'COMMENT' && ' прокомментировал: '}{notif.type === 'FOLLOW' && ' подписался на вас.'}{notif.type === 'GUESTBOOK' && ' написал в гостевой книге.'}</div>{notif.targetPreview && (<div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">"{notif.targetPreview}"</div>)}</div></div>)))}</div>)}
+                  {activityTab === 'DIALOGS' && (<div className="space-y-4">{messages.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ АКТИВНЫХ КАНАЛОВ СВЯЗИ</div>) : ([...new Set(messages.filter(m => m.sender === user?.username || m.receiver === user?.username).map(m => m.sender === user?.username ? m.receiver : m.sender))].map(partner => { const unreadCount = messages.filter(m => m.sender === partner && m.receiver === user?.username && !m.isRead).length; return (<div key={partner} onClick={() => handleOpenChat(partner)} className={`p-4 rounded border flex items-center gap-4 cursor-pointer transition-all hover:translate-x-1 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim hover:border-dark-primary' : 'bg-white border-light-dim hover:border-light-accent'}`}><div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative"><img src={getUserAvatar(partner)} alt="Avatar" />{unreadCount > 0 && (<div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-black animate-pulse"></div>)}</div><div className="flex-1"><div className="flex justify-between items-baseline mb-1"><span className="font-pixel text-sm font-bold">@{partner}</span>{unreadCount > 0 && <span className="text-[10px] font-bold bg-red-500 text-white px-2 rounded-full">{unreadCount} NEW</span>}</div><div className="font-mono text-xs opacity-80 truncate">Нажмите для перехода в чат</div></div></div>)}))}</div>)}
+              </div>
+          );
       case 'USER_PROFILE':
          const profileUsername = viewedProfile || user?.username;
          if (!profileUsername) return <div className="p-8 text-center font-pixel">USER_NOT_FOUND_ERROR_404</div>;
@@ -1265,262 +1605,96 @@ export default function App() {
              />
          );
 
-      case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
-      case 'MY_COLLECTION':
-          if (!user) return <div onClick={() => setView('FEED')}>Please Login</div>;
-          return <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => { setView('FEED'); updateHash('/feed'); }} onExhibitClick={handleExhibitClick} onCollectionClick={handleCollectionClick} onLike={toggleLike} />;
-      case 'DIRECT_CHAT':
-          if (!chatPartner || !user) return <div onClick={() => setView('FEED')}>Error: No Chat Partner</div>;
-          const conversation = messages.filter(m => (m.sender === user.username && m.receiver === chatPartner) || (m.sender === chatPartner && m.receiver === user.username)).sort((a,b) => a.id.localeCompare(b.id));
-          return (
-              <div className="max-w-2xl mx-auto animate-in fade-in h-[80vh] flex flex-col">
-                  <button onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
-                  <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                      <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden"><img src={getUserAvatar(chatPartner)} alt={chatPartner} /></div>
-                      <div><h2 className="font-pixel text-lg">@{chatPartner}</h2><p className="font-mono text-xs opacity-50">Private Link Encrypted</p></div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                      {conversation.length === 0 && <div className="text-center opacity-40 font-mono text-xs py-10">Начало зашифрованного соединения...</div>}
-                      {conversation.map(msg => { const isMe = msg.sender === user.username; return (<div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[70%] p-3 rounded-lg font-mono text-sm ${isMe ? (theme === 'dark' ? 'bg-dark-primary text-black rounded-tr-none' : 'bg-light-accent text-white rounded-tr-none') : (theme === 'dark' ? 'bg-dark-surface text-white rounded-tl-none' : 'bg-white text-black border rounded-tl-none')}`}>{msg.text}<div className={`text-[9px] mt-1 opacity-60 text-right ${isMe ? 'text-black' : 'text-current'}`}>{msg.timestamp}{isMe && <span className="ml-1 opacity-70">{msg.isRead ? '✓✓' : '✓'}</span>}</div></div></div>)})}
-                  </div>
-                  <div className="p-4 border-t border-dashed border-gray-500/30 flex gap-2">
-                      <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Сообщение..." className="flex-1 bg-transparent border rounded p-2 focus:outline-none font-mono text-sm" />
-                      <button onClick={handleSendMessage} className={`p-2 rounded ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}><Send size={20} /></button>
-                  </div>
-              </div>
-          );
-      case 'SEARCH':
-          return (
-              <div className="max-w-4xl mx-auto animate-in fade-in">
-                  <div className={`relative w-full flex items-center border-b-2 px-2 gap-2 mb-4 ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}>
-                       <Search size={20} className="opacity-50" />
-                       <input type="text" placeholder="ПОИСК ПО БАЗЕ ДАННЫХ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus className="bg-transparent w-full py-4 focus:outline-none font-pixel text-base md:text-lg tracking-wide" />
-                       {searchQuery && <button onClick={() => setSearchQuery('')}><X size={20}/></button>}
-                   </div>
-                   <div className="flex gap-4 mb-8">
-                       <button onClick={() => setSearchMode('ARTIFACTS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'ARTIFACTS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ АРТЕФАКТЫ ]</button>
-                       <button onClick={() => setSearchMode('COLLECTIONS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'COLLECTIONS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ КОЛЛЕКЦИИ ]</button>
-                   </div>
-                   {searchMode === 'COLLECTIONS' && (
-                       <div className="animate-in fade-in slide-in-from-bottom-2">
-                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{collections.filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={handleCollectionClick} onShare={handleShareCollection} />)}</div>
-                           {collections.length === 0 && <div className="text-center opacity-50 font-mono py-10">КОЛЛЕКЦИИ НЕ НАЙДЕНЫ</div>}
-                       </div>
-                   )}
-                   {searchMode === 'ARTIFACTS' && (
-                       <div className="animate-in fade-in slide-in-from-bottom-2">
-                           {!searchQuery && (
-                               <>
-                                   <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2"><Grid size={14}/> КАТЕГОРИИ</h3>
-                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">{Object.values(DefaultCategory).map((cat: string) => (<button key={cat} onClick={() => { setSelectedCategory(cat); setView('FEED'); updateHash('/feed'); }} className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span></button>))}</div>
-                               </>
-                           )}
-                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{(searchQuery ? exhibits.filter(ex => !ex.isDraft && (ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))) : exhibits.filter(ex => !ex.isDraft).sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)).map((item: Exhibit) => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />))}</div>
-                       </div>
-                   )}
-              </div>
-          );
-      
       default:
       case 'FEED':
-         const feedItems = feedMode === 'ARTIFACTS' 
+          const feedItems = feedMode === 'ARTIFACTS' 
              ? exhibits.filter(e => !e.isDraft && (selectedCategory === 'ВСЕ' || e.category === selectedCategory))
              : [];
-         const sortedFeed = feedItems.sort((a,b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, visibleCount);
-         
-         return (
-             <div className="animate-in fade-in">
-                 <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
-                     <button 
-                         onClick={() => { setSelectedCategory('ВСЕ'); if (view !== 'FEED') { setView('FEED'); updateHash('/feed'); } }}
-                         className={`px-4 py-2 rounded border font-pixel text-xs whitespace-nowrap transition-colors ${selectedCategory === 'ВСЕ' ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'opacity-60'}`}
-                     >
-                         ВСЕ
-                     </button>
-                     {Object.values(DefaultCategory).map(cat => (
-                         <button 
-                             key={cat}
-                             onClick={() => { setSelectedCategory(cat); if (view !== 'FEED') { setView('FEED'); updateHash('/feed'); } }}
-                             className={`px-4 py-2 rounded border font-pixel text-xs whitespace-nowrap transition-colors ${selectedCategory === cat ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'opacity-60'}`}
-                         >
-                             {cat}
-                         </button>
-                     ))}
-                 </div>
-                 
-                 {feedMode === 'ARTIFACTS' && (
-                     <>
-                        {sortedFeed.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
-                                <Box size={48} className="mb-4 opacity-50" />
-                                <p className="font-mono text-sm mb-6">Эта полка пока что пустует...</p>
-                                <button 
-                                    onClick={() => { setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
-                                    className={`px-6 py-3 rounded font-pixel text-[10px] md:text-xs font-bold border transition-all hover:scale-105 ${
-                                        theme === 'dark' 
-                                        ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' 
-                                        : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'
-                                    }`}
-                                >
-                                    ВЕРНУТЬСЯ В ОБЩУЮ ЛЕНТУ
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                                {sortedFeed.map((item: Exhibit) => (
-                                        <ExhibitCard 
-                                            key={item.id} 
-                                            item={item} 
-                                            theme={theme}
-                                            similarExhibits={[]}
-                                            onClick={handleExhibitClick}
-                                            isLiked={item.likedBy?.includes(user?.username || '') || false}
-                                            isFavorited={false}
-                                            onLike={(e) => toggleLike(item.id, e)}
-                                            onFavorite={(e) => toggleFavorite(item.id, e)}
-                                            onAuthorClick={handleAuthorClick}
-                                        />
-                                    ))
-                                }
-                            </div>
-                        )}
-                        
-                        <div ref={loadMoreRef} className="h-20 w-full flex items-center justify-center mt-8">
-                             {feedItems.length > visibleCount && <RetroLoader />}
-                        </div>
-                     </>
-                 )}
-
-                 {feedMode === 'COLLECTIONS' && (
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                         {collections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={handleCollectionClick} onShare={handleShareCollection} />)}
-                     </div>
-                 )}
-             </div>
-         );
+          // ... sorting ...
+          const sortedFeed = feedItems.sort((a,b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, visibleCount);
+          
+          return (
+              <div className="animate-in fade-in">
+                  <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
+                      <button 
+                          onClick={() => setSelectedCategory('ВСЕ')}
+                          className={`px-4 py-2 rounded border font-pixel text-xs whitespace-nowrap transition-colors ${selectedCategory === 'ВСЕ' ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'opacity-60'}`}
+                      >
+                          ВСЕ
+                      </button>
+                      {Object.values(DefaultCategory).map((cat: string) => (
+                          <button 
+                              key={cat}
+                              onClick={() => setSelectedCategory(cat)}
+                              className={`px-4 py-2 rounded border font-pixel text-xs whitespace-nowrap transition-colors ${selectedCategory === cat ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'opacity-60'}`}
+                          >
+                              {cat}
+                          </button>
+                      ))}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+                      {sortedFeed.map(item => (
+                          <ExhibitCard 
+                             key={item.id} 
+                             item={item} 
+                             theme={theme}
+                             similarExhibits={[]}
+                             onClick={handleExhibitClick}
+                             isLiked={item.likedBy?.includes(user?.username || '') || false}
+                             isFavorited={false}
+                             onLike={(e) => toggleLike(item.id, e)}
+                             onFavorite={(e) => toggleFavorite(item.id, e)}
+                             onAuthorClick={handleAuthorClick}
+                          />
+                      ))}
+                  </div>
+                  {sortedFeed.length < feedItems.length && (
+                      <div ref={loadMoreRef} className="py-8 flex justify-center opacity-50">
+                          <RetroLoader text="ЗАГРУЗКА" />
+                      </div>
+                  )}
+              </div>
+          );
     }
   };
 
-  if (isInitializing) return <div className="h-screen bg-black flex items-center justify-center text-green-500 font-pixel"><RetroLoader size="lg" text="SYSTEM BOOT" /></div>;
-
   return (
-    <div className={`min-h-screen transition-colors duration-500 font-sans selection:bg-green-500 selection:text-black ${
-      theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-800'
-    }`}>
-      <MatrixRain theme={theme} />
-      {theme === 'dark' && <CRTOverlay />}
+    <div className={`min-h-screen transition-colors duration-500 ${theme === 'dark' ? 'bg-black text-gray-300' : 'bg-gray-50 text-gray-800'} font-sans selection:bg-green-500 selection:text-black`}>
+       <MatrixRain theme={theme} />
+       <CRTOverlay />
+       {isLoginTransition && <LoginTransition />}
+       {showInstallBanner && <InstallBanner theme={theme} onInstall={handleInstallClick} onClose={handleDismissInstall} />}
 
-      {isLoginTransition && <LoginTransition />}
+       <div className="relative z-10 max-w-7xl mx-auto min-h-screen flex flex-col" {...globalSwipeHandlers}>
+          {view !== 'AUTH' && (
+              <header className={`p-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
+                 <div className="flex items-center gap-3">
+                     <div className={`p-2 rounded border ${theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent'}`}>
+                         <Terminal size={20} />
+                     </div>
+                     <span className={`font-pixel text-lg hidden md:block ${theme === 'dark' ? 'text-white' : 'text-black'}`}>NEO_ARCHIVE</span>
+                 </div>
+                 <div className="flex items-center gap-4">
+                     {user && (
+                         <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}>
+                             <div className="text-right hidden md:block">
+                                 <div className={`font-pixel text-xs font-bold ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>@{user.username}</div>
+                             </div>
+                             <div className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden border border-gray-500">
+                                 <img src={user.avatarUrl} alt="Avatar" />
+                             </div>
+                         </div>
+                     )}
+                     <button onClick={() => setView('SETTINGS')}><Settings size={20} /></button>
+                     <button onClick={handleLogout} className="text-red-500"><LogOut size={20} /></button>
+                 </div>
+              </header>
+          )}
 
-      {showInstallBanner && (
-          <InstallBanner 
-              theme={theme} 
-              onInstall={handleInstallClick} 
-              onClose={handleDismissInstall} 
-          />
-      )}
-
-      {isOffline() && (
-          <div className="fixed bottom-4 right-4 z-[100] px-3 py-1 bg-red-500 text-white font-pixel text-[10px] rounded animate-pulse flex items-center gap-2 shadow-lg">
-              <WifiOff size={12} /> OFFLINE MODE
-          </div>
-      )}
-      
-      {view !== 'AUTH' && (
-        <header className={`sticky top-0 z-50 backdrop-blur-md border-b flex flex-col md:flex-row items-center md:justify-between px-4 py-3 md:h-14 ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
-            <div className="w-full md:w-auto flex items-center justify-between">
-                <div 
-                    onClick={() => { setView('FEED'); setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
-                    className="font-pixel text-lg font-bold cursor-pointer flex items-center gap-2"
-                >
-                    <Terminal size={20} className={theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'} />
-                    <span>NEO_ARCHIVE</span>
-                </div>
-                
-                <div className="flex md:hidden items-center gap-4">
-                    <button onClick={() => { setView('SEARCH'); updateHash('/search'); }} className="opacity-70">
-                        <Search size={20} />
-                    </button>
-                    <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="opacity-70">
-                        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                    </button>
-                </div>
-            </div>
-
-            <div className={`w-full md:w-auto hidden md:flex items-center gap-4 md:mt-0`}>
-                <div className="relative w-full md:w-64">
-                    <input 
-                       value={searchQuery}
-                       onChange={(e) => { setSearchQuery(e.target.value); if(view !== 'SEARCH') setView('SEARCH'); }}
-                       placeholder="ПОИСК..."
-                       className={`w-full bg-transparent border rounded-full px-3 py-1 text-xs font-pixel focus:outline-none transition-all ${
-                           theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
-                       }`}
-                    />
-                    <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"/>
-                </div>
-
-                <div className="hidden md:flex items-center gap-4">
-                    <button 
-                        onClick={() => { setView('MY_COLLECTION'); updateHash('/my-collection'); }}
-                        className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-black'}`}
-                        title="Моя Полка"
-                    >
-                        <Package size={20} />
-                    </button>
-
-                    <button 
-                        onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} 
-                        className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}
-                        title="Добавить"
-                    >
-                        <PlusSquare size={20} />
-                    </button>
-                    
-                    <button 
-                        onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} 
-                        className="relative p-2 opacity-70 hover:opacity-100"
-                        title="Активность"
-                    >
-                        <Bell size={20} />
-                        {(notifications.some(n => n.recipient === user?.username && !n.isRead) || messages.some(m => m.receiver === user?.username && !m.isRead)) && (
-                            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                        )}
-                    </button>
-
-                    <button 
-                         onClick={() => {
-                             if (user) {
-                                 setViewedProfile(user.username);
-                                 setView('USER_PROFILE');
-                                 updateHash(`/profile/${user.username}`);
-                             }
-                         }}
-                         className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden border border-transparent hover:border-current transition-all"
-                         title="Профиль"
-                    >
-                        <img src={getUserAvatar(user?.username || 'Guest')} alt="User" />
-                    </button>
-
-                    <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="opacity-50 hover:opacity-100">
-                        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                    </button>
-                    
-                    <button onClick={handleLogout} className="opacity-50 hover:opacity-100 text-red-500" title="Выход">
-                        <LogOut size={20} />
-                    </button>
-                </div>
-            </div>
-        </header>
-      )}
-      
-      <main 
-        className="relative z-10 max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6"
-        {...globalSwipeHandlers}
-      >
-         {view === 'FEED' && <HeroSection theme={theme} user={user} />}
-         {view !== 'EXHIBIT' && view !== 'FEED' && renderContentArea()}
-         {view === 'EXHIBIT' && selectedExhibit && (
+          <main className="flex-1 p-4 md:p-6 overflow-x-hidden">
+              {view === 'FEED' && <HeroSection theme={theme} user={user} />}
+              {view === 'EXHIBIT' && selectedExhibit && (
                   <ExhibitDetailPage 
                       exhibit={selectedExhibit}
                       theme={theme}
@@ -1540,43 +1714,29 @@ export default function App() {
                       currentUser={user?.username || ''}
                       isAdmin={user?.isAdmin || false}
                   />
-         )}
-      </main>
+              )}
+              {view !== 'EXHIBIT' && renderContentArea()}
+          </main>
 
-      {view !== 'AUTH' && user && (
-          <MobileNavigation 
-              theme={theme}
-              view={view}
-              setView={setView}
-              updateHash={updateHash}
-              hasNotifications={notifications.some(n => n.recipient === user?.username && !n.isRead) || messages.some(m => m.receiver === user?.username && !m.isRead)}
-              username={user.username}
-              onResetFeed={handleResetFeed}
-              onProfileClick={() => {
-                   setViewedProfile(user.username);
-                   setView('USER_PROFILE');
-                   updateHash(`/profile/${user.username}`);
-              }}
-          />
-      )}
-
-      {view !== 'AUTH' && (
-          <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
-              <div className="flex justify-center gap-8 mb-4">
-                  <div className="flex flex-col items-center">
-                      <span className="font-bold text-lg font-pixel">{db.getFullDatabase().users.length}</span>
-                      <span className="text-[10px] uppercase tracking-widest">ПОЛЬЗОВАТЕЛЕЙ</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                      <span className="font-bold text-lg font-pixel text-green-500 animate-pulse">{Math.floor(db.getFullDatabase().users.length * 0.4)}</span>
-                      <span className="text-[10px] uppercase tracking-widest">ОНЛАЙН</span>
-                  </div>
-              </div>
-              <p>
-                  NEO_ARCHIVE SYSTEM v2.5 | POWERED BY <a href="https://t.me/truester1337" target="_blank" rel="noopener noreferrer" className="hover:text-current hover:underline font-bold">TRUESTER</a>
-              </p>
-          </footer>
-      )}
+          {view !== 'AUTH' && (
+              <MobileNavigation 
+                 theme={theme} 
+                 view={view} 
+                 setView={setView} 
+                 updateHash={updateHash} 
+                 hasNotifications={notifications.some(n => !n.isRead && n.recipient === user?.username)}
+                 username={user?.username || ''}
+                 onResetFeed={handleResetFeed}
+                 onProfileClick={() => {
+                     if (user) {
+                         setViewedProfile(user.username);
+                         setView('USER_PROFILE');
+                         updateHash(`/profile/${user.username}`);
+                     }
+                 }}
+              />
+          )}
+       </div>
     </div>
   );
 }

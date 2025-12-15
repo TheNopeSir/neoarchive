@@ -1,4 +1,3 @@
-
 import { Exhibit, UserProfile, Collection, Notification, Message } from './types';
 import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle } from 'lucide-react';
 import React from 'react';

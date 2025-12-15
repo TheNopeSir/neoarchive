@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { FolderOpen, Share2 } from 'lucide-react';
 import { Collection } from '../types';
