@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, Lock, ArrowRight, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square, Send } from 'lucide-react';
+import { Mail, Lock, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square, Send } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -10,6 +10,22 @@ interface MatrixLoginProps {
 }
 
 type AuthStep = 'ENTRY' | 'LOGIN' | 'REGISTER' | 'TELEGRAM';
+
+interface TelegramUser {
+    id: number;
+    first_name: string;
+    last_name?: string;
+    username?: string;
+    photo_url?: string;
+    auth_date: number;
+    hash: string;
+}
+
+declare global {
+    interface Window {
+        onTelegramAuth: (user: TelegramUser) => void;
+    }
+}
 
 const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const [step, setStep] = useState<AuthStep>('ENTRY');
@@ -21,8 +37,6 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const [tagline, setTagline] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   
-  // Telegram State
-  const [tgUsername, setTgUsername] = useState('');
   const telegramWrapperRef = useRef<HTMLDivElement>(null);
 
   // UI State
@@ -40,18 +54,55 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Telegram Widget Injection
+  // Telegram Widget Injection & Callback Setup
   useEffect(() => {
       if (step === 'TELEGRAM' && telegramWrapperRef.current) {
-          // Clear previous scripts if any
+          // Define the global callback function expected by the widget
+          window.onTelegramAuth = async (user: TelegramUser) => {
+              console.log("Telegram Auth Success:", user);
+              setIsLoading(true);
+              try {
+                  // Determine username
+                  const neoUsername = user.username || `tg_${user.id}`;
+                  // Create a consistent email for the system
+                  const neoEmail = `${user.id}@telegram.neoarchive`;
+                  // Password generation (in real app, use auth token, here we simulate)
+                  const neoPassword = `tg_hash_${user.id}`; // Simple simulation
+
+                  let userProfile: UserProfile;
+
+                  try {
+                      // Try to login first
+                      userProfile = await db.loginUser(neoEmail, neoPassword);
+                  } catch {
+                      // If login fails, register
+                      const displayName = user.username ? `@${user.username}` : `${user.first_name}`;
+                      userProfile = await db.registerUser(
+                          neoUsername, 
+                          neoPassword, 
+                          `Telegram User: ${displayName}`, 
+                          neoEmail, 
+                          user.username,
+                          user.photo_url
+                      );
+                  }
+                  
+                  onLogin(userProfile, true);
+
+              } catch (err: any) {
+                  setError("AUTH FAILED: " + err.message);
+                  setIsLoading(false);
+              }
+          };
+
+          // Inject Script
           telegramWrapperRef.current.innerHTML = '';
-          
           const script = document.createElement('script');
           script.src = "https://telegram.org/js/telegram-widget.js?22";
           script.async = true;
           script.setAttribute('data-telegram-login', 'TrusterStoryBot');
-          script.setAttribute('data-size', 'medium');
-          script.setAttribute('data-auth-url', 'https://neoarchive.ru/');
+          script.setAttribute('data-size', 'large');
+          script.setAttribute('data-onauth', 'onTelegramAuth(user)');
           script.setAttribute('data-request-access', 'write');
           
           telegramWrapperRef.current.appendChild(script);
@@ -64,7 +115,6 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
       setPassword('');
       setUsername('');
       setTagline('');
-      setTgUsername('');
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -118,39 +168,6 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     }
   };
 
-  const handleTelegramAuthManual = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!tgUsername) {
-          setError('ВВЕДИТЕ TELEGRAM USERNAME');
-          return;
-      }
-      setIsLoading(true);
-      
-      // Simulation of Telegram Widget behavior for client-side demo
-      setTimeout(async () => {
-          try {
-              const cleanTg = tgUsername.replace('@', '');
-              // We create a mock account linked to TG
-              const mockEmail = `${cleanTg}@telegram.neoarchive`;
-              const mockPass = `tg_secure_${cleanTg}`;
-              
-              try {
-                  // Try login first
-                  const user = await db.loginUser(mockEmail, mockPass);
-                  onLogin(user, rememberMe);
-              } catch {
-                  // If fails, register
-                  const user = await db.registerUser(cleanTg, mockPass, 'Telegram User', mockEmail, cleanTg);
-                  onLogin(user, rememberMe);
-              }
-          } catch (err: any) {
-              setError(err.message || "ОШИБКА TELEGRAM AUTH");
-          } finally {
-              setIsLoading(false);
-          }
-      }, 1500);
-  };
-
   const renderContent = () => {
     if (step === 'ENTRY') {
         return (
@@ -196,45 +213,15 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                  </div>
                  
                  {/* Widget Container */}
-                 <div className="flex justify-center my-4 p-4 bg-white/5 rounded" ref={telegramWrapperRef}>
+                 <div className="flex justify-center my-4 p-4 bg-white/5 rounded min-h-[80px]" ref={telegramWrapperRef}>
                      <RetroLoader text="WIDGET_LOADING" />
                  </div>
 
-                 <div className="relative flex items-center justify-center my-2">
-                     <span className="bg-black px-2 text-[10px] text-gray-500 z-10">ИЛИ ВРУЧНУЮ</span>
-                     <div className="absolute w-full border-t border-gray-800"></div>
-                 </div>
-
-                 {/* Manual Fallback */}
-                 <form onSubmit={handleTelegramAuthManual} className="w-full">
-                     <div className="space-y-1">
-                        <label className="text-[10px] font-pixel uppercase opacity-70">TELEGRAM USERNAME</label>
-                        <div className="flex items-center gap-2 border-b-2 p-2 border-current focus-within:opacity-100 opacity-70 transition-opacity">
-                            <Send size={18} />
-                            <input 
-                                value={tgUsername}
-                                onChange={e => setTgUsername(e.target.value)}
-                                className="bg-transparent w-full focus:outline-none font-mono text-sm"
-                                placeholder="@neo_user"
-                            />
-                        </div>
+                 {error && (
+                     <div className="flex items-center gap-2 text-red-500 font-bold text-xs font-mono justify-center animate-pulse border border-red-500 p-2 mt-4">
+                         <AlertCircle size={16}/> {error}
                      </div>
-
-                     {error && (
-                         <div className="flex items-center gap-2 text-red-500 font-bold text-xs font-mono justify-center animate-pulse border border-red-500 p-2 mt-4">
-                             <AlertCircle size={16}/> {error}
-                         </div>
-                     )}
-
-                     <button 
-                         disabled={isLoading}
-                         className={`mt-4 w-full py-3 font-bold font-pixel uppercase ${
-                             theme === 'dark' ? 'bg-blue-500 text-black' : 'bg-blue-600 text-white'
-                         }`}
-                     >
-                         {isLoading ? 'СОЕДИНЕНИЕ...' : 'ВОЙТИ'}
-                     </button>
-                 </form>
+                 )}
                  
                  <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
             </div>

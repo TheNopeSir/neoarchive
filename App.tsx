@@ -1109,6 +1109,42 @@ export default function App() {
       </div>
   );
 
+  // Group notifications logic
+  const groupNotifications = (notifs: Notification[]) => {
+      const grouped: { [key: string]: Notification & { count: number, ids: string[] } } = {};
+      
+      notifs.forEach(n => {
+          const key = `${n.actor}-${n.type}-${n.targetId || ''}`;
+          if (!grouped[key]) {
+              grouped[key] = { ...n, count: 1, ids: [n.id] };
+          } else {
+              grouped[key].count++;
+              grouped[key].ids.push(n.id);
+              // Update timestamp to latest
+              if(new Date(n.timestamp) > new Date(grouped[key].timestamp)) {
+                  grouped[key].timestamp = n.timestamp;
+              }
+          }
+      });
+      
+      return Object.values(grouped).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+  };
+
+  const handleNotificationClick = (n: Notification) => {
+      if (n.targetId) {
+          const item = exhibits.find(e => e.id === n.targetId);
+          if (item) {
+              handleExhibitClick(item);
+          } else {
+              // Fallback if item deleted or not found, go to profile
+              handleAuthorClick(n.actor);
+          }
+      } else {
+          // Follows or generic events go to profile
+          handleAuthorClick(n.actor);
+      }
+  };
+
   const renderContentArea = () => {
     switch (view) {
       // 1. ADD: CREATE HUB
@@ -1566,13 +1602,56 @@ export default function App() {
           );
       case 'ACTIVITY':
           const myNotifications = notifications.filter(n => n.recipient === user?.username);
+          // Group notifications here as well for consistency
+          const groupedNotifications = groupNotifications(myNotifications);
+
           return (
               <div className="max-w-2xl mx-auto animate-in fade-in">
                   <div className="flex justify-center mb-6 border-b border-gray-500/30">
                       <button onClick={handleOpenUpdates} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'UPDATES' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ОБНОВЛЕНИЯ {myNotifications.some(n => !n.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
                       <button onClick={() => setActivityTab('DIALOGS')} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'DIALOGS' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ДИАЛОГИ {messages.some(m => m.receiver === user?.username && !m.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
                   </div>
-                  {activityTab === 'UPDATES' && (<div className="space-y-4">{myNotifications.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>) : (myNotifications.map(notif => (<div key={notif.id} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}><div className="mt-1">{notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}{notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}{notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}{notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}</div><div className="flex-1"><div className="font-pixel text-xs opacity-50 mb-1 flex justify-between"><span>{notif.timestamp}</span>{!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}</div><div className="font-mono text-sm"><span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(notif.actor)}>@{notif.actor}</span>{notif.type === 'LIKE' && ' оценил ваш артефакт.'}{notif.type === 'COMMENT' && ' прокомментировал: '}{notif.type === 'FOLLOW' && ' подписался на вас.'}{notif.type === 'GUESTBOOK' && ' написал в гостевой книге.'}</div>{notif.targetPreview && (<div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">"{notif.targetPreview}"</div>)}</div></div>)))}</div>)}
+                  
+                  {activityTab === 'UPDATES' && (
+                      <div className="space-y-4">
+                          {groupedNotifications.length === 0 ? (
+                              <div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>
+                          ) : (
+                              groupedNotifications.map(notif => (
+                                  <div 
+                                    key={notif.id} // use latest id for key
+                                    onClick={() => handleNotificationClick(notif)}
+                                    className={`p-4 rounded border flex items-start gap-4 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}
+                                  >
+                                      <div className="mt-1">
+                                          {notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}
+                                          {notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}
+                                          {notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}
+                                          {notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}
+                                      </div>
+                                      <div className="flex-1">
+                                          <div className="font-pixel text-xs opacity-50 mb-1 flex justify-between">
+                                              <span>{notif.timestamp}</span>
+                                              {!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}
+                                          </div>
+                                          <div className="font-mono text-sm">
+                                              <span className="font-bold">@{notif.actor}</span>
+                                              {notif.type === 'LIKE' && (notif.count > 1 ? ` оценил ${notif.count} ваших артефактов.` : ` оценил ваш артефакт.`)}
+                                              {notif.type === 'COMMENT' && (notif.count > 1 ? ` оставил ${notif.count} комментариев.` : ` прокомментировал: `)}
+                                              {notif.type === 'FOLLOW' && ' подписался на вас.'}
+                                              {notif.type === 'GUESTBOOK' && ' написал в гостевой книге.'}
+                                          </div>
+                                          {/* Only show preview if single notification to avoid confusion */}
+                                          {notif.count === 1 && notif.targetPreview && (
+                                              <div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">"{notif.targetPreview}"</div>
+                                          )}
+                                      </div>
+                                  </div>
+                              ))
+                          )}
+                      </div>
+                  )}
+
                   {activityTab === 'DIALOGS' && (<div className="space-y-4">{messages.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ АКТИВНЫХ КАНАЛОВ СВЯЗИ</div>) : ([...new Set(messages.filter(m => m.sender === user?.username || m.receiver === user?.username).map(m => m.sender === user?.username ? m.receiver : m.sender))].map(partner => { const unreadCount = messages.filter(m => m.sender === partner && m.receiver === user?.username && !m.isRead).length; return (<div key={partner} onClick={() => handleOpenChat(partner)} className={`p-4 rounded border flex items-center gap-4 cursor-pointer transition-all hover:translate-x-1 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim hover:border-dark-primary' : 'bg-white border-light-dim hover:border-light-accent'}`}><div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative"><img src={getUserAvatar(partner)} alt="Avatar" />{unreadCount > 0 && (<div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-black animate-pulse"></div>)}</div><div className="flex-1"><div className="flex justify-between items-baseline mb-1"><span className="font-pixel text-sm font-bold">@{partner}</span>{unreadCount > 0 && <span className="text-[10px] font-bold bg-red-500 text-white px-2 rounded-full">{unreadCount} NEW</span>}</div><div className="font-mono text-xs opacity-80 truncate">Нажмите для перехода в чат</div></div></div>)}))}</div>)}
               </div>
           );
@@ -1699,6 +1778,8 @@ export default function App() {
   };
 
   const userNotifications = user ? notifications.filter(n => n.recipient === user.username && !n.isRead) : [];
+  // Use aggregated logic for the desktop badge count as well if desired, but raw count is usually better for the red dot.
+  const aggregatedNotifications = groupNotifications(userNotifications);
 
   return (
     <div className={`min-h-screen transition-colors duration-500 ${theme === 'dark' ? 'bg-black text-gray-300' : 'bg-gray-50 text-gray-800'} font-sans selection:bg-green-500 selection:text-black`}>
@@ -1735,20 +1816,15 @@ export default function App() {
                              <div className={`absolute top-full right-0 mt-2 w-72 rounded border shadow-xl z-50 overflow-hidden ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
                                  <div className="p-2 border-b border-gray-500/30 text-[10px] font-pixel opacity-70">SYSTEM_ALERTS</div>
                                  <div className="max-h-64 overflow-y-auto">
-                                     {userNotifications.length === 0 ? (
+                                     {aggregatedNotifications.length === 0 ? (
                                          <div className="p-4 text-center text-xs font-mono opacity-50">Нет новых событий</div>
                                      ) : (
-                                         userNotifications.map(n => (
+                                         aggregatedNotifications.map(n => (
                                              <div 
                                                 key={n.id} 
                                                 onClick={() => {
                                                     setShowDesktopNotifications(false);
-                                                    if(n.targetId) {
-                                                        const item = exhibits.find(e => e.id === n.targetId);
-                                                        if(item) handleExhibitClick(item);
-                                                    } else {
-                                                        handleAuthorClick(n.actor);
-                                                    }
+                                                    handleNotificationClick(n);
                                                 }}
                                                 className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}
                                              >
@@ -1757,8 +1833,8 @@ export default function App() {
                                                      <span className="text-[9px] opacity-50">{n.timestamp}</span>
                                                  </div>
                                                  <div className="text-[10px] font-mono leading-tight">
-                                                     {n.type === 'LIKE' && 'оценил ваш артефакт'}
-                                                     {n.type === 'COMMENT' && 'оставил комментарий'}
+                                                     {n.type === 'LIKE' && (n.count > 1 ? `оценил ${n.count} артефактов` : 'оценил ваш артефакт')}
+                                                     {n.type === 'COMMENT' && (n.count > 1 ? `оставил ${n.count} комментариев` : 'оставил комментарий')}
                                                      {n.type === 'FOLLOW' && 'теперь читает вас'}
                                                  </div>
                                              </div>
