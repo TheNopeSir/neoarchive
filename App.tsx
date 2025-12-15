@@ -821,14 +821,16 @@ export default function App() {
                   grouped[key].timestamp = n.timestamp;
                   grouped[key].targetId = n.targetId;
                   grouped[key].targetPreview = n.targetPreview;
-                  grouped[key].isRead = n.isRead || grouped[key].isRead;
               }
+              // If ANY notification in the group is unread, the group is unread.
+              if (!n.isRead) grouped[key].isRead = false;
           }
       });
       return Object.values(grouped).sort((a,b) => b.id.localeCompare(a.id));
   };
 
   const handleNotificationClick = (n: Notification & { count?: number }) => {
+      // If single item, go to item. If aggregated multiple items, go to author profile.
       if (n.count === 1 && n.targetId) {
           const item = exhibits.find(e => e.id === n.targetId);
           if (item) { handleExhibitClick(item); return; }
@@ -879,7 +881,8 @@ export default function App() {
       setGuestbookInput('');
   };
 
-  const userNotifications = user ? notifications.filter(n => n.recipient === user.username && !n.isRead) : [];
+  // Allow showing all notifications history, not just unread
+  const userNotifications = user ? notifications.filter(n => n.recipient === user.username) : [];
   const aggregatedNotifications = groupNotifications(userNotifications);
 
   const renderContentArea = () => {
@@ -1123,7 +1126,7 @@ export default function App() {
         return (
             <div className="max-w-2xl mx-auto animate-in fade-in">
                 <div className="flex gap-4 border-b border-gray-500/30 mb-6"><button onClick={() => setActivityTab('UPDATES')} className={`pb-2 font-pixel text-xs ${activityTab === 'UPDATES' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>УВЕДОМЛЕНИЯ</button><button onClick={() => setActivityTab('DIALOGS')} className={`pb-2 font-pixel text-xs ${activityTab === 'DIALOGS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>СООБЩЕНИЯ</button></div>
-                {activityTab === 'UPDATES' ? (<div className="space-y-4">{aggregatedNotifications.length === 0 ? (<div className="text-center opacity-50 py-10 font-mono text-sm">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => handleNotificationClick(n)} className="p-4 border rounded cursor-pointer hover:bg-white/5 flex gap-4"><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(n.actor)} alt={n.actor} /></div><div className="flex-1"><div className="flex justify-between mb-1"><span className="font-bold font-pixel text-xs">@{n.actor}</span><span className="text-[10px] opacity-50">{n.timestamp}</span></div><p className="text-xs font-mono opacity-80">{n.type === 'LIKE' && `Оценил: ${n.targetPreview || 'ваш артефакт'} ${n.count > 1 ? `(+${n.count-1})` : ''}`}{n.type === 'COMMENT' && `Прокомментировал: ${n.targetPreview} ${n.count > 1 ? `(+${n.count-1})` : ''}`}{n.type === 'FOLLOW' && 'Подписался на ваши обновления'}{n.type === 'GUESTBOOK' && `Написал в гостевой: ${n.targetPreview}`}</p></div></div>)))}</div>) : (<div className="space-y-2">{/* Dialogs logic */ (() => { const partners = new Set<string>(); messages.forEach(m => { if(m.sender === user?.username) partners.add(m.receiver); else if(m.receiver === user?.username) partners.add(m.sender); }); if(partners.size === 0) return <div className="text-center opacity-50 py-10 font-mono text-sm">Нет диалогов</div>; return Array.from(partners).map(partner => { const lastMsg = messages.filter(m => (m.sender === partner && m.receiver === user?.username) || (m.sender === user?.username && m.receiver === partner)).sort((a,b) => b.id.localeCompare(a.id))[0]; return (<div key={partner} onClick={() => handleOpenChat(partner)} className="p-4 border rounded cursor-pointer hover:bg-white/5 flex gap-4 items-center"><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(partner)} alt={partner} /></div><div className="flex-1 min-w-0"><div className="flex justify-between mb-1"><span className="font-bold font-pixel text-xs">@{partner}</span><span className="text-[10px] opacity-50">{lastMsg.timestamp}</span></div><p className="text-xs font-mono opacity-70 truncate">{lastMsg.sender === user?.username ? 'Вы: ' : ''}{lastMsg.text}</p></div></div>); }); })()}</div>)}
+                {activityTab === 'UPDATES' ? (<div className="space-y-4">{aggregatedNotifications.length === 0 ? (<div className="text-center opacity-50 py-10 font-mono text-sm">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className="font-bold text-xs">@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className="text-[10px] font-mono leading-tight">{n.type === 'LIKE' && (n.count > 1 ? `оценил ${n.count} артефактов` : 'оценил ваш артефакт')}{n.type === 'COMMENT' && (n.count > 1 ? `оставил ${n.count} комментариев` : 'оставил комментарий')}{n.type === 'FOLLOW' && 'теперь читает вас'}</div></div>)))}</div>) : (<div className="space-y-2">{/* Dialogs logic */ (() => { const partners = new Set<string>(); messages.forEach(m => { if(m.sender === user?.username) partners.add(m.receiver); else if(m.receiver === user?.username) partners.add(m.sender); }); if(partners.size === 0) return <div className="text-center opacity-50 py-10 font-mono text-sm">Нет диалогов</div>; return Array.from(partners).map(partner => { const lastMsg = messages.filter(m => (m.sender === partner && m.receiver === user?.username) || (m.sender === user?.username && m.receiver === partner)).sort((a,b) => b.id.localeCompare(a.id))[0]; return (<div key={partner} onClick={() => handleOpenChat(partner)} className="p-4 border rounded cursor-pointer hover:bg-white/5 flex gap-4 items-center"><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(partner)} alt={partner} /></div><div className="flex-1 min-w-0"><div className="flex justify-between mb-1"><span className="font-bold font-pixel text-xs">@{partner}</span><span className="text-[10px] opacity-50">{lastMsg.timestamp}</span></div><p className="text-xs font-mono opacity-70 truncate">{lastMsg.sender === user?.username ? 'Вы: ' : ''}{lastMsg.text}</p></div></div>); }); })()}</div>)}
             </div>
         );
     }
