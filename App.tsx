@@ -448,9 +448,8 @@ export default function App() {
   };
 
   const globalSwipeHandlers = useSwipe({
-      // FIX: Corrected prop names from onSwipeLeft/Right to onSwipedLeft/Right to match useSwipe hook definition.
-      onSwipedLeft: handleGlobalSwipeLeft,
-      onSwipedRight: handleGlobalSwipeRight
+      onSwipeLeft: handleGlobalSwipeLeft,
+      onSwipeRight: handleGlobalSwipeRight
   });
 
   // Reset pagination
