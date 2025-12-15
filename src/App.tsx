@@ -1,13 +1,13 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
   MessageSquare, Search, Database, Trash2, Settings, Home, Activity, Zap, Sparkles, 
-  User, ArrowLeft, Shuffle, Trophy, CheckCircle2, Bell, 
+  User, ArrowLeft, Shuffle, Trophy, Star, SlidersHorizontal, CheckCircle2, Bell, 
   MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
   Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
   Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download, Box,
-  Package, FileEdit, Reply, Plus
+  Package, FileEdit, Reply
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -18,21 +18,13 @@ import ErrorBoundary from './components/ErrorBoundary';
 import MatrixLogin from './components/MatrixLogin';
 import HallOfFame from './components/HallOfFame';
 import MyCollection from './components/MyCollection';
+import StorageMonitor from './components/StorageMonitor';
 import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
 import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
-import { compressImage, isOffline, getUserAvatar } from './services/storageService';
+import { compressImage, isOffline, getUserAvatar, autoCleanStorage } from './services/storageService';
 import useSwipe from './hooks/useSwipe';
-
-// IMPORTS
-import HeroSection from './components/HeroSection';
-import CollectionCard from './components/CollectionCard';
-import MobileNavigation from './components/MobileNavigation';
-import LoginTransition from './components/LoginTransition';
-import InstallBanner from './components/InstallBanner';
-import FeedView from './components/views/FeedView';
-import UserProfileView from './components/views/UserProfileView';
 
 // Helper to generate specs based on category
 const generateSpecsForCategory = (cat: string) => {
@@ -47,6 +39,156 @@ const getDefaultCondition = (cat: string) => {
     const conditions = CATEGORY_CONDITIONS[cat] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
     return conditions[0];
 };
+
+const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null }> = ({ theme, user }) => (
+    <div className={`hidden md:block relative mb-6 p-6 rounded-lg border-2 border-dashed overflow-hidden group ${
+        theme === 'dark' 
+        ? 'border-dark-dim bg-dark-surface/50 hover:border-dark-primary transition-colors' 
+        : 'border-light-dim bg-white/50 hover:border-light-accent transition-colors'
+    }`}>
+        <div className={`absolute top-0 left-0 w-1 h-full opacity-50 ${theme === 'dark' ? 'bg-dark-primary' : 'bg-light-accent'}`}></div>
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 className={`text-sm md:text-2xl lg:text-3xl font-pixel mb-2 break-words ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                    NEO_ARCHIVE
+                </h1>
+                <p className={`font-mono text-[10px] md:text-sm max-w-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Цифровой ковчег для сохранения артефактов прошлого в облачной вечности.
+                </p>
+            </div>
+        </div>
+        {/* Decorative scanline inside hero */}
+        <div className={`absolute inset-0 pointer-events-none opacity-5 bg-gradient-to-r from-transparent via-current to-transparent animate-[shimmer_2s_infinite] ${
+            theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'
+        }`} />
+    </div>
+);
+
+const MobileNavigation: React.FC<{
+    theme: 'dark' | 'light';
+    view: ViewState;
+    setView: (v: ViewState) => void;
+    updateHash: (path: string) => void;
+    hasNotifications: boolean;
+    username: string;
+    onResetFeed: () => void;
+    onProfileClick: () => void;
+}> = ({ theme, view, setView, updateHash, hasNotifications, username, onResetFeed, onProfileClick }) => {
+    const navItems = [
+        { id: 'FEED', icon: Home, label: 'ГЛАВНАЯ', action: () => { onResetFeed(); setView('FEED'); updateHash('/feed'); } },
+        { id: 'MY_COLLECTION', icon: Package, label: 'ПОЛКА', action: () => { setView('MY_COLLECTION'); updateHash('/my-collection'); } },
+        { id: 'ADD', icon: PlusCircle, label: 'ДОБАВИТЬ', action: () => { setView('CREATE_HUB'); updateHash('/create'); }, highlight: true },
+        { id: 'ACTIVITY', icon: Bell, label: 'АКТИВНОСТЬ', action: () => { setView('ACTIVITY'); updateHash('/activity'); }, hasBadge: hasNotifications },
+        { id: 'PROFILE', icon: User, label: 'ПРОФИЛЬ', action: onProfileClick }
+    ];
+
+    return (
+        <div className={`md:hidden fixed bottom-0 left-0 w-full z-50 border-t pb-safe ${
+            theme === 'dark' ? 'bg-black/95 border-dark-dim text-gray-400' : 'bg-white/95 border-light-dim text-gray-500'
+        }`}>
+            <div className="flex justify-around items-center h-16">
+                {navItems.map(item => {
+                    const isActive = view === item.id || (item.id === 'PROFILE' && view === 'USER_PROFILE') || (item.id === 'ADD' && ['CREATE_HUB', 'CREATE_ARTIFACT', 'CREATE_COLLECTION'].includes(view)) || (item.id === 'ACTIVITY' && ['ACTIVITY', 'DIRECT_CHAT'].includes(view));
+                    return (
+                        <button 
+                            key={item.id}
+                            onClick={item.action}
+                            className={`flex flex-col items-center justify-center w-full h-full gap-1 relative ${
+                                isActive 
+                                ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') 
+                                : ''
+                            }`}
+                        >
+                            <item.icon 
+                                size={item.highlight ? 28 : 20} 
+                                strokeWidth={item.highlight ? 2 : 1.5}
+                                className={item.highlight ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}
+                            />
+                            {!item.highlight && <span className="text-[8px] font-pixel mt-1">{item.label}</span>}
+                            {item.hasBadge && (
+                                <span className="absolute top-3 right-6 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+const LoginTransition: React.FC = () => (
+    <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center text-green-500 font-pixel">
+      <div className="space-y-4 text-center p-4">
+        <div className="text-3xl md:text-5xl animate-pulse font-bold tracking-widest text-shadow-glow">
+            ACCESS GRANTED
+        </div>
+        <div className="font-mono text-xs md:text-sm opacity-80 flex flex-col gap-1">
+            <span className="animate-[fade_0.5s_ease-in-out_infinite]">DECRYPTING USER DATA...</span>
+            <span className="text-[10px] opacity-60">KEY: RSA-4096-VERIFIED</span>
+        </div>
+        
+        {/* Progress Bar */}
+        <div className="w-64 h-3 border-2 border-green-900 p-0.5 mx-auto rounded relative overflow-hidden bg-green-900/20">
+           <div 
+             className="h-full bg-green-500 animate-[width_2.5s_cubic-bezier(0.4,0,0.2,1)_forwards]" 
+             style={{width: '0%', boxShadow: '0 0 10px #22c55e'}}
+           ></div>
+        </div>
+
+        <div className="font-mono text-[10px] opacity-50 mt-4 animate-pulse">
+           ESTABLISHING SECURE CONNECTION TO MATRIX...
+        </div>
+      </div>
+      <style>{`
+        @keyframes width {
+          0% { width: 5%; }
+          30% { width: 45%; }
+          60% { width: 55%; }
+          80% { width: 90%; }
+          100% { width: 100%; }
+        }
+        .text-shadow-glow {
+            text-shadow: 0 0 10px #22c55e, 0 0 20px #22c55e;
+        }
+      `}</style>
+    </div>
+);
+
+// Install Banner Component
+const InstallBanner: React.FC<{ theme: 'dark' | 'light'; onInstall: () => void; onClose: () => void }> = ({ theme, onInstall, onClose }) => (
+    <div className={`fixed top-14 left-0 w-full z-40 p-2 flex justify-center animate-in slide-in-from-top-2`}>
+        <div className={`flex items-center gap-3 p-3 rounded border-2 shadow-lg backdrop-blur-md max-w-sm w-full justify-between ${
+            theme === 'dark' 
+            ? 'bg-black/90 border-dark-primary text-white shadow-dark-primary/20' 
+            : 'bg-white/90 border-light-accent text-black shadow-light-accent/20'
+        }`}>
+            <div className="flex items-center gap-3">
+                <div className={`p-2 rounded border ${
+                    theme === 'dark' ? 'border-dark-primary bg-dark-primary/20' : 'border-light-accent bg-light-accent/20'
+                }`}>
+                    <Download size={20} className="animate-bounce" />
+                </div>
+                <div>
+                    <h3 className="font-pixel text-[10px] font-bold">SYSTEM UPDATE</h3>
+                    <p className="font-mono text-[9px] opacity-80">Установить приложение?</p>
+                </div>
+            </div>
+            <div className="flex gap-2">
+                <button 
+                    onClick={onInstall}
+                    className={`px-3 py-1 font-pixel text-[9px] font-bold uppercase border hover:bg-current hover:text-black transition-colors ${
+                        theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent'
+                    }`}
+                >
+                    INSTALL
+                </button>
+                <button onClick={onClose} className="opacity-50 hover:opacity-100">
+                    <X size={16} />
+                </button>
+            </div>
+        </div>
+    </div>
+);
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -65,7 +207,6 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [guestbook, setGuestbook] = useState<GuestbookEntry[]>([]);
-  const [systemStats, setSystemStats] = useState({ totalUsers: 0, onlineUsers: 0 });
 
   // UI State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
@@ -128,12 +269,12 @@ export default function App() {
   });
 
   const refreshData = () => {
+      console.log("🔄 [App] Refreshing data from cache...");
       setExhibits([...db.getExhibits()]);
       setCollections([...db.getCollections()]);
       setNotifications([...db.getNotifications()]);
       setMessages([...db.getMessages()]);
       setGuestbook([...db.getGuestbook()]);
-      setSystemStats(db.getSystemStats());
   };
 
   // Background Sync Polling
@@ -150,8 +291,11 @@ export default function App() {
       return () => clearInterval(interval);
   }, [view]);
 
-  // Initialize & PWA Install Listener
+  // Initialize & PWA Install Listener & Auto Clean
   useEffect(() => {
+    // 3. Auto-clean check on init
+    autoCleanStorage();
+
     window.onerror = (msg, url, lineNo, columnNo, error) => {
       console.error('🔴 [Global Error]:', msg, error);
       return false;
@@ -211,7 +355,7 @@ export default function App() {
       localStorage.setItem('pwa_dismissed', 'true');
   };
 
-  // --- HASH ROUTING FIX ---
+  // --- HASH ROUTING ---
   useEffect(() => {
       const handleHashChange = () => {
           if (!user) {
@@ -226,6 +370,7 @@ export default function App() {
           if (hash === '#/create') { setView('CREATE_HUB'); return; }
           if (hash === '#/create/artifact') { setView('CREATE_ARTIFACT'); return; }
           if (hash === '#/create/collection') { setView('CREATE_COLLECTION'); return; }
+          if (hash === '#/settings') { setView('SETTINGS'); return; } // Added Settings Route
           if (hash.startsWith('#/chat/')) {
               const partner = hash.split('/')[2];
               if (partner) { setChatPartner(partner); setView('DIRECT_CHAT'); }
@@ -253,7 +398,7 @@ export default function App() {
           }
       };
 
-      if (!isInitializing) {
+      if (!isInitializing && exhibits.length > 0) {
           handleHashChange();
       }
 
@@ -439,17 +584,13 @@ export default function App() {
          }
      }
 
-     // Ensure category matches a valid constant for condition/specs
-     const category = newExhibit.category || DefaultCategory.MISC;
-     const condition = newExhibit.condition || getDefaultCondition(category);
-
      const exhibit: Exhibit = {
          id: editingExhibitId || Date.now().toString(),
          title: newExhibit.title,
          description: newExhibit.description || '',
          imageUrls: newExhibit.imageUrls || [],
          videoUrl: newExhibit.videoUrl, 
-         category: category,
+         category: newExhibit.category || DefaultCategory.MISC,
          subcategory: newExhibit.subcategory, 
          owner: user?.username || 'Guest',
          timestamp: new Date().toLocaleString('ru-RU'),
@@ -459,7 +600,7 @@ export default function App() {
          specs: newExhibit.specs || {},
          comments: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.comments || [] : [],
          quality: newExhibit.quality || 'Не указано',
-         condition: condition,
+         condition: newExhibit.condition || getDefaultCondition(newExhibit.category || DefaultCategory.MISC),
          isDraft: isDraft
      };
 
@@ -921,51 +1062,114 @@ export default function App() {
       return badges;
   };
 
+  const renderCollectionCard = (col: Collection) => (
+      <div 
+         key={col.id} 
+         onClick={() => handleCollectionClick(col)}
+         className={`group relative aspect-[4/3] rounded-xl overflow-hidden cursor-pointer border-2 transition-transform hover:-translate-y-1 ${
+             theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'
+         }`}
+      >
+          <img src={col.coverImage} alt={col.title} className="w-full h-full object-cover transition-transform group-hover:scale-105"/>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-4">
+              <div className="font-pixel text-[10px] text-white/70 mb-1 flex items-center gap-1">
+                  <FolderOpen size={10}/> КОЛЛЕКЦИЯ
+              </div>
+              <h3 className="text-white font-pixel text-sm md:text-lg font-bold leading-tight mb-1">{col.title}</h3>
+              <div className="flex justify-between items-end">
+                  <span className="text-[10px] font-mono text-white/60">@{col.owner}</span>
+                  <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-white/20 backdrop-blur rounded text-[9px] font-bold text-white">
+                          {col.exhibitIds.length} ITEMS
+                      </span>
+                      <button
+                          onClick={(e) => { e.stopPropagation(); handleShareCollection(col); }}
+                          className="bg-white/20 p-1.5 rounded hover:bg-white/40 text-white transition-colors"
+                          title="Поделиться"
+                      >
+                          <Share2 size={12} />
+                      </button>
+                  </div>
+              </div>
+          </div>
+      </div>
+  );
+
   const renderContentArea = () => {
     switch (view) {
+      // 1. ADD: CREATE HUB
       case 'CREATE_HUB':
-        return (
-            <div className="max-w-2xl mx-auto animate-in fade-in h-[70vh] flex flex-col justify-center">
-                <h2 className="text-xl font-pixel mb-8 text-center uppercase">Выберите тип загрузки</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <button 
-                      onClick={() => { setView('CREATE_ARTIFACT'); updateHash('/create/artifact'); }}
-                      className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
-                          theme === 'dark' ? 'border-dark-dim hover:border-dark-primary bg-dark-surface' : 'border-light-dim hover:border-light-accent bg-white'
-                      }`}
-                    >
-                        <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>
-                            <FilePlus size={32} />
-                        </div>
-                        <div className="text-center">
-                            <h3 className="font-pixel text-base font-bold">АРТЕФАКТ</h3>
-                            <p className="font-mono text-xs opacity-70 mt-2">Загрузить единичный объект</p>
-                        </div>
-                    </button>
+          return (
+              <div className="max-w-2xl mx-auto animate-in fade-in h-[70vh] flex flex-col justify-center">
+                  <h2 className="text-xl font-pixel mb-8 text-center uppercase">Выберите тип загрузки</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <button 
+                        onClick={() => { setView('CREATE_ARTIFACT'); updateHash('/create/artifact'); }}
+                        className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
+                            theme === 'dark' ? 'border-dark-dim hover:border-dark-primary bg-dark-surface' : 'border-light-dim hover:border-light-accent bg-white'
+                        }`}
+                      >
+                          <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>
+                              <FilePlus size={32} />
+                          </div>
+                          <div className="text-center">
+                              <h3 className="font-pixel text-base font-bold">АРТЕФАКТ</h3>
+                              <p className="font-mono text-xs opacity-70 mt-2">Загрузить единичный объект</p>
+                          </div>
+                      </button>
 
-                    <button 
-                      onClick={() => { setView('CREATE_COLLECTION'); updateHash('/create/collection'); }}
-                      className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
-                          theme === 'dark' ? 'border-dark-dim hover:border-yellow-500 bg-dark-surface' : 'border-light-dim hover:border-orange-500 bg-white'
-                      }`}
-                    >
-                         <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-yellow-500 text-black' : 'bg-orange-500 text-white'}`}>
-                            <FolderPlus size={32} />
-                        </div>
-                        <div className="text-center">
-                            <h3 className="font-pixel text-base font-bold">КОЛЛЕКЦИЯ</h3>
-                            <p className="font-mono text-xs opacity-70 mt-2">Создать подборку предметов</p>
-                        </div>
-                    </button>
-                </div>
-            </div>
-        );
+                      <button 
+                        onClick={() => { setView('CREATE_COLLECTION'); updateHash('/create/collection'); }}
+                        className={`group p-8 rounded-xl border-2 border-dashed transition-all hover:-translate-y-2 flex flex-col items-center justify-center gap-4 ${
+                            theme === 'dark' ? 'border-dark-dim hover:border-yellow-500 bg-dark-surface' : 'border-light-dim hover:border-orange-500 bg-white'
+                        }`}
+                      >
+                           <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-yellow-500 text-black' : 'bg-orange-500 text-white'}`}>
+                              <FolderPlus size={32} />
+                          </div>
+                          <div className="text-center">
+                              <h3 className="font-pixel text-base font-bold">КОЛЛЕКЦИЯ</h3>
+                              <p className="font-mono text-xs opacity-70 mt-2">Создать подборку предметов</p>
+                          </div>
+                      </button>
+                  </div>
+              </div>
+          );
+
+      // NEW: SETTINGS VIEW
+      case 'SETTINGS':
+          return (
+              <div className="max-w-2xl mx-auto animate-in fade-in">
+                  <button onClick={() => { 
+                      if(user) { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }
+                      else { setView('FEED'); updateHash('/feed'); }
+                  }} className="flex items-center gap-2 mb-6 hover:underline opacity-70 font-pixel text-xs">
+                      <ArrowLeft size={16} /> НАЗАД
+                  </button>
+                  <h2 className="text-xl font-pixel mb-6 border-b pb-2 border-dashed border-gray-500/30">СИСТЕМНЫЕ НАСТРОЙКИ</h2>
+                  <div className="space-y-6">
+                      <StorageMonitor theme={theme} />
+                      
+                      <div className={`p-4 rounded border ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
+                          <h3 className="font-pixel text-xs mb-2">ОФОРМЛЕНИЕ</h3>
+                          <div className="flex items-center justify-between">
+                              <span className="text-xs font-mono">Тема интерфейса</span>
+                              <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="flex items-center gap-2 px-3 py-1 rounded border opacity-70 hover:opacity-100">
+                                  {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                                  <span className="text-[10px] font-bold uppercase">{theme === 'dark' ? 'СВЕТЛАЯ' : 'ТЕМНАЯ'}</span>
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="text-center opacity-40 text-[10px] font-mono mt-8">
+                          NeoArchive System v2.4.5<br/>
+                          Build: {new Date().toLocaleDateString()}
+                      </div>
+                  </div>
+              </div>
+          );
 
       case 'CREATE_ARTIFACT':
-        // Ensure category defaults to SOMETHING for conditions to load properly
-        const currentCategory = newExhibit.category || DefaultCategory.MISC;
-        const availableConditions = CATEGORY_CONDITIONS[currentCategory] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
-
         return (
           <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
              <div className="flex items-center gap-2 mb-6">
@@ -1010,11 +1214,17 @@ export default function App() {
                                  <option key={cat} value={cat}>{cat}</option>
                              ))}
                          </select>
-                         <ChevronDown size={16} className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'}`} />
+                         <ChevronDown 
+                             size={16} 
+                             className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                                 theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
+                             }`} 
+                         />
                      </div>
                  </div>
 
-                 {CATEGORY_SUBCATEGORIES[currentCategory] && (
+                 {/* Subcategory Selector (Restored) */}
+                 {CATEGORY_SUBCATEGORIES[newExhibit.category || ''] && (
                      <div className="space-y-1 animate-in fade-in">
                          <label className="text-[10px] font-pixel uppercase opacity-70">ПОДКАТЕГОРИЯ</label>
                          <div className="relative mt-1">
@@ -1028,15 +1238,21 @@ export default function App() {
                                  }`}
                              >
                                  <option value="">-- ВЫБЕРИТЕ ПОДТИП --</option>
-                                 {CATEGORY_SUBCATEGORIES[currentCategory].map((sub: string) => (
+                                 {CATEGORY_SUBCATEGORIES[newExhibit.category || ''].map((sub: string) => (
                                      <option key={sub} value={sub}>{sub}</option>
                                  ))}
                              </select>
-                             <ChevronDown size={16} className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'}`} />
+                             <ChevronDown 
+                                 size={16} 
+                                 className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                                     theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
+                                 }`} 
+                             />
                          </div>
                      </div>
                  )}
 
+                 {/* Condition Selector */}
                  <div className="space-y-1">
                      <label className="text-[10px] font-pixel uppercase opacity-70">СОСТОЯНИЕ / GRADE</label>
                      <div className="relative">
@@ -1049,15 +1265,20 @@ export default function App() {
                                 : 'bg-white text-black border-light-dim focus:border-light-accent'
                             }`}
                          >
-                             <option value="">-- ВЫБЕРИТЕ СОСТОЯНИЕ --</option>
-                             {availableConditions.map(cond => (
+                             {(CATEGORY_CONDITIONS[newExhibit.category || DefaultCategory.MISC] || []).map(cond => (
                                  <option key={cond} value={cond}>{cond}</option>
                              ))}
                          </select>
-                         <ChevronDown size={16} className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'}`} />
+                         <ChevronDown 
+                             size={16} 
+                             className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                                 theme === 'dark' ? 'text-dark-dim' : 'text-light-dim'
+                             }`} 
+                         />
                      </div>
                  </div>
 
+                 {/* Image Upload Section */}
                  <div className="space-y-1">
                     <label className="text-[10px] font-pixel uppercase opacity-70">ИЗОБРАЖЕНИЯ (МИН. 1) *</label>
                     <div className="flex flex-wrap gap-2 mb-2">
@@ -1078,7 +1299,12 @@ export default function App() {
                         }`}>
                             <ImageIcon size={20} className="opacity-50" />
                             <span className="text-[8px] font-pixel mt-1 opacity-50">ГАЛЕРЕЯ</span>
-                            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={handleImageUpload}
+                            />
                         </label>
 
                         <label className={`w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-70 transition-opacity ${
@@ -1086,7 +1312,13 @@ export default function App() {
                         }`}>
                             <Camera size={20} className="opacity-50" />
                             <span className="text-[8px] font-pixel mt-1 opacity-50">КАМЕРА</span>
-                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                capture="environment"
+                                className="hidden" 
+                                onChange={handleImageUpload}
+                            />
                         </label>
                     </div>
                  </div>
@@ -1105,6 +1337,7 @@ export default function App() {
                      />
                  </div>
 
+                 {/* Dynamic Specs Fields with Datalist */}
                  <div className="space-y-3">
                      <label className="text-[10px] font-pixel uppercase opacity-70 block border-b pb-1">ХАРАКТЕРИСТИКИ</label>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1178,8 +1411,6 @@ export default function App() {
       case 'COLLECTION_DETAIL':
           if (!selectedCollection) return <div>Error</div>;
           const colExhibits = exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id));
-          const isCollectionOwner = user?.username === selectedCollection.owner;
-
           return (
               <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
                   <div className="flex justify-between items-center mb-6">
@@ -1200,14 +1431,12 @@ export default function App() {
                       <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-6">
                           <h1 className="text-xl md:text-3xl font-pixel text-white mb-2">{selectedCollection.title}</h1>
                           <p className="text-white/80 font-mono text-sm max-w-2xl">{selectedCollection.description}</p>
-                          
-                          {isCollectionOwner && (
+                          {user?.username === selectedCollection.owner && (
                               <button 
                                 onClick={() => handleEditCollection(selectedCollection)}
-                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white backdrop-blur-md transition-all hover:scale-110"
-                                title="Редактировать коллекцию"
+                                className="absolute top-4 right-4 bg-white/20 p-2 rounded hover:bg-white/40 text-white"
                               >
-                                  <Edit2 size={18} />
+                                  <Edit2 size={16} />
                               </button>
                           )}
                       </div>
@@ -1231,31 +1460,63 @@ export default function App() {
               </div>
           );
 
-      case 'EXHIBIT':
-          if (!selectedExhibit) return <div>Exhibit not found</div>;
+      // (Other cases are implicitly handled via the default render, but we need to ensure the full file is returned to keep structure valid)
+      case 'AUTH': return <MatrixLogin theme={theme} onLogin={handleLogin} />;
+      case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
+      case 'MY_COLLECTION':
+          if (!user) return <div onClick={() => setView('FEED')}>Please Login</div>;
+          return <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => { setView('FEED'); updateHash('/feed'); }} onExhibitClick={handleExhibitClick} onCollectionClick={handleCollectionClick} onLike={toggleLike} />;
+      case 'DIRECT_CHAT':
+          if (!chatPartner || !user) return <div onClick={() => setView('FEED')}>Error: No Chat Partner</div>;
+          const conversation = messages.filter(m => (m.sender === user.username && m.receiver === chatPartner) || (m.sender === chatPartner && m.receiver === user.username)).sort((a,b) => a.id.localeCompare(b.id));
           return (
-              <ExhibitDetailPage 
-                  exhibit={selectedExhibit}
-                  theme={theme}
-                  onBack={handleBack}
-                  onLike={(id) => toggleLike(id)}
-                  onFavorite={(id) => toggleFavorite(id)}
-                  onPostComment={handlePostComment}
-                  onLikeComment={handleLikeComment}
-                  onAuthorClick={handleAuthorClick}
-                  onShare={(id: string) => { /* internal share logic used */ }}
-                  isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
-                  isFavorited={false}
-                  onFollow={handleFollow}
-                  onMessage={handleOpenChat}
-                  onDelete={handleDeleteExhibit}
-                  onEdit={(exhibit) => handleEditExhibit(exhibit)}
-                  isFollowing={user?.following.includes(selectedExhibit.owner) || false}
-                  currentUser={user?.username || ''}
-                  isAdmin={user?.isAdmin || false}
-              />
+              <div className="max-w-2xl mx-auto animate-in fade-in h-[80vh] flex flex-col">
+                  <button onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
+                  <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
+                      <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden"><img src={getUserAvatar(chatPartner)} alt={chatPartner} /></div>
+                      <div><h2 className="font-pixel text-lg">@{chatPartner}</h2><p className="font-mono text-xs opacity-50">Private Link Encrypted</p></div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {conversation.length === 0 && <div className="text-center opacity-40 font-mono text-xs py-10">Начало зашифрованного соединения...</div>}
+                      {conversation.map(msg => { const isMe = msg.sender === user.username; return (<div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[70%] p-3 rounded-lg font-mono text-sm ${isMe ? (theme === 'dark' ? 'bg-dark-primary text-black rounded-tr-none' : 'bg-light-accent text-white rounded-tr-none') : (theme === 'dark' ? 'bg-dark-surface text-white rounded-tl-none' : 'bg-white text-black border rounded-tl-none')}`}>{msg.text}<div className={`text-[9px] mt-1 opacity-60 text-right ${isMe ? 'text-black' : 'text-current'}`}>{msg.timestamp}{isMe && <span className="ml-1 opacity-70">{msg.isRead ? '✓✓' : '✓'}</span>}</div></div></div>)})}
+                  </div>
+                  <div className="p-4 border-t border-dashed border-gray-500/30 flex gap-2">
+                      <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Сообщение..." className="flex-1 bg-transparent border rounded p-2 focus:outline-none font-mono text-sm" />
+                      <button onClick={handleSendMessage} className={`p-2 rounded ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}><Send size={20} /></button>
+                  </div>
+              </div>
           );
-
+      case 'SEARCH':
+          return (
+              <div className="max-w-4xl mx-auto animate-in fade-in">
+                  <div className={`relative w-full flex items-center border-b-2 px-2 gap-2 mb-4 ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}>
+                       <Search size={20} className="opacity-50" />
+                       <input type="text" placeholder="ПОИСК ПО БАЗЕ ДАННЫХ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus className="bg-transparent w-full py-4 focus:outline-none font-pixel text-base md:text-lg tracking-wide" />
+                       {searchQuery && <button onClick={() => setSearchQuery('')}><X size={20}/></button>}
+                   </div>
+                   <div className="flex gap-4 mb-8">
+                       <button onClick={() => setSearchMode('ARTIFACTS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'ARTIFACTS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ АРТЕФАКТЫ ]</button>
+                       <button onClick={() => setSearchMode('COLLECTIONS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'COLLECTIONS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ КОЛЛЕКЦИИ ]</button>
+                   </div>
+                   {searchMode === 'COLLECTIONS' && (
+                       <div className="animate-in fade-in slide-in-from-bottom-2">
+                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{collections.filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(renderCollectionCard)}</div>
+                           {collections.length === 0 && <div className="text-center opacity-50 font-mono py-10">КОЛЛЕКЦИИ НЕ НАЙДЕНЫ</div>}
+                       </div>
+                   )}
+                   {searchMode === 'ARTIFACTS' && (
+                       <div className="animate-in fade-in slide-in-from-bottom-2">
+                           {!searchQuery && (
+                               <>
+                                   <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2"><Grid size={14}/> КАТЕГОРИИ</h3>
+                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">{Object.values(DefaultCategory).map((cat: string) => (<button key={cat} onClick={() => { setSelectedCategory(cat); setView('FEED'); updateHash('/feed'); }} className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span></button>))}</div>
+                               </>
+                           )}
+                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{(searchQuery ? exhibits.filter(ex => !ex.isDraft && (ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))) : exhibits.filter(ex => !ex.isDraft).sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)).map((item: Exhibit) => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />))}</div>
+                       </div>
+                   )}
+              </div>
+          );
       case 'EDIT_COLLECTION':
           if (!collectionToEdit) return <div>Error</div>;
           return (
@@ -1271,25 +1532,11 @@ export default function App() {
                       </div>
                       <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label><input className="w-full bg-transparent border-b p-2 font-pixel text-lg focus:outline-none" value={collectionToEdit.title} onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})} /></div>
                       <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 font-mono text-sm rounded h-24 focus:outline-none" value={collectionToEdit.description} onChange={e => setCollectionToEdit({...collectionToEdit, description: e.target.value})} /></div>
-                      <div>
-                          <label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label>
-                          <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">
-                              {exhibits.filter(e => e.owner === user?.username).map(ex => { 
-                                  const isSelected = collectionToEdit.exhibitIds.includes(ex.id); 
-                                  return (
-                                      <div key={ex.id} onClick={() => { const newIds = isSelected ? collectionToEdit.exhibitIds.filter(id => id !== ex.id) : [...collectionToEdit.exhibitIds, ex.id]; setCollectionToEdit({...collectionToEdit, exhibitIds: newIds}); }} className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${isSelected ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent') : 'opacity-60 hover:opacity-100'}`}>
-                                          <div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>{isSelected && <Check size={12} strokeWidth={4} />}</div>
-                                          <div className="truncate font-mono text-xs">{ex.title}</div>
-                                      </div>
-                                  )
-                              })}
-                          </div>
-                      </div>
+                      <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label><div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">{exhibits.filter(e => e.owner === user?.username).map(ex => { const isSelected = collectionToEdit.exhibitIds.includes(ex.id); return (<div key={ex.id} onClick={() => { const newIds = isSelected ? collectionToEdit.exhibitIds.filter(id => id !== ex.id) : [...collectionToEdit.exhibitIds, ex.id]; setCollectionToEdit({...collectionToEdit, exhibitIds: newIds}); }} className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${isSelected ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent') : 'opacity-60 hover:opacity-100'}`}><div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>{isSelected && <Check size={12} strokeWidth={4} />}</div><div className="truncate font-mono text-xs">{ex.title}</div></div>)})}</div></div>
                       <button onClick={handleSaveCollection} className="w-full py-4 font-bold font-pixel bg-green-500 text-black uppercase">СОХРАНИТЬ ИЗМЕНЕНИЯ</button>
                   </div>
               </div>
           );
-
       case 'CREATE_COLLECTION':
           return (
               <div className="max-w-xl mx-auto animate-in fade-in">
@@ -1303,280 +1550,193 @@ export default function App() {
                  </div>
               </div>
           );
-
       case 'ACTIVITY':
           const myNotifications = notifications.filter(n => n.recipient === user?.username);
-          
-          // Aggregation Logic
-          const aggregatedNotifs = useMemo(() => {
-              const groups: Record<string, { base: Notification, actors: Set<string>, count: number, latestTime: string }> = {};
-              
-              myNotifications.forEach(n => {
-                  let key = n.type;
-                  if (n.targetId) key += `_${n.targetId}`;
-                  else if (n.type === 'FOLLOW') key += `_${n.timestamp.split(',')[0]}`; 
-                  
-                  if (!groups[key]) {
-                      groups[key] = { base: n, actors: new Set([n.actor]), count: 1, latestTime: n.timestamp };
-                  } else {
-                      groups[key].actors.add(n.actor);
-                      groups[key].count++;
-                      if (!n.isRead) groups[key].base.isRead = false;
-                      if (n.timestamp > groups[key].latestTime) groups[key].latestTime = n.timestamp; 
-                  }
-              });
-              
-              return Object.values(groups).sort((a,b) => {
-                  // Rough date sort
-                  return b.latestTime.localeCompare(a.latestTime); 
-              });
-          }, [myNotifications]);
-
           return (
               <div className="max-w-2xl mx-auto animate-in fade-in">
                   <div className="flex justify-center mb-6 border-b border-gray-500/30">
                       <button onClick={handleOpenUpdates} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'UPDATES' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ОБНОВЛЕНИЯ {myNotifications.some(n => !n.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
                       <button onClick={() => setActivityTab('DIALOGS')} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'DIALOGS' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ДИАЛОГИ {messages.some(m => m.receiver === user?.username && !m.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
                   </div>
-                  
-                  {activityTab === 'UPDATES' && (
-                      <div className="space-y-4">
-                          {aggregatedNotifs.length === 0 ? (
-                              <div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>
-                          ) : (
-                              aggregatedNotifs.map(group => {
-                                  const notif = group.base;
-                                  const actors = Array.from(group.actors);
-                                  const mainActor = actors[0];
-                                  const otherCount = group.count - 1;
-                                  
-                                  return (
-                                      <div key={notif.id + '_group'} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}>
-                                          <div className="mt-1">
-                                              {notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}
-                                              {notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}
-                                              {notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}
-                                              {notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}
-                                          </div>
-                                          <div className="flex-1">
-                                              <div className="font-pixel text-xs opacity-50 mb-1 flex justify-between">
-                                                  <span>{group.latestTime}</span>
-                                                  {!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}
-                                              </div>
-                                              <div className="font-mono text-sm">
-                                                  <span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(mainActor)}>@{mainActor}</span>
-                                                  {otherCount > 0 && <span className="opacity-70"> и еще {otherCount}</span>}
-                                                  
-                                                  {notif.type === 'LIKE' && ` оценили "${notif.targetPreview}".`}
-                                                  {notif.type === 'COMMENT' && ` прокомментировали "${notif.targetPreview}".`}
-                                                  {notif.type === 'FOLLOW' && ' подписались на вас.'}
-                                                  {notif.type === 'GUESTBOOK' && ' написали в гостевой книге.'}
-                                              </div>
-                                              {/* Only show text preview for single comments to avoid clutter */}
-                                              {notif.type === 'COMMENT' && group.count === 1 && notif.targetPreview && (
-                                                  <div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">
-                                                      "{notif.targetPreview}"
-                                                  </div>
-                                              )}
-                                          </div>
-                                      </div>
-                                  );
-                              })
-                          )}
-                      </div>
-                  )}
-
+                  {activityTab === 'UPDATES' && (<div className="space-y-4">{myNotifications.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>) : (myNotifications.map(notif => (<div key={notif.id} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}><div className="mt-1">{notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}{notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}{notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}{notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}</div><div className="flex-1"><div className="font-pixel text-xs opacity-50 mb-1 flex justify-between"><span>{notif.timestamp}</span>{!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}</div><div className="font-mono text-sm"><span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(notif.actor)}>@{notif.actor}</span>{notif.type === 'LIKE' && ' оценил ваш артефакт.'}{notif.type === 'COMMENT' && ' прокомментировал: '}{notif.type === 'FOLLOW' && ' подписался на вас.'}{notif.type === 'GUESTBOOK' && ' написал в гостевой книге.'}</div>{notif.targetPreview && (<div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">"{notif.targetPreview}"</div>)}</div></div>)))}</div>)}
                   {activityTab === 'DIALOGS' && (<div className="space-y-4">{messages.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ АКТИВНЫХ КАНАЛОВ СВЯЗИ</div>) : ([...new Set(messages.filter(m => m.sender === user?.username || m.receiver === user?.username).map(m => m.sender === user?.username ? m.receiver : m.sender))].map(partner => { const unreadCount = messages.filter(m => m.sender === partner && m.receiver === user?.username && !m.isRead).length; return (<div key={partner} onClick={() => handleOpenChat(partner)} className={`p-4 rounded border flex items-center gap-4 cursor-pointer transition-all hover:translate-x-1 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim hover:border-dark-primary' : 'bg-white border-light-dim hover:border-light-accent'}`}><div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative"><img src={getUserAvatar(partner)} alt="Avatar" />{unreadCount > 0 && (<div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-black animate-pulse"></div>)}</div><div className="flex-1"><div className="flex justify-between items-baseline mb-1"><span className="font-pixel text-sm font-bold">@{partner}</span>{unreadCount > 0 && <span className="text-[10px] font-bold bg-red-500 text-white px-2 rounded-full">{unreadCount} NEW</span>}</div><div className="font-mono text-xs opacity-80 truncate">Нажмите для перехода в чат</div></div></div>)}))}</div>)}
               </div>
           );
-
-      // ... (other cases remain the same)
-      default:
-      case 'FEED':
+      case 'USER_PROFILE':
+         const profileUsername = viewedProfile || user?.username;
+         if (!profileUsername) return <div className="p-8 text-center font-pixel">USER_NOT_FOUND_ERROR_404</div>;
+         
          return (
-             <FeedView
-                theme={theme}
-                feedMode={feedMode}
-                setFeedMode={setFeedMode}
-                selectedCategory={selectedCategory}
-                setSelectedCategory={setSelectedCategory}
-                exhibits={exhibits}
-                collections={collections}
-                user={user}
-                visibleCount={visibleCount}
-                loadMoreRef={loadMoreRef}
-                onExhibitClick={handleExhibitClick}
-                onLike={toggleLike}
-                onFavorite={toggleFavorite}
-                onAuthorClick={handleAuthorClick}
-                onCollectionClick={handleCollectionClick}
-                onShareCollection={handleShareCollection}
-                setView={setView}
-                updateHash={(path: string) => updateHash(path)}
+             <UserProfileView
+                 user={user!}
+                 viewedProfileUsername={profileUsername}
+                 exhibits={exhibits}
+                 collections={collections}
+                 guestbook={guestbook}
+                 theme={theme}
+                 onBack={() => { setView('FEED'); updateHash('/feed'); }}
+                 onLogout={handleLogout}
+                 onFollow={handleFollow}
+                 onChat={handleOpenChat}
+                 onExhibitClick={handleExhibitClick}
+                 onLike={toggleLike}
+                 onFavorite={toggleFavorite}
+                 onAuthorClick={handleAuthorClick}
+                 onCollectionClick={handleCollectionClick}
+                 onShareCollection={handleShareCollection}
+                 onViewHallOfFame={() => { setView('HALL_OF_FAME'); updateHash('/hall-of-fame'); }}
+                 onGuestbookPost={handleGuestbookPost}
+                 refreshData={refreshData}
+                 isEditingProfile={isEditingProfile}
+                 setIsEditingProfile={setIsEditingProfile}
+                 editTagline={editTagline}
+                 setEditTagline={setEditTagline}
+                 editStatus={editStatus}
+                 setEditStatus={setEditStatus}
+                 editTelegram={editTelegram}
+                 setEditTelegram={setEditTelegram}
+                 onSaveProfile={handleSaveProfile}
+                 onProfileImageUpload={handleProfileImageUpload}
+                 guestbookInput={guestbookInput}
+                 setGuestbookInput={setGuestbookInput}
+                 guestbookInputRef={guestbookInputRef}
+                 profileTab={profileTab}
+                 setProfileTab={setProfileTab}
              />
          );
+
+      default:
+      case 'FEED':
+          const feedItems = feedMode === 'ARTIFACTS' 
+             ? exhibits.filter(e => !e.isDraft && (selectedCategory === 'ВСЕ' || e.category === selectedCategory))
+             : [];
+          // ... sorting ...
+          const sortedFeed = feedItems.sort((a,b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, visibleCount);
+          
+          return (
+              <div className="animate-in fade-in">
+                  <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
+                      <button 
+                          onClick={() => setSelectedCategory('ВСЕ')}
+                          className={`px-4 py-2 rounded border font-pixel text-xs whitespace-nowrap transition-colors ${selectedCategory === 'ВСЕ' ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'opacity-60'}`}
+                      >
+                          ВСЕ
+                      </button>
+                      {Object.values(DefaultCategory).map((cat: string) => (
+                          <button 
+                              key={cat}
+                              onClick={() => setSelectedCategory(cat)}
+                              className={`px-4 py-2 rounded border font-pixel text-xs whitespace-nowrap transition-colors ${selectedCategory === cat ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'opacity-60'}`}
+                          >
+                              {cat}
+                          </button>
+                      ))}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+                      {sortedFeed.map(item => (
+                          <ExhibitCard 
+                             key={item.id} 
+                             item={item} 
+                             theme={theme}
+                             similarExhibits={[]}
+                             onClick={handleExhibitClick}
+                             isLiked={item.likedBy?.includes(user?.username || '') || false}
+                             isFavorited={false}
+                             onLike={(e) => toggleLike(item.id, e)}
+                             onFavorite={(e) => toggleFavorite(item.id, e)}
+                             onAuthorClick={handleAuthorClick}
+                          />
+                      ))}
+                  </div>
+                  {sortedFeed.length < feedItems.length && (
+                      <div ref={loadMoreRef} className="py-8 flex justify-center opacity-50">
+                          <RetroLoader text="ЗАГРУЗКА" />
+                      </div>
+                  )}
+              </div>
+          );
     }
   };
 
-  if (isInitializing) return <div className="h-screen bg-black flex items-center justify-center text-green-500 font-pixel"><RetroLoader size="lg" text="SYSTEM BOOT" /></div>;
-
   return (
-    <div className={`min-h-screen transition-colors duration-500 font-sans selection:bg-green-500 selection:text-black ${
-      theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-800'
-    }`}>
-      {/* ... (existing layout) ... */}
-      <MatrixRain theme={theme} />
-      {theme === 'dark' && <CRTOverlay />}
+    <div className={`min-h-screen transition-colors duration-500 ${theme === 'dark' ? 'bg-black text-gray-300' : 'bg-gray-50 text-gray-800'} font-sans selection:bg-green-500 selection:text-black`}>
+       <MatrixRain theme={theme} />
+       <CRTOverlay />
+       {isLoginTransition && <LoginTransition />}
+       {showInstallBanner && <InstallBanner theme={theme} onInstall={handleInstallClick} onClose={handleDismissInstall} />}
 
-      {isLoginTransition && <LoginTransition />}
+       <div className="relative z-10 max-w-7xl mx-auto min-h-screen flex flex-col" {...globalSwipeHandlers}>
+          {view !== 'AUTH' && (
+              <header className={`p-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
+                 <div className="flex items-center gap-3">
+                     <div className={`p-2 rounded border ${theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent'}`}>
+                         <Terminal size={20} />
+                     </div>
+                     <span className={`font-pixel text-lg hidden md:block ${theme === 'dark' ? 'text-white' : 'text-black'}`}>NEO_ARCHIVE</span>
+                 </div>
+                 <div className="flex items-center gap-4">
+                     {user && (
+                         <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}>
+                             <div className="text-right hidden md:block">
+                                 <div className={`font-pixel text-xs font-bold ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>@{user.username}</div>
+                             </div>
+                             <div className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden border border-gray-500">
+                                 <img src={user.avatarUrl} alt="Avatar" />
+                             </div>
+                         </div>
+                     )}
+                     <button onClick={() => setView('SETTINGS')}><Settings size={20} /></button>
+                     <button onClick={handleLogout} className="text-red-500"><LogOut size={20} /></button>
+                 </div>
+              </header>
+          )}
 
-      {showInstallBanner && (
-          <InstallBanner 
-              theme={theme} 
-              onInstall={handleInstallClick} 
-              onClose={handleDismissInstall} 
-          />
-      )}
+          <main className="flex-1 p-4 md:p-6 overflow-x-hidden">
+              {view === 'FEED' && <HeroSection theme={theme} user={user} />}
+              {view === 'EXHIBIT' && selectedExhibit && (
+                  <ExhibitDetailPage 
+                      exhibit={selectedExhibit}
+                      theme={theme}
+                      onBack={handleBack}
+                      onShare={(id) => handleShareCollection({id, title: selectedExhibit.title, description: selectedExhibit.description, coverImage: selectedExhibit.imageUrls[0]} as Collection)} 
+                      onFavorite={(id) => toggleFavorite(id)}
+                      onLike={(id) => toggleLike(id)}
+                      isFavorited={false}
+                      isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
+                      onPostComment={handlePostComment}
+                      onAuthorClick={handleAuthorClick}
+                      onFollow={handleFollow}
+                      onMessage={handleOpenChat}
+                      onDelete={user?.username === selectedExhibit.owner || user?.isAdmin ? handleDeleteExhibit : undefined}
+                      onEdit={user?.username === selectedExhibit.owner ? handleEditExhibit : undefined}
+                      isFollowing={user?.following.includes(selectedExhibit.owner) || false}
+                      currentUser={user?.username || ''}
+                      isAdmin={user?.isAdmin || false}
+                  />
+              )}
+              {view !== 'EXHIBIT' && renderContentArea()}
+          </main>
 
-      {isOffline() && (
-          <div className="fixed bottom-4 right-4 z-[100] px-3 py-1 bg-red-500 text-white font-pixel text-[10px] rounded animate-pulse flex items-center gap-2 shadow-lg">
-              <WifiOff size={12} /> OFFLINE MODE
-          </div>
-      )}
-      
-      {view !== 'AUTH' && (
-        <header className={`sticky top-0 z-50 backdrop-blur-md border-b flex flex-col md:flex-row items-center md:justify-between px-4 py-3 md:h-14 ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
-            <div className="w-full md:w-auto flex items-center justify-between">
-                <div 
-                    onClick={() => { setView('FEED'); setFeedMode('ARTIFACTS'); setSelectedCategory('ВСЕ'); updateHash('/feed'); }}
-                    className="font-pixel text-lg font-bold cursor-pointer flex items-center gap-2"
-                >
-                    <Terminal size={20} className={theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'} />
-                    <span>NEO_ARCHIVE</span>
-                </div>
-                
-                {/* Mobile Header Actions */}
-                <div className="flex md:hidden items-center gap-4">
-                    <button onClick={() => { setView('SEARCH'); updateHash('/search'); }} className="opacity-70">
-                        <Search size={20} />
-                    </button>
-                    <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="opacity-70">
-                        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                    </button>
-                </div>
-            </div>
-
-            {/* Desktop Nav */}
-            <div className={`w-full md:w-auto hidden md:flex items-center gap-4 md:mt-0`}>
-                <div className="relative w-full md:w-64">
-                    <input 
-                       value={searchQuery}
-                       onChange={(e) => { setSearchQuery(e.target.value); if(view !== 'SEARCH') setView('SEARCH'); }}
-                       placeholder="ПОИСК..."
-                       className={`w-full bg-transparent border rounded-full px-3 py-1 text-xs font-pixel focus:outline-none transition-all ${
-                           theme === 'dark' ? 'border-dark-dim focus:border-dark-primary' : 'border-light-dim focus:border-light-accent'
-                       }`}
-                    />
-                    <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"/>
-                </div>
-
-                <div className="hidden md:flex items-center gap-4">
-                    <button 
-                        onClick={() => { setView('MY_COLLECTION'); updateHash('/my-collection'); }}
-                        className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-black'}`}
-                        title="Моя Полка"
-                    >
-                        <Package size={20} />
-                    </button>
-
-                    <button 
-                        onClick={() => { setView('CREATE_HUB'); updateHash('/create'); }} 
-                        className={`p-2 rounded-full transition-transform hover:scale-110 ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}
-                        title="Добавить"
-                    >
-                        <PlusSquare size={20} />
-                    </button>
-                    
-                    <button 
-                        onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} 
-                        className="relative p-2 opacity-70 hover:opacity-100"
-                        title="Активность"
-                    >
-                        <Bell size={20} />
-                        {(notifications.some(n => n.recipient === user?.username && !n.isRead) || messages.some(m => m.receiver === user?.username && !m.isRead)) && (
-                            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                        )}
-                    </button>
-
-                    <button 
-                         onClick={() => {
-                             if (user) {
-                                 setViewedProfile(user.username);
-                                 setView('USER_PROFILE');
-                                 updateHash(`/profile/${user.username}`);
-                             }
-                         }}
-                         className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden border border-transparent hover:border-current transition-all"
-                         title="Профиль"
-                    >
-                        <img src={getUserAvatar(user?.username || 'Guest')} alt="User" />
-                    </button>
-
-                    <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="opacity-50 hover:opacity-100">
-                        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                    </button>
-                    
-                    <button onClick={handleLogout} className="opacity-50 hover:opacity-100 text-red-500" title="Выход">
-                        <LogOut size={20} />
-                    </button>
-                </div>
-            </div>
-        </header>
-      )}
-      
-      {/* GLOBAL SWIPE CONTAINER */}
-      <main 
-        className="relative z-10 max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6"
-        {...globalSwipeHandlers}
-      >
-         {view === 'FEED' && <HeroSection theme={theme} user={user} />}
-         {renderContentArea()}
-      </main>
-
-      {view !== 'AUTH' && user && (
-          <MobileNavigation 
-              theme={theme}
-              view={view}
-              setView={setView}
-              updateHash={updateHash}
-              hasNotifications={notifications.some(n => n.recipient === user?.username && !n.isRead) || messages.some(m => m.receiver === user?.username && !m.isRead)}
-              username={user.username}
-              onResetFeed={handleResetFeed}
-              onProfileClick={() => {
-                   setViewedProfile(user.username);
-                   setView('USER_PROFILE');
-                   updateHash(`/profile/${user.username}`);
-              }}
-          />
-      )}
-
-      {view !== 'AUTH' && (
-          <footer className="hidden md:block mt-20 py-10 text-center font-mono text-xs opacity-40 border-t border-dashed border-gray-500/30">
-              <div className="flex justify-center gap-8 mb-4">
-                  <div className="flex flex-col items-center">
-                      <span className="font-bold text-lg font-pixel">{systemStats.totalUsers}</span>
-                      <span className="text-[10px] uppercase tracking-widest">ПОЛЬЗОВАТЕЛЕЙ</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                      <span className="font-bold text-lg font-pixel text-green-500 animate-pulse">{systemStats.onlineUsers}</span>
-                      <span className="text-[10px] uppercase tracking-widest">ОНЛАЙН</span>
-                  </div>
-              </div>
-              <p>
-                  NEO_ARCHIVE SYSTEM v2.5 | POWERED BY <a href="https://t.me/truester1337" target="_blank" rel="noopener noreferrer" className="hover:text-current hover:underline font-bold">TRUESTER</a>
-              </p>
-          </footer>
-      )}
+          {view !== 'AUTH' && (
+              <MobileNavigation 
+                 theme={theme} 
+                 view={view} 
+                 setView={setView} 
+                 updateHash={updateHash} 
+                 hasNotifications={notifications.some(n => !n.isRead && n.recipient === user?.username)}
+                 username={user?.username || ''}
+                 onResetFeed={handleResetFeed}
+                 onProfileClick={() => {
+                     if (user) {
+                         setViewedProfile(user.username);
+                         setView('USER_PROFILE');
+                         updateHash(`/profile/${user.username}`);
+                     }
+                 }}
+              />
+          )}
+       </div>
     </div>
   );
 }
