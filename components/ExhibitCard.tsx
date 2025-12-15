@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Heart, Eye } from 'lucide-react';
 import { Exhibit } from '../types';
@@ -136,7 +137,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
          </div>
 
          <div className="mt-auto pt-3 flex justify-between items-center border-t border-dashed border-opacity-20 border-gray-500">
-             {/* VISIBLE ON ALL DEVICES (Removed hidden md:flex) */}
+             {/* VISIBLE ON ALL DEVICES */}
              <div 
                onClick={handleAuthorClickInternal}
                className={`flex text-[10px] truncate max-w-[60%] opacity-60 items-center gap-1 cursor-pointer hover:underline hover:opacity-100 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
@@ -157,7 +158,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
                     onClick={handleLikeClick}
                     className={`flex items-center gap-1 px-2 py-1 rounded transition-all active:scale-95 group/like relative overflow-hidden ${
                         isLiked 
-                        ? (theme === 'dark' ? 'text-red-400 bg-red-400/10' : 'text-red-500 bg-red-50') 
+                        ? (theme === 'dark' ? 'text-green-400 bg-green-400/10' : 'text-green-500 bg-green-50') 
                         : (theme === 'dark' ? 'text-gray-500 hover:text-white hover:bg-white/10' : 'text-gray-400 hover:text-black hover:bg-black/5')
                     }`}
                  >
@@ -167,13 +168,13 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
                      />
                      <span 
                         key={item.likes}
-                        className={`text-[9px] md:text-[10px] font-bold transition-all duration-300 ${isLikeAnimating ? 'text-red-500 scale-110' : ''} animate-[spin_0.1s_ease-out_reverse]`}
+                        className={`text-[9px] md:text-[10px] font-bold transition-all duration-300 ${isLikeAnimating ? 'text-green-500 scale-110' : ''} animate-[spin_0.1s_ease-out_reverse]`}
                         style={{ animation: isLikeAnimating ? 'none' : undefined }}
                      >
                          {item.likes}
                      </span>
                      {isLikeAnimating && (
-                         <span className="absolute inset-0 rounded-full border-2 border-red-500 opacity-0 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_1]" />
+                         <span className="absolute inset-0 rounded-full border-2 border-green-500 opacity-0 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_1]" />
                      )}
                   </button>
              </div>

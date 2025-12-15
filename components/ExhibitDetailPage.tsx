@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Exhibit, Comment } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
+import { getUserAvatar } from '../services/storageService';
 
 interface ExhibitDetailPageProps {
   exhibit: Exhibit;
@@ -118,6 +119,9 @@ export default function ExhibitDetailPage({
       return match ? `https://www.youtube.com/embed/${match[1]}` : null;
   };
   const embedUrl = getEmbedUrl(exhibit.videoUrl || '');
+
+  // Filter specs that have content
+  const nonEmptySpecs = Object.entries(specs).filter(([key, val]) => val && val.trim().length > 0);
 
   return (
     <div className={`w-full min-h-full pb-20 animate-in fade-in duration-300 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -241,6 +245,12 @@ export default function ExhibitDetailPage({
                           {exhibit.category}
                       </div>
                       
+                      {exhibit.subcategory && (
+                          <div className={`inline-block px-2 py-0.5 text-[9px] font-pixel rounded border border-gray-500 opacity-80`}>
+                              {exhibit.subcategory}
+                          </div>
+                      )}
+                      
                       {/* Tier Badge */}
                       <div className={`inline-block px-2 py-0.5 text-[9px] font-bold font-pixel rounded border flex items-center gap-1 ${tier.bgColor} border-current ${tier.color}`}>
                           <TierIcon size={10} /> {tier.name}
@@ -257,7 +267,7 @@ export default function ExhibitDetailPage({
                      onClick={() => onLike(exhibit.id)}
                      className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all active:scale-95 ${
                         isLiked 
-                          ? (theme === 'dark' ? 'border-red-500 text-red-500 bg-red-500/10' : 'border-red-600 text-red-600 bg-red-600/10')
+                          ? (theme === 'dark' ? 'border-green-500 text-green-500 bg-green-500/10' : 'border-green-600 text-green-600 bg-green-600/10')
                           : 'border-gray-500/30 opacity-70 hover:opacity-100'
                      }`}
                   >
@@ -279,7 +289,7 @@ export default function ExhibitDetailPage({
             }`}>
                <div className="flex items-center gap-3 cursor-pointer" onClick={() => onAuthorClick(exhibit.owner)}>
                   <div className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden flex-shrink-0">
-                     <img src={`https://ui-avatars.com/api/?name=${exhibit.owner}&background=random`} alt="avatar" />
+                     <img src={getUserAvatar(exhibit.owner)} alt="avatar" />
                   </div>
                   <div className="overflow-hidden">
                      <div className="font-bold font-pixel text-xs truncate">@{exhibit.owner}</div>
@@ -309,16 +319,18 @@ export default function ExhibitDetailPage({
 
             {/* Specs Grid */}
             <div className="grid grid-cols-2 gap-3 mb-8">
-               {Object.entries(specs).map(([key, val]) => (
+               {nonEmptySpecs.map(([key, val]) => (
                  <div key={key} className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
                     <div className="text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">{key}</div>
                     <div className="font-bold font-mono text-xs truncate">{val}</div>
                  </div>
                ))}
-               <div className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
-                    <div className="text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">СОСТОЯНИЕ</div>
-                    <div className="font-bold font-mono text-xs truncate">{exhibit.condition || 'НЕ УКАЗАНО'}</div>
-               </div>
+               {exhibit.condition && (
+                   <div className={`p-2 border rounded ${theme === 'dark' ? 'border-dark-dim bg-black/20' : 'border-light-dim bg-gray-50'}`}>
+                        <div className="text-[9px] uppercase opacity-50 mb-1 font-mono tracking-wider truncate">СОСТОЯНИЕ</div>
+                        <div className="font-bold font-mono text-xs truncate">{exhibit.condition}</div>
+                   </div>
+               )}
             </div>
 
             {/* Comments Section */}

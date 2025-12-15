@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, Lock, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square, Send } from 'lucide-react';
+import { Mail, Lock, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square, Send, Globe } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -64,23 +64,23 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
               try {
                   // Determine username
                   const neoUsername = user.username || `tg_${user.id}`;
-                  // Create a consistent email for the system (Must end in valid TLD for Supabase)
+                  // Create a consistent system ID for the user (we won't show this to them)
                   const neoEmail = `${user.id}@telegram.neoarchive.com`;
-                  // Password generation (using hash as secret for demo consistency)
+                  // Secure hash secret for this user type
                   const neoPassword = `tg_secure_${user.id}_${user.hash?.substring(0,8) || 'key'}`;
 
                   let userProfile: UserProfile;
 
                   try {
-                      // Try to login first (if user exists)
+                      // Try to identify user in DB
                       userProfile = await db.loginUser(neoEmail, neoPassword);
                   } catch {
-                      // If login fails, register new user
+                      // If not found, register new identity automatically
                       const displayName = user.username ? `@${user.username}` : `${user.first_name}`;
                       userProfile = await db.registerUser(
                           neoUsername, 
                           neoPassword, 
-                          `Telegram Agent: ${displayName}`, 
+                          `Telegram Identity: ${displayName}`, 
                           neoEmail, 
                           user.username,
                           user.photo_url
@@ -90,7 +90,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                   onLogin(userProfile, true);
 
               } catch (err: any) {
-                  setError("AUTH FAILED: " + err.message);
+                  setError("CONNECTION FAILED: " + err.message);
                   setIsLoading(false);
               }
           };
@@ -101,7 +101,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
           script.src = "https://telegram.org/js/telegram-widget.js?22";
           script.async = true;
           script.setAttribute('data-telegram-login', 'TrusterStoryBot');
-          script.setAttribute('data-size', 'medium'); // Updated to medium as per user request
+          script.setAttribute('data-size', 'large'); // Restore Large for better visibility in separate view
+          script.setAttribute('data-radius', '10');
           script.setAttribute('data-onauth', 'onTelegramAuth(user)');
           script.setAttribute('data-request-access', 'write');
           
@@ -170,34 +171,48 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     if (step === 'ENTRY') {
         return (
             <div className="flex flex-col gap-4 w-full">
-                <button 
-                  onClick={() => { setStep('LOGIN'); resetForm(); }}
-                  className={`py-4 px-6 border-2 font-pixel text-lg uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${
-                      theme === 'dark' ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'
-                  }`}
-                >
-                    <span>ВХОД</span>
-                    <Terminal size={24} className="group-hover:animate-pulse" />
-                </button>
+                {/* Standard Auth Block */}
+                <div className="grid grid-cols-2 gap-4">
+                    <button 
+                      onClick={() => { setStep('LOGIN'); resetForm(); }}
+                      className={`py-4 px-2 border-2 font-pixel text-sm md:text-base uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-2 group ${
+                          theme === 'dark' ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'
+                      }`}
+                    >
+                        <Terminal size={24} className="group-hover:animate-pulse" />
+                        <span>ВХОД</span>
+                    </button>
+
+                    <button 
+                      onClick={() => { setStep('REGISTER'); resetForm(); }}
+                      className={`py-4 px-2 border-2 font-pixel text-sm md:text-base uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-2 group ${
+                          theme === 'dark' ? 'border-dark-dim text-dark-dim hover:border-white hover:text-white' : 'border-light-dim text-light-dim hover:border-black hover:text-black'
+                      }`}
+                    >
+                        <UserPlus size={24} />
+                        <span>РЕГИСТРАЦИЯ</span>
+                    </button>
+                </div>
                 
+                {/* Separator */}
+                <div className="flex items-center gap-2 opacity-50 my-2">
+                    <div className="h-px bg-current flex-1"></div>
+                    <span className="text-[10px] font-mono">АЛЬТЕРНАТИВНЫЙ ДОСТУП</span>
+                    <div className="h-px bg-current flex-1"></div>
+                </div>
+
+                {/* Telegram Auth Block - Separated */}
                 <button 
                   onClick={() => { setStep('TELEGRAM'); resetForm(); }}
-                  className={`py-4 px-6 border-2 font-pixel text-lg uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${
+                  className={`py-4 px-6 border-2 font-pixel text-sm uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${
                       theme === 'dark' ? 'border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black' : 'border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white'
                   }`}
                 >
-                    <span>TELEGRAM</span>
+                    <div className="flex flex-col items-start">
+                        <span>TELEGRAM LOGIN</span>
+                        <span className="text-[8px] font-mono opacity-70 normal-case tracking-normal">Быстрый вход через мессенджер</span>
+                    </div>
                     <Send size={24} />
-                </button>
-
-                <button 
-                  onClick={() => { setStep('REGISTER'); resetForm(); }}
-                  className={`py-4 px-6 border-2 font-pixel text-lg uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${
-                      theme === 'dark' ? 'border-dark-dim text-dark-dim hover:border-white hover:text-white' : 'border-light-dim text-light-dim hover:border-black hover:text-black'
-                  }`}
-                >
-                    <span>РЕГИСТРАЦИЯ</span>
-                    <UserPlus size={24} />
                 </button>
             </div>
         )
@@ -206,13 +221,17 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     if (step === 'TELEGRAM') {
         return (
             <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
-                 <div className="text-center font-mono text-xs opacity-70 mb-2">
-                     АВТОРИЗАЦИЯ ЧЕРЕЗ TELEGRAM
+                 <div className="text-center font-mono text-xs opacity-70 mb-2 border-b border-dashed border-gray-500 pb-2">
+                     МОДУЛЬ АВТОРИЗАЦИИ TELEGRAM
                  </div>
                  
-                 {/* Widget Container */}
-                 <div className="flex justify-center my-4 p-4 bg-white/5 rounded min-h-[80px]" ref={telegramWrapperRef}>
-                     <RetroLoader text="WIDGET_LOADING" />
+                 <div className="text-[10px] font-mono opacity-60 text-center mb-4">
+                     Для входа нажмите кнопку ниже и подтвердите действие в Telegram. Пароль не требуется.
+                 </div>
+
+                 {/* Widget Container - Centered */}
+                 <div className="flex justify-center my-4 min-h-[80px]" ref={telegramWrapperRef}>
+                     <RetroLoader text="INIT_WIDGET" />
                  </div>
 
                  {error && (
@@ -221,11 +240,12 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                      </div>
                  )}
                  
-                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
+                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="mt-4 text-xs font-mono opacity-50 hover:underline text-center">ОТМЕНА</button>
             </div>
         );
     }
 
+    // Login and Register views remain same...
     if (step === 'LOGIN') {
         return (
             <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
@@ -402,7 +422,6 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   );
 };
 
-// Simple internal Loader for widget
 const RetroLoader = ({text}: {text: string}) => (
     <div className="flex flex-col items-center">
         <div className="w-4 h-4 border-2 border-t-transparent border-current rounded-full animate-spin mb-2"></div>
