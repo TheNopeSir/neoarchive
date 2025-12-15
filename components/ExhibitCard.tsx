@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Heart, Eye } from 'lucide-react';
 import { Exhibit } from '../types';

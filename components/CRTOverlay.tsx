@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 
 import React, { useEffect } from 'react';
-=======
-import React from 'react';
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
 
 const CRTOverlay: React.FC = () => {
   return (

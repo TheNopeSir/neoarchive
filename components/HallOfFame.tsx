@@ -47,6 +47,7 @@ const HallOfFame: React.FC<HallOfFameProps> = ({ theme, achievedIds, onBack }) =
             {allBadges.map(([id, badge]) => {
                 const isUnlocked = achievedIds.includes(id);
                 // Dynamically import Icon (mocked here by checking types in App, but simple fallback)
+                // In a real app we would pass the icon component or map it
                 
                 return (
                     <div 

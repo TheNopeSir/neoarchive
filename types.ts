@@ -16,11 +16,7 @@ export interface Exhibit {
   imageUrls: string[];
   videoUrl?: string; 
   category: string; 
-<<<<<<< HEAD
   subcategory?: string; // Added
-=======
-  subcategory?: string; 
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
   owner: string;
   timestamp: string;
   likes: number;
@@ -31,11 +27,7 @@ export interface Exhibit {
   quality: string;
   specs: Record<string, string>;
   comments: Comment[];
-<<<<<<< HEAD
   isDraft?: boolean; // Added
-=======
-  isDraft?: boolean; 
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
 }
 
 export interface Collection {

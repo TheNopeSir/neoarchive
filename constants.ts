@@ -1,3 +1,4 @@
+
 import { Exhibit, UserProfile, Collection, Notification, Message } from './types';
 import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle } from 'lucide-react';
 import React from 'react';
@@ -37,7 +38,6 @@ export const BADGES = {
     'COLLECTOR': { label: 'ARCHIVIST', desc: 'Создана первая коллекция', color: 'bg-orange-500', icon: 'Layers' }
 };
 
-<<<<<<< HEAD
 export const STATUS_OPTIONS = {
     'ONLINE': { label: 'В сети', color: 'text-green-500', icon: Circle },
     'AWAY': { label: 'Отошел', color: 'text-yellow-500', icon: Moon },
@@ -130,36 +130,6 @@ export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
   [DefaultCategory.MISC]: [
       'Назначение', 'Производитель', 'Страна происхождения', 'Год производства', 
       'Материал', 'Размеры', 'Вес', 'Цвет', 'Редкость'
-=======
-// 4. Specs Templates - More generic starting points, user can add/remove
-export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
-  [DefaultCategory.PHONES]: [
-      'Бренд', 'Модель', 'Год'
-  ],
-  [DefaultCategory.GAMES]: [
-      'Платформа', 'Название', 'Регион', 'Год'
-  ],
-  [DefaultCategory.MAGAZINES]: [
-      'Название', 'Номер', 'Год'
-  ],
-  [DefaultCategory.MUSIC]: [
-      'Исполнитель/Бренд', 'Название', 'Формат', 'Год'
-  ],
-  [DefaultCategory.VIDEO]: [
-      'Название', 'Формат', 'Год'
-  ],
-  [DefaultCategory.TOYS]: [
-      'Название', 'Производитель', 'Год', 'Материал'
-  ],
-  [DefaultCategory.COMPUTERS]: [
-      'Производитель', 'Модель', 'Процессор', 'ОЗУ', 'Год'
-  ],
-  [DefaultCategory.CAMERAS]: [
-      'Бренд', 'Модель', 'Тип', 'Год'
-  ],
-  [DefaultCategory.MISC]: [
-      'Предмет', 'Производитель', 'Год'
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
   ]
 };
 
@@ -255,22 +225,3 @@ export const TIER_CONFIG: Record<TierType, {
         icon: Zap
     }
 };
-<<<<<<< HEAD
-=======
-
-export const MOCK_USER: UserProfile = {
-  username: "Neo_User_01",
-  email: "neo@matrix.com",
-  tagline: "Подключен к сети.",
-  status: 'ONLINE',
-  avatarUrl: "https://picsum.photos/100/100?grayscale",
-  joinedDate: "31.12.1999",
-  following: ['Morpheus', 'Trinity'],
-  achievements: ['HELLO_WORLD']
-};
-
-export const MOCK_COLLECTIONS: Collection[] = [];
-export const MOCK_NOTIFICATIONS: Notification[] = [];
-export const MOCK_MESSAGES: Message[] = [];
-export const INITIAL_EXHIBITS: Exhibit[] = [];
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
