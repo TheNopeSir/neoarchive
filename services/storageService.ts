@@ -1,3 +1,4 @@
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { supabase } from './supabaseClient';
 

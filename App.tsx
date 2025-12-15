@@ -5,7 +5,9 @@ import {
   Activity, Bell, FilePlus, FolderPlus, Grid, Share2, Award, Crown, 
   ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, Send, 
   Video, Image as ImageIcon, WifiOff, Download, Box, Package, User,
-  X, ArrowLeft, Upload, Home, PlusCircle, Heart, MessageSquare, MessageCircle, FolderOpen
+  X, ArrowLeft, Upload, Home, PlusCircle, Heart, MessageSquare, MessageCircle, FolderOpen,
+  // FIX: Import 'Settings' icon from lucide-react
+  Settings
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -1575,7 +1577,7 @@ export default function App() {
                  guestbook={guestbook}
                  theme={theme}
                  onBack={() => { setView('FEED'); updateHash('/feed'); }}
-                 onLogout={handleLogout}
+                 onLogout={onLogout}
                  onFollow={handleFollow}
                  onChat={handleOpenChat}
                  onExhibitClick={handleExhibitClick}
