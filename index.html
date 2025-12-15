@@ -4,17 +4,46 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#000000" />
+    
+    <!-- SEO Primary Tags -->
+    <title>NeoArchive: Ваша цифровая полка и виртуальные коллекции</title>
+    <meta name="title" content="NeoArchive: Ваша цифровая полка и виртуальные коллекции" />
+    <meta name="description" content="NeoArchive — это ваша персональная цифровая полка. Удобный сервис для создания виртуальных коллекций: гаджеты, игры, книги, винил и любые предметы вашего хобби. Организуйте, делитесь и находите единомышленников." />
+    <meta name="keywords" content="цифровая полка, виртуальная коллекция, каталог коллекций, менеджер коллекций, хобби, neoarchive, ретро техника, игры, винил, книги, lego, моделизм, коллекционирование" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="Russian" />
+    <meta name="author" content="NeoArchive System" />
+
+    <!-- Open Graph / Facebook / Telegram -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://neoarchive.ru/" />
+    <meta property="og:title" content="NeoArchive: Ваша цифровая полка" />
+    <meta property="og:description" content="Создайте красивый каталог своих вещей. Делитесь коллекциями и находите редкие экземпляры в сообществе." />
+    <meta property="og:image" content="https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=1200&font-size=0.5&bold=true" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://neoarchive.ru/" />
+    <meta property="twitter:title" content="NeoArchive: Виртуальные коллекции" />
+    <meta property="twitter:description" content="Удобный менеджер для ваших физических и цифровых коллекций." />
+    <meta property="twitter:image" content="https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=1200&font-size=0.5&bold=true" />
+
+    <!-- Mobile Web App -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="NeoArchive — публичная коллекция цифровых артефактов, ретро-гаджетов и истории технологий. Сохраняйте, делитесь и обсуждайте." />
-    <meta name="keywords" content="коллекции, ретро, гаджеты, телефоны, y2k, архив, история, технологии, игры" />
-    <title>NeoArchive</title>
+    <meta name="apple-mobile-web-app-title" content="NeoArchive" />
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=32&bold=true" />
+    <link rel="icon" type="image/png" sizes="16x16" href="https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=16&bold=true" />
+    <link rel="apple-touch-icon" href="https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=192&bold=true" />
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- Changed fonts to Orbitron (Headers) and Exo 2 (Body) for legibility and style -->
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,100..900;1,100..900&family=Orbitron:wght@400..900&display=swap" rel="stylesheet">
-    <link rel="apple-touch-icon" href="https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=192" />
+    
     <script>
       tailwind.config = {
         darkMode: 'class',
@@ -87,10 +116,12 @@
     "express": "https://aistudiocdn.com/express@^5.2.1",
     "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
     "os": "https://aistudiocdn.com/os@^0.1.2",
-    "mysql2/": "https://esm.sh/mysql2@^3.15.3/"
+    "mysql2/": "https://esm.sh/mysql2@^3.15.3/",
+    "react-helmet-async": "https://esm.sh/react-helmet-async@^2.0.4"
   }
 }
 </script>
+<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>

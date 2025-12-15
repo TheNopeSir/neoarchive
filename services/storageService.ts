@@ -9,13 +9,12 @@ let cache = {
     messages: [] as Message[],
     users: [] as UserProfile[],
     guestbook: [] as GuestbookEntry[],
-    deletedIds: [] as string[], // Track deleted IDs to prevent "zombies" from sync
+    deletedIds: [] as string[],
     isLoaded: false
 };
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-// Bump version to force structure update and clear old cache
 const CACHE_VERSION = '2.4.0-GlobalForceUpdate'; 
 let isOfflineMode = false;
 
@@ -67,16 +66,12 @@ const loadFromLocalCache = (): boolean => {
     if (json) {
         try {
             const parsed = JSON.parse(json);
-            
-            // Version Check - Critical for forcing updates
             if (!parsed.version || parsed.version !== CACHE_VERSION) {
-                console.log(`♻️ [Cache] Version mismatch (Old: ${parsed.version}, New: ${CACHE_VERSION}). Clearing cache to apply updates.`);
+                console.log(`♻️ [Cache] Version mismatch. Clearing.`);
                 localStorage.removeItem(LOCAL_STORAGE_KEY);
                 return false;
             }
-
             const data = parsed.data || parsed; 
-            
             cache = {
                 exhibits: data.exhibits || [],
                 collections: data.collections || [],
@@ -89,12 +84,59 @@ const loadFromLocalCache = (): boolean => {
             };
             return true;
         } catch (e) { 
-            console.warn("Cache parse error, clearing", e);
             localStorage.removeItem(LOCAL_STORAGE_KEY);
             return false; 
         }
     }
     return false;
+};
+
+// --- STORAGE MANAGEMENT (NEW) ---
+
+export const getStorageEstimate = async () => {
+  if (navigator.storage && navigator.storage.estimate) {
+    try {
+      const { usage, quota } = await navigator.storage.estimate();
+      if (usage !== undefined && quota !== undefined) {
+        return {
+          usage,
+          quota,
+          percentage: (usage / quota) * 100
+        };
+      }
+    } catch (e) {
+      console.warn("Storage estimate failed", e);
+    }
+  }
+  return null;
+};
+
+export const clearLocalCache = () => {
+    try {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        // Optional: clear image cache if utilizing specific cache names
+        if ('caches' in window) {
+            caches.keys().then(names => {
+                for (let name of names) caches.delete(name);
+            });
+        }
+        window.location.reload();
+    } catch(e) {
+        console.error("Failed to clear cache", e);
+    }
+};
+
+export const autoCleanStorage = async () => {
+    const estimate = await getStorageEstimate();
+    if (estimate && estimate.percentage > 95) {
+        console.warn("⚠️ Storage critical (>95%). Auto-cleaning cache...");
+        // Keep user session if possible, but clear data
+        const sessionUser = localStorage.getItem(SESSION_USER_KEY);
+        localStorage.clear();
+        if (sessionUser) localStorage.setItem(SESSION_USER_KEY, sessionUser);
+        
+        window.location.reload(); 
+    }
 };
 
 // --- IMAGE COMPRESSION UTILITY ---
@@ -128,8 +170,6 @@ export const compressImage = async (file: File): Promise<string> => {
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx?.drawImage(img, 0, 0, width, height);
-                
-                // Compress to JPEG with 0.7 quality
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
                 resolve(dataUrl);
             };
@@ -156,9 +196,7 @@ const fetchTable = async <T>(tableName: string): Promise<T[]> => {
         .from(tableName)
         .select('data');
 
-    if (error) {
-        return [];
-    }
+    if (error) return [];
 
     const items = (data || [])
         .map((row: any) => row.data)
@@ -174,24 +212,10 @@ const mergeUsers = (local: UserProfile[], cloud: UserProfile[]): UserProfile[] =
     return Array.from(map.values());
 };
 
-// Merge respecting deletedIds
 const mergeData = <T extends { id: string, timestamp?: string }>(local: T[], cloud: T[], deletedIds: string[]): T[] => {
     const map = new Map<string, T>();
-    
-    // Add local items if not deleted
-    local.forEach(item => {
-        if (!deletedIds.includes(item.id)) {
-            map.set(item.id, item);
-        }
-    });
-    
-    // Add cloud items if not deleted (Cloud overrides local on conflict, but local deletion wins)
-    cloud.forEach(item => {
-        if (!deletedIds.includes(item.id)) {
-            map.set(item.id, item);
-        }
-    });
-    
+    local.forEach(item => { if (!deletedIds.includes(item.id)) map.set(item.id, item); });
+    cloud.forEach(item => { if (!deletedIds.includes(item.id)) map.set(item.id, item); });
     return Array.from(map.values()).sort((a, b) => {
         const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
@@ -288,12 +312,9 @@ export const backgroundSync = async (): Promise<boolean> => {
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
 // --- AUTH & CRUD ---
-
 export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string): Promise<UserProfile> => {
     const usernameExists = cache.users.some(u => u.username.toLowerCase() === username.toLowerCase());
-    if (usernameExists) {
-        throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
-    }
+    if (usernameExists) throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
 
     const { data, error } = await supabase.auth.signUp({
         email,
@@ -305,7 +326,6 @@ export const registerUser = async (username: string, password: string, tagline: 
     if (!data.user) throw new Error("Подтвердите email для завершения регистрации");
 
     const isSuperAdmin = email === 'admin@neoarchive.net';
-
     const userProfile: UserProfile = {
         username: isSuperAdmin ? 'TheArchitect' : username,
         email,
@@ -394,8 +414,6 @@ export const updateUserProfile = async (user: UserProfile) => {
     await supabase.from('users').upsert({ username: user.username, data: user });
 };
 
-// --- DATA METHODS ---
-
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 
 export const saveExhibit = async (exhibit: Exhibit) => {
@@ -422,7 +440,7 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
 export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
   cache.notifications = cache.notifications.filter(n => n.targetId !== id);
-  cache.deletedIds.push(id); // Mark as deleted locally
+  cache.deletedIds.push(id); 
   saveToLocalCache();
   await supabase.from('exhibits').delete().eq('id', id);
 };
@@ -447,7 +465,7 @@ export const updateCollection = async (updatedCollection: Collection) => {
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
-    cache.deletedIds.push(id); // Mark as deleted locally
+    cache.deletedIds.push(id);
     saveToLocalCache();
     await supabase.from('collections').delete().eq('id', id);
 };
@@ -463,7 +481,6 @@ export const saveNotification = async (notif: Notification) => {
 export const markNotificationsRead = async (recipient: string) => {
     let hasUpdates = false;
     const toUpdate: Notification[] = [];
-    
     cache.notifications.forEach(n => {
         if (n.recipient === recipient && !n.isRead) {
              n.isRead = true;
@@ -471,7 +488,6 @@ export const markNotificationsRead = async (recipient: string) => {
              hasUpdates = true;
         }
     });
-    
     if (hasUpdates) {
         saveToLocalCache();
         if (toUpdate.length > 0) {

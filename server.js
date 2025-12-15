@@ -19,7 +19,7 @@ const SUPABASE_URL = "https://kovcgjtqbvmuzhsrcktd.supabase.co";
 // 2. SERVICE_ROLE ключ
 const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTM2MTYyMCwiZXhwIjoyMDgwOTM3NjIwfQ.9dGlbb7TV9SRDnYQULdDMDpZrI4r5XO1FgTCoKqrpf4";
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 // ==========================================
 
@@ -28,15 +28,10 @@ const app = express();
 // Middleware
 // Enable CORS for ALL origins to fix mobile/external connection issues
 app.use(cors({
-    origin: '*', // Разрешить ВСЕ источники (для теста)
+    origin: true, // Reflect request origin
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
-
-app.use((req, res, next) => {
-    console.log(`📨 ${req.method} ${req.url} from ${req.ip}`);
-    next();
-});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -199,25 +194,14 @@ function getLocalIp() {
     }
     return '0.0.0.0';
 }
-// Health Check для TimeWeb App Platform
-app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'ok', 
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime()
-    });
-});
 
-app.get('/ping', (req, res) => {
-    res.status(200).send('pong');
-});
 // Listen on 0.0.0.0 is crucial for external access
 app.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIp();
     console.log(`\n🚀 NeoArchive Server running!`);
-    console.log(`   > Port: ${PORT}`);
     console.log(`   > URL: ${SUPABASE_URL}`);
     console.log(`   > Status: ${isOfflineMode ? '🟡 OFFLINE (KEYS MISSING)' : '🟢 ONLINE'}`);
     console.log(`   > Local:   http://localhost:${PORT}`);
-    console.log(`   > Network: http://${ip}:${PORT}`);
+    console.log(`   > Network: http://${ip}:${PORT}`); // Use this URL on your phone
+    console.log(`\n   Для доступа с телефона, убедитесь, что устройства в одной сети`);
 });

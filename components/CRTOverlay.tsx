@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 
 const CRTOverlay: React.FC = () => {
   return (
