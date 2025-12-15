@@ -71,7 +71,6 @@ const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null 
     </div>
 );
 
-// ... MobileNavigation, LoginTransition, InstallBanner components omitted for brevity (same as previous) ...
 const MobileNavigation: React.FC<{
     theme: 'dark' | 'light';
     view: ViewState;
@@ -199,7 +198,6 @@ const InstallBanner: React.FC<{ theme: 'dark' | 'light'; onInstall: () => void; 
 );
 
 export default function App() {
-  // ... State declarations ...
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewState>('AUTH'); 
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -278,7 +276,6 @@ export default function App() {
       coverImage: '' 
   });
 
-  // ... (Sync, Init, Handlers logic same as previous) ...
   const refreshData = () => {
       console.log("🔄 [App] Refreshing data from cache...");
       setExhibits([...db.getExhibits()]);
@@ -411,7 +408,6 @@ export default function App() {
       setSelectedCategory('ВСЕ');
   };
 
-  // --- SWIPE & NAVIGATION LOGIC OMITTED FOR BREVITY (Same as before) ---
   const handleGlobalSwipeLeft = () => {
       if (view === 'AUTH' || !user) return;
       const order: ViewState[] = ['FEED', 'MY_COLLECTION', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
@@ -446,7 +442,6 @@ export default function App() {
       onSwipeRight: handleGlobalSwipeRight
   });
 
-  // --- FUNCTIONS (Like, Comment, etc) OMITTED FOR BREVITY ---
   const handleLogin = (loggedInUser: UserProfile, remember: boolean) => {
       setIsLoginTransition(true);
       if (remember) {
@@ -471,7 +466,6 @@ export default function App() {
       }
   };
 
-  // ... (Other handlers like handleExhibitClick, handleLike, etc. are identical to previous version, ensuring they exist) ...
   const handleExhibitClick = (item: Exhibit) => {
       if (!item) return;
       if (!viewedExhibitsSession.has(item.id)) {
@@ -813,7 +807,6 @@ export default function App() {
       updateHash('/activity');
   };
 
-  // Group notifications logic
   const groupNotifications = (notifs: Notification[]) => {
       const grouped: { [key: string]: Notification & { count: number, ids: string[] } } = {};
       notifs.forEach(n => {
@@ -895,9 +888,7 @@ export default function App() {
     if (view === 'MY_COLLECTION' && user) return <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={handleCollectionClick} onLike={toggleLike} />;
     if (view === 'USER_PROFILE' && viewedProfile) return <UserProfileView user={user!} viewedProfileUsername={viewedProfile} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={handleBack} onLogout={handleLogout} onFollow={handleFollow} onChat={handleOpenChat} onExhibitClick={handleExhibitClick} onLike={toggleLike} onFavorite={toggleFavorite} onAuthorClick={handleAuthorClick} onCollectionClick={handleCollectionClick} onShareCollection={handleShareCollection} onViewHallOfFame={() => { setView('HALL_OF_FAME'); updateHash('/hall-of-fame'); }} onGuestbookPost={handleGuestbookPost} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} onSaveProfile={handleSaveProfile} onProfileImageUpload={handleProfileImageUpload} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab} />;
     
-    // ... FEED and SEARCH logic ...
     if (view === 'FEED' || view === 'SEARCH') {
-        // Filter logic same as before
         const filteredExhibits = exhibits.filter(e => {
             if (e.isDraft) return false;
             if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
@@ -909,7 +900,6 @@ export default function App() {
              return true;
         });
 
-        // SORTING: Weighted Score
         const sortedFeed = filteredExhibits.sort((a,b) => {
               let scoreA = calculateArtifactScore(a);
               let scoreB = calculateArtifactScore(b);
@@ -1086,18 +1076,42 @@ export default function App() {
         );
     }
 
-    // ... (Remaining views: CREATE_COLLECTION, ACTIVITY, DIRECT_CHAT, COLLECTION_DETAIL, SETTINGS are identical)
     if (view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') {
         const isEdit = view === 'EDIT_COLLECTION';
         const activeCol = isEdit ? collectionToEdit : newCollection;
-        const setter = isEdit ? setCollectionToEdit : setNewCollection;
+        
+        // Fixed TS7006: Use typed function instead of complex setter union
+        const handleUpdate = (field: 'title' | 'description', value: string) => {
+             if (isEdit) {
+                 setCollectionToEdit(prev => prev ? ({ ...prev, [field]: value }) : null);
+             } else {
+                 setNewCollection(prev => ({ ...prev, [field]: value }));
+             }
+        };
+
         return (
              <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in pb-32">
                  <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
                  <h2 className="text-xl font-pixel font-bold">{isEdit ? 'РЕДАКТИРОВАНИЕ КОЛЛЕКЦИИ' : 'НОВАЯ КОЛЛЕКЦИЯ'}</h2>
                  <div className="space-y-4">
-                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">НАЗВАНИЕ</label><input value={activeCol?.title || ''} onChange={e => setter(prev => ({...prev!, title: e.target.value}))} className="w-full bg-transparent border-b p-2 font-mono" placeholder="Мои лучшие находки" /></div>
-                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОПИСАНИЕ</label><textarea value={activeCol?.description || ''} onChange={e => setter(prev => ({...prev!, description: e.target.value}))} className="w-full bg-transparent border p-2 font-mono text-sm h-24 rounded" placeholder="О чем эта подборка?" /></div>
+                     <div>
+                        <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">НАЗВАНИЕ</label>
+                        <input 
+                            value={activeCol?.title || ''} 
+                            onChange={e => handleUpdate('title', e.target.value)} 
+                            className="w-full bg-transparent border-b p-2 font-mono" 
+                            placeholder="Мои лучшие находки" 
+                        />
+                     </div>
+                     <div>
+                        <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОПИСАНИЕ</label>
+                        <textarea 
+                            value={activeCol?.description || ''} 
+                            onChange={e => handleUpdate('description', e.target.value)} 
+                            className="w-full bg-transparent border p-2 font-mono text-sm h-24 rounded" 
+                            placeholder="О чем эта подборка?" 
+                        />
+                     </div>
                      <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОБЛОЖКА</label><div className="relative aspect-video bg-gray-800 rounded overflow-hidden flex items-center justify-center group">{activeCol?.coverImage ? (<img src={activeCol.coverImage} className="w-full h-full object-cover" />) : (<span className="opacity-50 text-xs">НЕТ ИЗОБРАЖЕНИЯ</span>)}<label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"><Upload size={24} className="text-white" /><input type="file" accept="image/*" className="hidden" onChange={isEdit ? handleCollectionCoverUpload : handleNewCollectionCoverUpload} /></label></div></div>
                      <button onClick={isEdit ? handleSaveCollection : handleCreateCollection} disabled={isLoading} className="w-full py-3 bg-green-500 text-black font-bold font-pixel rounded">{isLoading ? 'СОХРАНЕНИЕ...' : (isEdit ? 'ОБНОВИТЬ' : 'СОЗДАТЬ')}</button>
                      {isEdit && (<button onClick={handleDeleteCollection} className="w-full py-3 border border-red-500 text-red-500 font-bold font-pixel rounded">УДАЛИТЬ КОЛЛЕКЦИЮ</button>)}
