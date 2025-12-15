@@ -223,7 +223,6 @@ export default function App() {
           }
       };
 
-      // FIX: Removed dependency on exhibits.length to allow empty states to route correctly
       if (!isInitializing) {
           handleHashChange();
       }
@@ -996,7 +995,6 @@ export default function App() {
           );
 
       case 'ACTIVITY':
-          // FIX: Use ActivityView to avoid hook violation error (#310) in previous conditional render
           return (
               <ActivityView 
                   theme={theme}
@@ -1025,6 +1023,106 @@ export default function App() {
                  </div>
               </div>
           );
+      
+      case 'USER_PROFILE':
+         const profileUsername = viewedProfile || user?.username;
+         if (!profileUsername) return <div className="p-8 text-center font-pixel">USER_NOT_FOUND_ERROR_404</div>;
+         
+         return (
+             <UserProfileView
+                 user={user!}
+                 viewedProfileUsername={profileUsername}
+                 exhibits={exhibits}
+                 collections={collections}
+                 guestbook={guestbook}
+                 theme={theme}
+                 onBack={() => { setView('FEED'); updateHash('/feed'); }}
+                 onLogout={handleLogout}
+                 onFollow={handleFollow}
+                 onChat={handleOpenChat}
+                 onExhibitClick={handleExhibitClick}
+                 onLike={toggleLike}
+                 onFavorite={toggleFavorite}
+                 onAuthorClick={handleAuthorClick}
+                 onCollectionClick={handleCollectionClick}
+                 onShareCollection={handleShareCollection}
+                 onViewHallOfFame={() => { setView('HALL_OF_FAME'); updateHash('/hall-of-fame'); }}
+                 onGuestbookPost={handleGuestbookPost}
+                 refreshData={refreshData}
+                 isEditingProfile={isEditingProfile}
+                 setIsEditingProfile={setIsEditingProfile}
+                 editTagline={editTagline}
+                 setEditTagline={setEditTagline}
+                 editStatus={editStatus}
+                 setEditStatus={setEditStatus}
+                 editTelegram={editTelegram}
+                 setEditTelegram={setEditTelegram}
+                 onSaveProfile={handleSaveProfile}
+                 onProfileImageUpload={handleProfileImageUpload}
+                 guestbookInput={guestbookInput}
+                 setGuestbookInput={setGuestbookInput}
+                 guestbookInputRef={guestbookInputRef}
+                 profileTab={profileTab}
+                 setProfileTab={setProfileTab}
+             />
+         );
+
+      case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
+      case 'MY_COLLECTION':
+          if (!user) return <div onClick={() => setView('FEED')}>Please Login</div>;
+          return <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => { setView('FEED'); updateHash('/feed'); }} onExhibitClick={handleExhibitClick} onCollectionClick={handleCollectionClick} onLike={toggleLike} />;
+      case 'DIRECT_CHAT':
+          if (!chatPartner || !user) return <div onClick={() => setView('FEED')}>Error: No Chat Partner</div>;
+          const conversation = messages.filter(m => (m.sender === user.username && m.receiver === chatPartner) || (m.sender === chatPartner && m.receiver === user.username)).sort((a,b) => a.id.localeCompare(b.id));
+          return (
+              <div className="max-w-2xl mx-auto animate-in fade-in h-[80vh] flex flex-col">
+                  <button onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
+                  <div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
+                      <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden"><img src={getUserAvatar(chatPartner)} alt={chatPartner} /></div>
+                      <div><h2 className="font-pixel text-lg">@{chatPartner}</h2><p className="font-mono text-xs opacity-50">Private Link Encrypted</p></div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {conversation.length === 0 && <div className="text-center opacity-40 font-mono text-xs py-10">Начало зашифрованного соединения...</div>}
+                      {conversation.map(msg => { const isMe = msg.sender === user.username; return (<div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[70%] p-3 rounded-lg font-mono text-sm ${isMe ? (theme === 'dark' ? 'bg-dark-primary text-black rounded-tr-none' : 'bg-light-accent text-white rounded-tr-none') : (theme === 'dark' ? 'bg-dark-surface text-white rounded-tl-none' : 'bg-white text-black border rounded-tl-none')}`}>{msg.text}<div className={`text-[9px] mt-1 opacity-60 text-right ${isMe ? 'text-black' : 'text-current'}`}>{msg.timestamp}{isMe && <span className="ml-1 opacity-70">{msg.isRead ? '✓✓' : '✓'}</span>}</div></div></div>)})}
+                  </div>
+                  <div className="p-4 border-t border-dashed border-gray-500/30 flex gap-2">
+                      <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Сообщение..." className="flex-1 bg-transparent border rounded p-2 focus:outline-none font-mono text-sm" />
+                      <button onClick={handleSendMessage} className={`p-2 rounded ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}><Send size={20} /></button>
+                  </div>
+              </div>
+          );
+      case 'SEARCH':
+          return (
+              <div className="max-w-4xl mx-auto animate-in fade-in">
+                  <div className={`relative w-full flex items-center border-b-2 px-2 gap-2 mb-4 ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}>
+                       <Search size={20} className="opacity-50" />
+                       <input type="text" placeholder="ПОИСК ПО БАЗЕ ДАННЫХ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus className="bg-transparent w-full py-4 focus:outline-none font-pixel text-base md:text-lg tracking-wide" />
+                       {searchQuery && <button onClick={() => setSearchQuery('')}><X size={20}/></button>}
+                   </div>
+                   <div className="flex gap-4 mb-8">
+                       <button onClick={() => setSearchMode('ARTIFACTS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'ARTIFACTS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ АРТЕФАКТЫ ]</button>
+                       <button onClick={() => setSearchMode('COLLECTIONS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'COLLECTIONS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ КОЛЛЕКЦИИ ]</button>
+                   </div>
+                   {searchMode === 'COLLECTIONS' && (
+                       <div className="animate-in fade-in slide-in-from-bottom-2">
+                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{collections.filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={handleCollectionClick} onShare={handleShareCollection} />)}</div>
+                           {collections.length === 0 && <div className="text-center opacity-50 font-mono py-10">КОЛЛЕКЦИИ НЕ НАЙДЕНЫ</div>}
+                       </div>
+                   )}
+                   {searchMode === 'ARTIFACTS' && (
+                       <div className="animate-in fade-in slide-in-from-bottom-2">
+                           {!searchQuery && (
+                               <>
+                                   <h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2"><Grid size={14}/> КАТЕГОРИИ</h3>
+                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">{Object.values(DefaultCategory).map((cat: string) => (<button key={cat} onClick={() => { setSelectedCategory(cat); setView('FEED'); updateHash('/feed'); }} className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span></button>))}</div>
+                               </>
+                           )}
+                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{(searchQuery ? exhibits.filter(ex => !ex.isDraft && (ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))) : exhibits.filter(ex => !ex.isDraft).sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)).map((item: Exhibit) => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />))}</div>
+                       </div>
+                   )}
+              </div>
+          );
+      
       default:
       case 'FEED':
          return (
