@@ -41,7 +41,7 @@ interface UserProfileViewProps {
     onProfileImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
     guestbookInput: string;
     setGuestbookInput: (v: string) => void;
-    guestbookInputRef: React.RefObject<HTMLInputElement>;
+    guestbookInputRef: React.RefObject<HTMLInputElement | null>;
     profileTab: 'ARTIFACTS' | 'COLLECTIONS';
     setProfileTab: (v: 'ARTIFACTS' | 'COLLECTIONS') => void;
 }
