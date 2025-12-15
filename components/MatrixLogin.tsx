@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, ArrowRight, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square } from 'lucide-react';
+import { Mail, Lock, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 

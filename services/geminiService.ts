@@ -75,7 +75,7 @@ export const moderateContent = async (text: string): Promise<ModerationResult> =
   for (const word of FORBIDDEN_WORDS) {
       // Check both normalized and raw (lowercased) text
       if (cleanText.includes(word) || text.toLowerCase().includes(word)) {
-          return { allowed: false, reason: `ОБНАРУЖЕНО ЗАПРЕЩЕННОЕ СЛОВО/ТЕМАТИКА` };
+          return { allowed: false, reason: `ОБНАРУЖЕНО ЗАПРЕЩЕННОЕ СЛОВО: "${word.toUpperCase()}"` };
       }
   }
 
