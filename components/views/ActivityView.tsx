@@ -29,7 +29,6 @@ const ActivityView: React.FC<ActivityViewProps> = ({
 }) => {
     const myNotifications = notifications.filter(n => n.recipient === user?.username);
 
-    // Aggregation Logic (Safe to use hooks here as it's a top-level component)
     const aggregatedNotifs = useMemo(() => {
         const groups: Record<string, { base: Notification, actors: Set<string>, count: number, latestTime: string }> = {};
 
@@ -93,7 +92,6 @@ const ActivityView: React.FC<ActivityViewProps> = ({
                                             {notif.type === 'FOLLOW' && ' подписались на вас.'}
                                             {notif.type === 'GUESTBOOK' && ' написали в гостевой книге.'}
                                         </div>
-                                        {/* Only show text preview for single comments to avoid clutter */}
                                         {notif.type === 'COMMENT' && group.count === 1 && notif.targetPreview && (
                                             <div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">
                                                 "{notif.targetPreview}"

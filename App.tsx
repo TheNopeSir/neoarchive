@@ -1,13 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
-  MessageSquare, Search, Database, Trash2, Settings, Home, Activity, Zap, Sparkles, 
-  User, ArrowLeft, Shuffle, Trophy, CheckCircle2, Bell, 
-  MessageCircle, PlusCircle, Heart, FilePlus, FolderPlus, Grid, Flame, Layers, 
-  Share2, Award, Crown, ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, 
-  Send, Link, Smartphone, Laptop, Video, Image as ImageIcon, WifiOff, Download, Box,
-  Package, FileEdit, Reply, Plus
+  Terminal, PlusSquare, Sun, Moon, ChevronDown, LogOut, Search, Database, Trash2, 
+  Activity, Bell, FilePlus, FolderPlus, Grid, Share2, Award, Crown, 
+  ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, Send, 
+  Video, Image as ImageIcon, WifiOff, Download, Box, Package, User,
+  X, ArrowLeft, Upload
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -18,24 +16,21 @@ import ErrorBoundary from './components/ErrorBoundary';
 import MatrixLogin from './components/MatrixLogin';
 import HallOfFame from './components/HallOfFame';
 import MyCollection from './components/MyCollection';
+import ActivityView from './components/views/ActivityView';
+import FeedView from './components/views/FeedView';
+import UserProfileView from './components/views/UserProfileView';
 import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
-import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, BADGES, calculateArtifactScore, STATUS_OPTIONS, CATEGORY_SUBCATEGORIES, COMMON_SPEC_VALUES } from './constants';
+import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, COMMON_SPEC_VALUES, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
 import { compressImage, isOffline, getUserAvatar } from './services/storageService';
 import useSwipe from './hooks/useSwipe';
-
-// IMPORTS
 import HeroSection from './components/HeroSection';
 import CollectionCard from './components/CollectionCard';
 import MobileNavigation from './components/MobileNavigation';
 import LoginTransition from './components/LoginTransition';
 import InstallBanner from './components/InstallBanner';
-import FeedView from './components/views/FeedView';
-import UserProfileView from './components/views/UserProfileView';
-import ActivityView from './components/views/ActivityView';
 
-// Helper to generate specs based on category
 const generateSpecsForCategory = (cat: string) => {
     const template = CATEGORY_SPECS_TEMPLATES[cat] || [];
     const specs: Record<string, string> = {};
@@ -43,7 +38,6 @@ const generateSpecsForCategory = (cat: string) => {
     return specs;
 };
 
-// Helper to get default condition for category
 const getDefaultCondition = (cat: string) => {
     const conditions = CATEGORY_CONDITIONS[cat] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
     return conditions[0];
@@ -56,11 +50,9 @@ export default function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isLoginTransition, setIsLoginTransition] = useState(false);
   
-  // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
-  // Data State
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -68,7 +60,6 @@ export default function App() {
   const [guestbook, setGuestbook] = useState<GuestbookEntry[]>([]);
   const [systemStats, setSystemStats] = useState({ totalUsers: 0, onlineUsers: 0 });
 
-  // UI State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,14 +67,11 @@ export default function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [viewedProfile, setViewedProfile] = useState<string | null>(null);
   const [activityTab, setActivityTab] = useState<'UPDATES' | 'DIALOGS'>('UPDATES');
-  const [badgeIndex, setBadgeIndex] = useState(0);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false); 
   
-  // Pagination State
   const [visibleCount, setVisibleCount] = useState(12);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   
-  // Edit Profile State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editTagline, setEditTagline] = useState('');
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
@@ -92,27 +80,17 @@ export default function App() {
   const [guestbookInput, setGuestbookInput] = useState('');
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
-  // Feed State
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
-
-  // Search/Profile Tab State
   const [searchMode, setSearchMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
   const [profileTab, setProfileTab] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
 
-  // Chat State
   const [chatPartner, setChatPartner] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
 
-  // Collection Editing
   const [collectionToEdit, setCollectionToEdit] = useState<Collection | null>(null);
-
-  // Exhibit Editing
   const [editingExhibitId, setEditingExhibitId] = useState<string | null>(null);
-
-  // Session tracking
   const [viewedExhibitsSession, setViewedExhibitsSession] = useState<Set<string>>(new Set());
 
-  // Create Modal State
   const [newExhibit, setNewExhibit] = useState<Partial<Exhibit>>({
     category: DefaultCategory.PHONES,
     subcategory: '', 
@@ -121,7 +99,6 @@ export default function App() {
     imageUrls: []
   });
   
-  // Create Collection State
   const [newCollection, setNewCollection] = useState<{title: string, description: string, coverImage: string}>({ 
       title: '', 
       description: '', 
@@ -137,21 +114,15 @@ export default function App() {
       setSystemStats(db.getSystemStats());
   };
 
-  // Background Sync Polling
   useEffect(() => {
       if (view === 'AUTH' || isOffline()) return;
-
       const interval = setInterval(async () => {
           const hasUpdates = await db.backgroundSync();
-          if (hasUpdates) {
-              refreshData();
-          }
+          if (hasUpdates) refreshData();
       }, 15000); 
-
       return () => clearInterval(interval);
   }, [view]);
 
-  // Initialize & PWA Install Listener
   useEffect(() => {
     window.onerror = (msg, url, lineNo, columnNo, error) => {
       console.error('🔴 [Global Error]:', msg, error);
@@ -176,6 +147,7 @@ export default function App() {
             if (restoredUser) {
                  setUser(restoredUser);
                  refreshData();
+                 // If no hash or root, default to FEED. If hash present, handleHashChange will run.
                  if (!window.location.hash || window.location.hash === '#/') {
                      setView('FEED');
                      updateHash('/feed');
@@ -194,7 +166,6 @@ export default function App() {
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
-  // Handle Install Click
   const handleInstallClick = async () => {
       if (!deferredPrompt) return;
       deferredPrompt.prompt();
@@ -206,13 +177,11 @@ export default function App() {
       }
   };
 
-  // Handle Dismiss Click (X)
   const handleDismissInstall = () => {
       setShowInstallBanner(false);
       localStorage.setItem('pwa_dismissed', 'true');
   };
 
-  // --- HASH ROUTING ---
   useEffect(() => {
       const handleHashChange = () => {
           if (!user) {
@@ -254,6 +223,7 @@ export default function App() {
           }
       };
 
+      // FIX: Removed dependency on exhibits.length to allow empty states to route correctly
       if (!isInitializing) {
           handleHashChange();
       }
@@ -271,7 +241,6 @@ export default function App() {
       setSelectedCategory('ВСЕ');
   };
 
-  // --- SWIPE LOGIC ---
   const handleGlobalSwipeLeft = () => {
       if (view === 'AUTH' || !user) return;
       const order: ViewState[] = ['FEED', 'MY_COLLECTION', 'CREATE_HUB', 'ACTIVITY', 'USER_PROFILE'];
@@ -306,15 +275,12 @@ export default function App() {
       onSwipeRight: handleGlobalSwipeRight
   });
 
-  // Reset pagination
   useEffect(() => {
       setVisibleCount(12);
   }, [selectedCategory, feedMode, searchQuery, view]);
 
-  // Infinite Scroll
   useEffect(() => {
       if (view !== 'FEED' || feedMode !== 'ARTIFACTS') return;
-
       const observer = new IntersectionObserver((entries) => {
           if (entries[0].isIntersecting) {
               setTimeout(() => {
@@ -322,11 +288,7 @@ export default function App() {
               }, 800);
           }
       }, { threshold: 0.1 });
-
-      if (loadMoreRef.current) {
-          observer.observe(loadMoreRef.current);
-      }
-
+      if (loadMoreRef.current) observer.observe(loadMoreRef.current);
       return () => observer.disconnect();
   }, [view, feedMode, visibleCount]); 
 
@@ -400,7 +362,6 @@ export default function App() {
   const handleAuthorClick = (author: string) => {
       setViewedProfile(author);
       setProfileTab('ARTIFACTS'); 
-      setBadgeIndex(0); 
       setIsEditingProfile(false);
       setView('USER_PROFILE');
       updateHash(`/profile/${author}`);
@@ -427,9 +388,7 @@ export default function App() {
          alert('ОШИБКА: НЕОБХОДИМО ЗАГРУЗИТЬ МИНИМУМ ОДНО ИЗОБРАЖЕНИЕ');
          return;
      }
-     
      setIsLoading(true);
-
      if (!isDraft) {
          const contentToCheck = `${newExhibit.title} ${newExhibit.description}`;
          const modResult = await moderateContent(contentToCheck);
@@ -439,14 +398,15 @@ export default function App() {
              return;
          }
      }
-
+     const category = newExhibit.category || DefaultCategory.MISC;
+     const condition = newExhibit.condition || getDefaultCondition(category);
      const exhibit: Exhibit = {
          id: editingExhibitId || Date.now().toString(),
          title: newExhibit.title,
          description: newExhibit.description || '',
          imageUrls: newExhibit.imageUrls || [],
          videoUrl: newExhibit.videoUrl, 
-         category: newExhibit.category || DefaultCategory.MISC,
+         category: category,
          subcategory: newExhibit.subcategory, 
          owner: user?.username || 'Guest',
          timestamp: new Date().toLocaleString('ru-RU'),
@@ -456,18 +416,15 @@ export default function App() {
          specs: newExhibit.specs || {},
          comments: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.comments || [] : [],
          quality: newExhibit.quality || 'Не указано',
-         condition: newExhibit.condition || getDefaultCondition(newExhibit.category || DefaultCategory.MISC),
+         condition: condition,
          isDraft: isDraft
      };
-
      if (editingExhibitId) {
          await db.updateExhibit(exhibit);
      } else {
          await db.saveExhibit(exhibit); 
      }
-     
      setExhibits([...db.getExhibits()]);
-     
      setNewExhibit({ 
          category: DefaultCategory.PHONES, 
          specs: generateSpecsForCategory(DefaultCategory.PHONES),
@@ -477,7 +434,6 @@ export default function App() {
      });
      setEditingExhibitId(null);
      setIsLoading(false);
-     
      if (isDraft) {
          alert('ЧЕРНОВИК СОХРАНЕН');
          setView('MY_COLLECTION');
@@ -498,10 +454,7 @@ export default function App() {
         }
         try {
             const base64 = await compressImage(file);
-            setNewExhibit(prev => ({
-                ...prev,
-                imageUrls: [...(prev.imageUrls || []), base64]
-            }));
+            setNewExhibit(prev => ({ ...prev, imageUrls: [...(prev.imageUrls || []), base64] }));
         } catch (err: any) {
             alert("Ошибка загрузки изображения");
         }
@@ -982,7 +935,6 @@ export default function App() {
           </div>
         );
 
-      // 3. THIS WAS MISSING -> FIXES CARD NAVIGATION
       case 'EXHIBIT':
           if (!selectedExhibit) return <div>Exhibit not found</div>;
           return (
@@ -990,12 +942,12 @@ export default function App() {
                   exhibit={selectedExhibit}
                   theme={theme}
                   onBack={handleBack}
-                  onLike={(id) => toggleLike(id)}
-                  onFavorite={(id) => toggleFavorite(id)}
+                  onLike={(id: string) => toggleLike(id)}
+                  onFavorite={(id: string) => toggleFavorite(id)}
                   onPostComment={handlePostComment}
                   onLikeComment={handleLikeComment}
                   onAuthorClick={handleAuthorClick}
-                  onShare={(id) => { /* internal share logic used */ }}
+                  onShare={(id: string) => { /* internal share logic used */ }}
                   isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
                   isFavorited={false}
                   onFollow={handleFollow}
@@ -1044,7 +996,7 @@ export default function App() {
           );
 
       case 'ACTIVITY':
-          // FIX: Use extracted ActivityView component to solve React Hook order violation (Error #310)
+          // FIX: Use ActivityView to avoid hook violation error (#310) in previous conditional render
           return (
               <ActivityView 
                   theme={theme}
@@ -1059,8 +1011,20 @@ export default function App() {
               />
           );
 
-      // ... Rest of the cases (EDIT_COLLECTION, SEARCH, etc. - ommited for brevity but implicitly included as they were not changed) ...
-      // Ensuring default renders Feed
+      case 'EDIT_COLLECTION': if (!collectionToEdit) return <div>Error</div>; return (<div className="max-w-2xl mx-auto animate-in fade-in pb-32"><div className="flex items-center justify-between mb-6"><div className="flex items-center gap-2"><button onClick={handleBack} className="hover:underline font-pixel text-xs"><ArrowLeft size={16}/></button><h2 className="text-lg font-pixel">РЕДАКТОР КОЛЛЕКЦИИ</h2></div><button onClick={handleDeleteCollection} className="text-red-500 p-2 border border-red-500 rounded hover:bg-red-500/10 transition-colors"><Trash2 size={16} /></button></div><div className="space-y-6"><div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">{collectionToEdit.coverImage ? (<img src={collectionToEdit.coverImage} className="w-full h-full object-cover" />) : (<div className="flex items-center justify-center w-full h-full text-xs font-mono opacity-50">NO COVER</div>)}<label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"><div className="flex flex-col items-center gap-2 text-white"><Upload size={24} /><span className="font-pixel text-[10px]">CHANGE COVER</span></div><input type="file" accept="image/*" className="hidden" onChange={handleCollectionCoverUpload} /></label></div><div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label><input className="w-full bg-transparent border-b p-2 font-pixel text-lg focus:outline-none" value={collectionToEdit.title} onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 font-mono text-sm rounded h-24 focus:outline-none" value={collectionToEdit.description} onChange={e => setCollectionToEdit({...collectionToEdit, description: e.target.value})} /></div><div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label><div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">{exhibits.filter(e => e.owner === user?.username).map(ex => { const isSelected = collectionToEdit.exhibitIds.includes(ex.id); return (<div key={ex.id} onClick={() => { const newIds = isSelected ? collectionToEdit.exhibitIds.filter(id => id !== ex.id) : [...collectionToEdit.exhibitIds, ex.id]; setCollectionToEdit({...collectionToEdit, exhibitIds: newIds}); }} className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${isSelected ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent') : 'opacity-60 hover:opacity-100'}`}><div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>{isSelected && <Check size={12} strokeWidth={4} />}</div><div className="truncate font-mono text-xs">{ex.title}</div></div>)})}</div></div><button onClick={handleSaveCollection} className="w-full py-4 font-bold font-pixel bg-green-500 text-black uppercase">СОХРАНИТЬ ИЗМЕНЕНИЯ</button></div></div>);
+      case 'CREATE_COLLECTION':
+          return (
+              <div className="max-w-xl mx-auto animate-in fade-in">
+                 <button onClick={() => setView('CREATE_HUB')} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100"><ArrowLeft size={16} /> НАЗАД</button>
+                 <h2 className="text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
+                 <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
+                     <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">{newCollection.coverImage ? (<img src={newCollection.coverImage} className="w-full h-full object-cover" />) : (<div className="flex flex-col items-center justify-center w-full h-full text-xs font-mono opacity-50 gap-2"><Camera size={24} /><span>ЗАГРУЗИТЬ ОБЛОЖКУ *</span></div>)}<label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"><input type="file" accept="image/*" className="hidden" onChange={handleNewCollectionCoverUpload} /><div className="text-white font-pixel text-xs">ВЫБРАТЬ ФОТО</div></label></div>
+                     <div><label className="text-xs font-pixel uppercase opacity-70">НАЗВАНИЕ ПОДБОРКИ *</label><input className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-base mt-1" placeholder="Например: Мои консоли" value={newCollection.title} onChange={e => setNewCollection({...newCollection, title: e.target.value})} /></div>
+                     <div><label className="text-xs font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 focus:outline-none font-mono text-sm mt-1 rounded h-32" placeholder="О чем эта коллекция?" value={newCollection.description} onChange={e => setNewCollection({...newCollection, description: e.target.value})} /></div>
+                     <button onClick={handleCreateCollection} disabled={isLoading} className={`w-full py-3 mt-4 font-pixel font-bold uppercase tracking-widest ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? '...' : 'СОЗДАТЬ И ДОБАВИТЬ ПРЕДМЕТЫ'}</button>
+                 </div>
+              </div>
+          );
       default:
       case 'FEED':
          return (
@@ -1085,14 +1049,6 @@ export default function App() {
                 updateHash={updateHash}
              />
          );
-      // Ensure all other cases are preserved (USER_PROFILE, DIRECT_CHAT etc. - just adding EXHIBIT above fixed the main bug)
-      case 'USER_PROFILE': return <UserProfileView user={user!} viewedProfileUsername={viewedProfile || user!.username} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={handleBack} onLogout={handleLogout} onFollow={handleFollow} onChat={handleOpenChat} onExhibitClick={handleExhibitClick} onLike={toggleLike} onFavorite={toggleFavorite} onAuthorClick={handleAuthorClick} onCollectionClick={handleCollectionClick} onShareCollection={handleShareCollection} onViewHallOfFame={() => { setView('HALL_OF_FAME'); updateHash('/hall-of-fame'); }} onGuestbookPost={handleGuestbookPost} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} onSaveProfile={handleSaveProfile} onProfileImageUpload={handleProfileImageUpload} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab} />;
-      case 'DIRECT_CHAT': if (!chatPartner) return <div>Error</div>; const conversation = messages.filter(m => (m.sender === user?.username && m.receiver === chatPartner) || (m.sender === chatPartner && m.receiver === user?.username)).sort((a,b) => a.id.localeCompare(b.id)); return (<div className="max-w-2xl mx-auto animate-in fade-in h-[80vh] flex flex-col"><button onClick={() => { setView('ACTIVITY'); updateHash('/activity'); }} className="flex items-center gap-2 mb-4 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button><div className={`flex items-center gap-4 p-4 border-b ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden"><img src={getUserAvatar(chatPartner)} alt={chatPartner} /></div><div><h2 className="font-pixel text-lg">@{chatPartner}</h2><p className="font-mono text-xs opacity-50">Private Link Encrypted</p></div></div><div className="flex-1 overflow-y-auto p-4 space-y-4">{conversation.length === 0 && <div className="text-center opacity-40 font-mono text-xs py-10">Начало зашифрованного соединения...</div>}{conversation.map(msg => { const isMe = msg.sender === user?.username; return (<div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[70%] p-3 rounded-lg font-mono text-sm ${isMe ? (theme === 'dark' ? 'bg-dark-primary text-black rounded-tr-none' : 'bg-light-accent text-white rounded-tr-none') : (theme === 'dark' ? 'bg-dark-surface text-white rounded-tl-none' : 'bg-white text-black border rounded-tl-none')}`}>{msg.text}<div className={`text-[9px] mt-1 opacity-60 text-right ${isMe ? 'text-black' : 'text-current'}`}>{msg.timestamp}{isMe && <span className="ml-1 opacity-70">{msg.isRead ? '✓✓' : '✓'}</span>}</div></div></div>)})}</div><div className="p-4 border-t border-dashed border-gray-500/30 flex gap-2"><input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Сообщение..." className="flex-1 bg-transparent border rounded p-2 focus:outline-none font-mono text-sm" /><button onClick={handleSendMessage} className={`p-2 rounded ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}><Send size={20} /></button></div></div>);
-      case 'AUTH': return <MatrixLogin theme={theme} onLogin={handleLogin} />;
-      case 'HALL_OF_FAME': return <HallOfFame theme={theme} achievedIds={user ? getUserAchievements(user.username) : []} onBack={() => { setView('FEED'); updateHash('/feed'); }} />;
-      case 'MY_COLLECTION': if (!user) return <div onClick={() => setView('FEED')}>Please Login</div>; return <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => { setView('FEED'); updateHash('/feed'); }} onExhibitClick={handleExhibitClick} onCollectionClick={handleCollectionClick} onLike={toggleLike} />;
-      case 'SEARCH': return (<div className="max-w-4xl mx-auto animate-in fade-in"><div className={`relative w-full flex items-center border-b-2 px-2 gap-2 mb-4 ${theme === 'dark' ? 'border-dark-primary' : 'border-light-accent'}`}><Search size={20} className="opacity-50" /><input type="text" placeholder="ПОИСК ПО БАЗЕ ДАННЫХ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus className="bg-transparent w-full py-4 focus:outline-none font-pixel text-base md:text-lg tracking-wide" />{searchQuery && <button onClick={() => setSearchQuery('')}><X size={20}/></button>}</div><div className="flex gap-4 mb-8"><button onClick={() => setSearchMode('ARTIFACTS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'ARTIFACTS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ АРТЕФАКТЫ ]</button><button onClick={() => setSearchMode('COLLECTIONS')} className={`pb-1 text-xs md:text-sm font-pixel transition-colors ${searchMode === 'COLLECTIONS' ? (theme === 'dark' ? 'border-b-2 border-dark-primary text-dark-primary' : 'border-b-2 border-light-accent text-light-accent') : 'opacity-50'}`}>[ КОЛЛЕКЦИИ ]</button></div>{searchMode === 'COLLECTIONS' && (<div className="animate-in fade-in slide-in-from-bottom-2"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{collections.filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={handleCollectionClick} onShare={handleShareCollection} />)}</div>{collections.length === 0 && <div className="text-center opacity-50 font-mono py-10">КОЛЛЕКЦИИ НЕ НАЙДЕНЫ</div>}</div>)}{searchMode === 'ARTIFACTS' && (<div className="animate-in fade-in slide-in-from-bottom-2">{!searchQuery && (<><h3 className="font-pixel text-xs opacity-70 mb-4 flex items-center gap-2"><Grid size={14}/> КАТЕГОРИИ</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">{Object.values(DefaultCategory).map((cat: string) => (<button key={cat} onClick={() => { setSelectedCategory(cat); setView('FEED'); updateHash('/feed'); }} className={`p-4 border rounded hover:scale-105 transition-transform flex flex-col items-center gap-2 justify-center text-center h-20 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}><span className="font-pixel text-[10px] md:text-xs font-bold">{cat}</span></button>))}</div></>)}<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{(searchQuery ? exhibits.filter(ex => !ex.isDraft && (ex.title.toLowerCase().includes(searchQuery.toLowerCase()) || ex.description.toLowerCase().includes(searchQuery.toLowerCase()))) : exhibits.filter(ex => !ex.isDraft).sort((a, b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, 4)).map((item: Exhibit) => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />))}</div></div>)}</div>);
-      case 'EDIT_COLLECTION': if (!collectionToEdit) return <div>Error</div>; return (<div className="max-w-2xl mx-auto animate-in fade-in pb-32"><div className="flex items-center justify-between mb-6"><div className="flex items-center gap-2"><button onClick={handleBack} className="hover:underline font-pixel text-xs"><ArrowLeft size={16}/></button><h2 className="text-lg font-pixel">РЕДАКТОР КОЛЛЕКЦИИ</h2></div><button onClick={handleDeleteCollection} className="text-red-500 p-2 border border-red-500 rounded hover:bg-red-500/10 transition-colors"><Trash2 size={16} /></button></div><div className="space-y-6"><div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">{collectionToEdit.coverImage ? (<img src={collectionToEdit.coverImage} className="w-full h-full object-cover" />) : (<div className="flex items-center justify-center w-full h-full text-xs font-mono opacity-50">NO COVER</div>)}<label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"><div className="flex flex-col items-center gap-2 text-white"><Upload size={24} /><span className="font-pixel text-[10px]">CHANGE COVER</span></div><input type="file" accept="image/*" className="hidden" onChange={handleCollectionCoverUpload} /></label></div><div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НАЗВАНИЕ * (МИН. 3)</label><input className="w-full bg-transparent border-b p-2 font-pixel text-lg focus:outline-none" value={collectionToEdit.title} onChange={e => setCollectionToEdit({...collectionToEdit, title: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 font-mono text-sm rounded h-24 focus:outline-none" value={collectionToEdit.description} onChange={e => setCollectionToEdit({...collectionToEdit, description: e.target.value})} /></div><div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-2">СОСТАВ КОЛЛЕКЦИИ</label><div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-2 rounded">{exhibits.filter(e => e.owner === user?.username).map(ex => { const isSelected = collectionToEdit.exhibitIds.includes(ex.id); return (<div key={ex.id} onClick={() => { const newIds = isSelected ? collectionToEdit.exhibitIds.filter(id => id !== ex.id) : [...collectionToEdit.exhibitIds, ex.id]; setCollectionToEdit({...collectionToEdit, exhibitIds: newIds}); }} className={`p-2 border rounded cursor-pointer flex items-center gap-2 transition-colors ${isSelected ? (theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent') : 'opacity-60 hover:opacity-100'}`}><div className={`w-4 h-4 border flex items-center justify-center ${theme === 'dark' ? 'border-black' : 'border-white'}`}>{isSelected && <Check size={12} strokeWidth={4} />}</div><div className="truncate font-mono text-xs">{ex.title}</div></div>)})}</div></div><button onClick={handleSaveCollection} className="w-full py-4 font-bold font-pixel bg-green-500 text-black uppercase">СОХРАНИТЬ ИЗМЕНЕНИЯ</button></div></div>);
     }
   };
 
@@ -1102,7 +1058,6 @@ export default function App() {
     <div className={`min-h-screen transition-colors duration-500 font-sans selection:bg-green-500 selection:text-black ${
       theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-800'
     }`}>
-      {/* ... (existing layout) ... */}
       <MatrixRain theme={theme} />
       {theme === 'dark' && <CRTOverlay />}
 
@@ -1133,7 +1088,6 @@ export default function App() {
                     <span>NEO_ARCHIVE</span>
                 </div>
                 
-                {/* Mobile Header Actions */}
                 <div className="flex md:hidden items-center gap-4">
                     <button onClick={() => { setView('SEARCH'); updateHash('/search'); }} className="opacity-70">
                         <Search size={20} />
@@ -1144,7 +1098,6 @@ export default function App() {
                 </div>
             </div>
 
-            {/* Desktop Nav */}
             <div className={`w-full md:w-auto hidden md:flex items-center gap-4 md:mt-0`}>
                 <div className="relative w-full md:w-64">
                     <input 
@@ -1212,7 +1165,6 @@ export default function App() {
         </header>
       )}
       
-      {/* GLOBAL SWIPE CONTAINER */}
       <main 
         className="relative z-10 max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6"
         {...globalSwipeHandlers}
