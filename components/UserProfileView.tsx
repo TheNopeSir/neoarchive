@@ -1,12 +1,13 @@
+
 import React, { useState } from 'react';
 import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X } from 'lucide-react';
-import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus } from '../types';
-import { STATUS_OPTIONS, BADGES } from '../constants';
-import * as db from '../services/storageService';
-import { getUserAvatar } from '../services/storageService';
-import ExhibitCard from './ExhibitCard';
-import CollectionCard from './CollectionCard';
-import SEO from './SEO';
+import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus } from '../../types';
+import { STATUS_OPTIONS, BADGES } from '../../constants';
+import * as db from '../../services/storageService';
+import { getUserAvatar } from '../../services/storageService';
+import ExhibitCard from '../ExhibitCard';
+import CollectionCard from '../CollectionCard';
+import SEO from '../SEO';
 
 interface UserProfileViewProps {
     user: UserProfile;
@@ -110,8 +111,8 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <div className="flex-1 text-center md:text-left space-y-2">
                     {isEditingProfile && isCurrentUser ? (
                         <div className="space-y-2 max-w-sm">
-                            <input value={editTagline} onChange={(e) => setEditTagline(e.target.value)} placeholder="Статус..." className="w-full bg-transparent border-b p-1 font-mono text-sm" />
-                            <input value={editTelegram} onChange={(e) => setEditTelegram(e.target.value)} placeholder="Telegram (без @)" className="w-full bg-transparent border-b p-1 font-mono text-sm" />
+                            <input value={editTagline} onChange={e => setEditTagline(e.target.value)} placeholder="Статус..." className="w-full bg-transparent border-b p-1 font-mono text-sm" />
+                            <input value={editTelegram} onChange={e => setEditTelegram(e.target.value)} placeholder="Telegram (без @)" className="w-full bg-transparent border-b p-1 font-mono text-sm" />
                             <div className="flex gap-2">
                                 {(Object.keys(STATUS_OPTIONS) as UserStatus[]).map(s => (
                                     <button key={s} onClick={() => setEditStatus(s)} className={`p-1 rounded border ${editStatus === s ? 'border-green-500 bg-green-500/20' : 'border-transparent'}`} title={STATUS_OPTIONS[s].label}>
@@ -241,7 +242,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 </div>
                 {user && (
                     <div className="flex gap-2">
-                        <input ref={guestbookInputRef} value={guestbookInput} onChange={(e) => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className="flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none" />
+                        <input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className="flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none" />
                         <button onClick={onGuestbookPost} className="p-2 border rounded hover:bg-white/10"><Send size={16} /></button>
                     </div>
                 )}
