@@ -17,7 +17,7 @@ let cache = {
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
 // BUMP VERSION TO CLEAR CACHE & FIX QUOTA ISSUES
-const CACHE_VERSION = '2.6.0-QuotaFix'; 
+const CACHE_VERSION = '2.7.0-QuotaFix'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -67,8 +67,17 @@ const saveToLocalCache = () => {
             try {
                 // Emergency clear
                 localStorage.removeItem(LOCAL_STORAGE_KEY);
-                // Attempt to save a lightweight version (keep users/msgs, drop exhibits if needed, but for now just clear)
-                // Ideally, we might want to trim old exhibits here, but a fresh start is safer for now.
+                // Try to save minimal data
+                const minimalPayload = {
+                    version: CACHE_VERSION,
+                    data: {
+                        ...cache,
+                        exhibits: cache.exhibits.slice(0, 50), // Keep only recent
+                        collections: cache.collections.slice(0, 10),
+                        notifications: cache.notifications.slice(0, 20)
+                    }
+                };
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(minimalPayload));
             } catch (retryErr) {
                 console.error("🔴 [Cache] Critical Storage Failure", retryErr);
             }

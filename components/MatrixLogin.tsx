@@ -64,8 +64,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
               try {
                   // Determine username
                   const neoUsername = user.username || `tg_${user.id}`;
-                  // Create a consistent email for the system (mock email for TG users)
-                  const neoEmail = `${user.id}@telegram.neoarchive`;
+                  // Create a consistent email for the system (Must end in valid TLD for Supabase)
+                  const neoEmail = `${user.id}@telegram.neoarchive.com`;
                   // Password generation (using hash as secret for demo consistency)
                   const neoPassword = `tg_secure_${user.id}_${user.hash?.substring(0,8) || 'key'}`;
 
@@ -101,7 +101,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
           script.src = "https://telegram.org/js/telegram-widget.js?22";
           script.async = true;
           script.setAttribute('data-telegram-login', 'TrusterStoryBot');
-          script.setAttribute('data-size', 'large');
+          script.setAttribute('data-size', 'medium'); // Updated to medium as per user request
           script.setAttribute('data-onauth', 'onTelegramAuth(user)');
           script.setAttribute('data-request-access', 'write');
           
