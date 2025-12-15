@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, PlusSquare, X, Sun, Moon, ChevronDown, Upload, LogOut, FolderOpen, 
   MessageSquare, Search, Database, Trash2, Settings, Home, Activity, Zap, Sparkles, 
@@ -33,6 +33,7 @@ import LoginTransition from './components/LoginTransition';
 import InstallBanner from './components/InstallBanner';
 import FeedView from './components/views/FeedView';
 import UserProfileView from './components/views/UserProfileView';
+import ActivityView from './components/views/ActivityView';
 
 // Helper to generate specs based on category
 const generateSpecsForCategory = (cat: string) => {
@@ -211,7 +212,7 @@ export default function App() {
       localStorage.setItem('pwa_dismissed', 'true');
   };
 
-  // --- HASH ROUTING FIX ---
+  // --- HASH ROUTING ---
   useEffect(() => {
       const handleHashChange = () => {
           if (!user) {
@@ -919,7 +920,6 @@ export default function App() {
 
   const renderContentArea = () => {
     switch (view) {
-      // 1. ADD: CREATE HUB, ARTIFACT, COLLECTION (unchanged logic)
       case 'CREATE_HUB':
         return (
             <div className="max-w-2xl mx-auto animate-in fade-in h-[70vh] flex flex-col justify-center">
@@ -990,12 +990,12 @@ export default function App() {
                   exhibit={selectedExhibit}
                   theme={theme}
                   onBack={handleBack}
-                  onLike={(id: string) => toggleLike(id)}
-                  onFavorite={(id: string) => toggleFavorite(id)}
+                  onLike={(id) => toggleLike(id)}
+                  onFavorite={(id) => toggleFavorite(id)}
                   onPostComment={handlePostComment}
                   onLikeComment={handleLikeComment}
                   onAuthorClick={handleAuthorClick}
-                  onShare={(id: string) => { /* internal share logic used */ }}
+                  onShare={(id) => { /* internal share logic used */ }}
                   isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
                   isFavorited={false}
                   onFollow={handleFollow}
@@ -1044,102 +1044,19 @@ export default function App() {
           );
 
       case 'ACTIVITY':
-          const myNotifications = notifications.filter(n => n.recipient === user?.username);
-          
-          // Re-implemented Aggregation Logic
-          const aggregatedNotifs = useMemo(() => {
-              const groups: Record<string, { base: Notification, actors: Set<string>, count: number, latestTime: string }> = {};
-              
-              myNotifications.forEach(n => {
-                  let key = n.type;
-                  if (n.targetId) key += `_${n.targetId}`;
-                  else if (n.type === 'FOLLOW') key += `_${n.timestamp.split(',')[0]}`; 
-                  
-                  if (!groups[key]) {
-                      groups[key] = { base: n, actors: new Set([n.actor]), count: 1, latestTime: n.timestamp };
-                  } else {
-                      groups[key].actors.add(n.actor);
-                      groups[key].count++;
-                      if (!n.isRead) groups[key].base.isRead = false;
-                      if (n.timestamp > groups[key].latestTime) groups[key].latestTime = n.timestamp; 
-                  }
-              });
-              
-              return Object.values(groups).sort((a,b) => {
-                  return b.latestTime.localeCompare(a.latestTime); 
-              });
-          }, [myNotifications]);
-
+          // FIX: Use extracted ActivityView component to solve React Hook order violation (Error #310)
           return (
-              <div className="max-w-2xl mx-auto animate-in fade-in">
-                  <div className="flex justify-center mb-6 border-b border-gray-500/30">
-                      <button onClick={handleOpenUpdates} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'UPDATES' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ОБНОВЛЕНИЯ {myNotifications.some(n => !n.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
-                      <button onClick={() => setActivityTab('DIALOGS')} className={`px-6 py-3 font-pixel text-xs font-bold border-b-2 transition-colors relative ${activityTab === 'DIALOGS' ? (theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent') : 'border-transparent opacity-50'}`}>ДИАЛОГИ {messages.some(m => m.receiver === user?.username && !m.isRead) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
-                  </div>
-                  
-                  {activityTab === 'UPDATES' && (
-                      <div className="space-y-4">
-                          {aggregatedNotifs.length === 0 ? (
-                              <div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ УВЕДОМЛЕНИЙ</div>
-                          ) : (
-                              aggregatedNotifs.map(group => {
-                                  const notif = group.base;
-                                  const actors = Array.from(group.actors);
-                                  const mainActor = actors[0];
-                                  const otherCount = group.count - 1;
-                                  
-                                  return (
-                                      <div key={notif.id + '_group'} className={`p-4 rounded border flex items-start gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'} ${!notif.isRead ? 'border-l-4 border-l-red-500' : ''}`}>
-                                          <div className="mt-1">
-                                              {notif.type === 'LIKE' && <Heart className="text-red-500" size={16} />}
-                                              {notif.type === 'COMMENT' && <MessageSquare className="text-blue-500" size={16} />}
-                                              {notif.type === 'FOLLOW' && <User className="text-green-500" size={16} />}
-                                              {notif.type === 'GUESTBOOK' && <MessageCircle className="text-yellow-500" size={16} />}
-                                          </div>
-                                          <div className="flex-1">
-                                              <div className="font-pixel text-xs opacity-50 mb-1 flex justify-between">
-                                                  <span>{group.latestTime}</span>
-                                                  {!notif.isRead && <span className="text-red-500 font-bold">NEW</span>}
-                                              </div>
-                                              <div className="font-mono text-sm">
-                                                  <span className="font-bold cursor-pointer hover:underline" onClick={() => handleAuthorClick(mainActor)}>@{mainActor}</span>
-                                                  {otherCount > 0 && <span className="opacity-70"> и еще {otherCount}</span>}
-                                                  
-                                                  {notif.type === 'LIKE' && ` оценили "${notif.targetPreview}".`}
-                                                  {notif.type === 'COMMENT' && ` прокомментировали "${notif.targetPreview}".`}
-                                                  {notif.type === 'FOLLOW' && ' подписались на вас.'}
-                                                  {notif.type === 'GUESTBOOK' && ' написали в гостевой книге.'}
-                                              </div>
-                                              {/* Only show text preview for single comments to avoid clutter */}
-                                              {notif.type === 'COMMENT' && group.count === 1 && notif.targetPreview && (
-                                                  <div className="mt-2 text-xs opacity-70 italic border-l-2 pl-2 border-current">
-                                                      "{notif.targetPreview}"
-                                                  </div>
-                                              )}
-                                          </div>
-                                      </div>
-                                  );
-                              })
-                          )}
-                      </div>
-                  )}
-
-                  {activityTab === 'DIALOGS' && (<div className="space-y-4">{messages.length === 0 ? (<div className="text-center opacity-50 font-mono py-10">НЕТ АКТИВНЫХ КАНАЛОВ СВЯЗИ</div>) : ([...new Set(messages.filter(m => m.sender === user?.username || m.receiver === user?.username).map(m => m.sender === user?.username ? m.receiver : m.sender))].map(partner => { const unreadCount = messages.filter(m => m.sender === partner && m.receiver === user?.username && !m.isRead).length; return (<div key={partner} onClick={() => handleOpenChat(partner)} className={`p-4 rounded border flex items-center gap-4 cursor-pointer transition-all hover:translate-x-1 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim hover:border-dark-primary' : 'bg-white border-light-dim hover:border-light-accent'}`}><div className="w-10 h-10 rounded-full overflow-hidden bg-gray-500 relative"><img src={getUserAvatar(partner)} alt="Avatar" />{unreadCount > 0 && (<div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-black animate-pulse"></div>)}</div><div className="flex-1"><div className="flex justify-between items-baseline mb-1"><span className="font-pixel text-sm font-bold">@{partner}</span>{unreadCount > 0 && <span className="text-[10px] font-bold bg-red-500 text-white px-2 rounded-full">{unreadCount} NEW</span>}</div><div className="font-mono text-xs opacity-80 truncate">Нажмите для перехода в чат</div></div></div>)}))}</div>)}
-              </div>
-          );
-
-      case 'CREATE_COLLECTION':
-          return (
-              <div className="max-w-xl mx-auto animate-in fade-in">
-                 <button onClick={() => setView('CREATE_HUB')} className="mb-6 flex items-center gap-2 font-pixel text-xs opacity-60 hover:opacity-100"><ArrowLeft size={16} /> НАЗАД</button>
-                 <h2 className="text-lg font-pixel mb-6">НОВАЯ КОЛЛЕКЦИЯ</h2>
-                 <div className={`p-6 rounded border space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                     <div className="relative w-full aspect-[3/1] bg-gray-800 rounded-lg overflow-hidden border border-dashed border-gray-500 group">{newCollection.coverImage ? (<img src={newCollection.coverImage} className="w-full h-full object-cover" />) : (<div className="flex flex-col items-center justify-center w-full h-full text-xs font-mono opacity-50 gap-2"><Camera size={24} /><span>ЗАГРУЗИТЬ ОБЛОЖКУ *</span></div>)}<label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"><input type="file" accept="image/*" className="hidden" onChange={handleNewCollectionCoverUpload} /><div className="text-white font-pixel text-xs">ВЫБРАТЬ ФОТО</div></label></div>
-                     <div><label className="text-xs font-pixel uppercase opacity-70">НАЗВАНИЕ ПОДБОРКИ *</label><input className="w-full bg-transparent border-b p-2 focus:outline-none font-pixel text-base mt-1" placeholder="Например: Мои консоли" value={newCollection.title} onChange={e => setNewCollection({...newCollection, title: e.target.value})} /></div>
-                     <div><label className="text-xs font-pixel uppercase opacity-70">ОПИСАНИЕ</label><textarea className="w-full bg-transparent border p-2 focus:outline-none font-mono text-sm mt-1 rounded h-32" placeholder="О чем эта коллекция?" value={newCollection.description} onChange={e => setNewCollection({...newCollection, description: e.target.value})} /></div>
-                     <button onClick={handleCreateCollection} disabled={isLoading} className={`w-full py-3 mt-4 font-pixel font-bold uppercase tracking-widest ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? '...' : 'СОЗДАТЬ И ДОБАВИТЬ ПРЕДМЕТЫ'}</button>
-                 </div>
-              </div>
+              <ActivityView 
+                  theme={theme}
+                  user={user}
+                  notifications={notifications}
+                  messages={messages}
+                  activityTab={activityTab}
+                  setActivityTab={setActivityTab}
+                  handleOpenUpdates={handleOpenUpdates}
+                  handleAuthorClick={handleAuthorClick}
+                  handleOpenChat={handleOpenChat}
+              />
           );
 
       // ... Rest of the cases (EDIT_COLLECTION, SEARCH, etc. - ommited for brevity but implicitly included as they were not changed) ...
