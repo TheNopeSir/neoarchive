@@ -52,6 +52,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
 
     return (
         <div className="min-h-screen animate-in fade-in pb-24">
+            {/* Header */}
             <div className={`sticky top-0 z-40 border-b px-4 py-3 flex items-center justify-between shadow-lg ${
                 theme === 'dark' ? 'bg-dark-bg border-dark-dim' : 'bg-light-bg border-light-dim'
             }`}>
@@ -91,6 +92,8 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
             </div>
 
             <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row gap-6">
+                
+                {/* Categories */}
                 {activeTab === 'ITEMS' && (
                     <div className="w-full md:w-64 flex-shrink-0">
                         <div className="flex overflow-x-auto md:flex-col gap-2 pb-2 md:pb-0 scrollbar-hide sticky top-20">
@@ -128,6 +131,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                     </div>
                 )}
 
+                {/* Content */}
                 <div className="flex-1">
                     {activeTab === 'ITEMS' ? (
                         filteredExhibits.length === 0 ? (
@@ -168,6 +172,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                             </div>
                         )
                     ) : (
+                        /* COLLECTIONS TAB */
                         collections.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 opacity-30">
                                 <FolderOpen size={48} className="mb-4" />

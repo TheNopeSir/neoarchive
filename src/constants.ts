@@ -15,7 +15,7 @@ export const DefaultCategory = {
   MISC: 'ПРОЧЕЕ'
 } as const;
 
-// 2. Subcategories (Restored)
+// 2. Subcategories
 export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
     [DefaultCategory.PHONES]: ['Смартфоны', 'Кнопочные телефоны', 'Раскладушки', 'Слайдеры', 'КПК', 'Стационарные'],
     [DefaultCategory.GAMES]: ['Картриджи (8-bit/16-bit)', 'Диски (CD/DVD/BD)', 'Портативные консоли', 'Стационарные консоли', 'Аксессуары', 'Аркадные автоматы'],
@@ -28,109 +28,19 @@ export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
     [DefaultCategory.MISC]: ['Часы', 'Калькуляторы', 'Мерч', 'Упаковка', 'Реклама', 'Другое']
 };
 
-export const BADGES = {
-    'HELLO_WORLD': { label: 'HELLO WORLD', desc: 'Первый вход в систему', color: 'bg-green-500', icon: 'Terminal' },
-    'UPLOADER': { label: 'DATA_MINER', desc: 'Загружено 5+ артефактов', color: 'bg-blue-500', icon: 'Upload' },
-    'INFLUENCER': { label: 'NET_CELEB', desc: '100+ Лайков на контенте', color: 'bg-purple-500', icon: 'Star' },
-    'CRITIC': { label: 'OBSERVER', desc: 'Оставлено 5+ комментариев', color: 'bg-yellow-500', icon: 'MessageSquare' },
-    'LEGEND': { label: 'THE_ONE', desc: 'Владелец Легендарного артефакта', color: 'bg-red-500', icon: 'Zap' },
-    'COLLECTOR': { label: 'ARCHIVIST', desc: 'Создана первая коллекция', color: 'bg-orange-500', icon: 'Layers' }
-};
-
-<<<<<<< HEAD
-export const STATUS_OPTIONS = {
-    'ONLINE': { label: 'В сети', color: 'text-green-500', icon: Circle },
-    'AWAY': { label: 'Отошел', color: 'text-yellow-500', icon: Moon },
-    'DND': { label: 'Не беспокоить', color: 'text-red-500', icon: MinusCircle },
-    'INVISIBLE': { label: 'Невидимка', color: 'text-gray-400', icon: EyeOff },
-    'FREE_FOR_CHAT': { label: 'Готов болтать', color: 'text-blue-500', icon: MessageCircle },
-};
-
-export const MOCK_USER: UserProfile = {
-  username: "Neo_User_01",
-  email: "neo@matrix.com",
-  tagline: "Подключен к сети.",
-  status: 'ONLINE',
-  avatarUrl: "https://picsum.photos/100/100?grayscale",
-  joinedDate: "31.12.1999",
-  following: ['Morpheus', 'Trinity'],
-  achievements: ['HELLO_WORLD']
-};
-
-export const MOCK_COLLECTIONS: Collection[] = [];
-export const MOCK_NOTIFICATIONS: Notification[] = [];
-export const MOCK_MESSAGES: Message[] = [];
-export const INITIAL_EXHIBITS: Exhibit[] = [];
-
-// Specific grading scales for categories
+// 3. Grades / Conditions
 export const CATEGORY_CONDITIONS: Record<string, string[]> = {
-  [DefaultCategory.PHONES]: [
-    'НОВЫЙ (SEALED)', 'КАК НОВЫЙ (LIKE NEW)', 'ОТЛИЧНОЕ (EXC)', 'ХОРОШЕЕ (GOOD)', 'ПОТЕРТОЕ (FAIR)', 'НА ЗАПЧАСТИ (PARTS)'
-  ],
-  [DefaultCategory.COMPUTERS]: [
-    'НОВЫЙ (SEALED)', 'КАК НОВЫЙ (LIKE NEW)', 'ОТЛИЧНОЕ (EXC)', 'ХОРОШЕЕ (GOOD)', 'ПОТЕРТОЕ (FAIR)', 'НА ЗАПЧАСТИ (PARTS)'
-  ],
-  [DefaultCategory.CAMERAS]: [
-    'MINT', 'NEAR MINT', 'EXCELLENT+', 'EXCELLENT', 'USER', 'UGLY / AS-IS'
-  ],
-  [DefaultCategory.GAMES]: [
-    'ЗАПЕЧАТАНО (SEALED)', 'ПОЛНЫЙ КОМПЛЕКТ (CIB)', 'БЕЗ МАНУАЛА', 'ТОЛЬКО КАРТРИДЖ (LOOSE)', 'ТОЛЬКО КОРОБКА', 'D.O.A. (НЕ РАБОТАЕТ)'
-  ],
-  [DefaultCategory.MUSIC]: [
-    'MINT (M)', 'NEAR MINT (NM)', 'VERY GOOD PLUS (VG+)', 'VERY GOOD (VG)', 'GOOD (G)', 'POOR (P)', 'BAD (B)'
-  ],
-  [DefaultCategory.MAGAZINES]: [
-    'КОЛЛЕКЦИОННОЕ (9.0+)', 'ОТЛИЧНОЕ (FINE)', 'ЧИТАННОЕ (VG)', 'ВЕТХОЕ (FAIR)', 'БЕЗ ОБЛОЖКИ'
-  ],
-  [DefaultCategory.VIDEO]: [
-    'ЗАПЕЧАТАНО (SEALED)', 'ОТЛИЧНОЕ (MINT)', 'ХОРОШЕЕ (GOOD)', 'EX-RENTAL', 'ПОВРЕЖДЕНА УПАКОВКА', 'ТОЛЬКО КАССЕТА/ДИСК'
-  ],
-  [DefaultCategory.TOYS]: [
-    'MINT IN BOX (MIB)', 'MINT ON CARD (MOC)', 'LOOSE COMPLETE', 'LOOSE INCOMPLETE', 'BROKEN'
-  ],
-  [DefaultCategory.MISC]: [
-    'ИДЕАЛ', 'ХОРОШЕЕ', 'ПОТЕРТОЕ', 'СЛОМАНО'
-  ]
+  [DefaultCategory.PHONES]: ['Новый (Sealed)', 'Отличное', 'Хорошее', 'Удовлетворительное', 'На запчасти'],
+  [DefaultCategory.GAMES]: ['Запечатанный', 'Отличное', 'Хорошее', 'Царапины', 'Не работает'],
+  [DefaultCategory.MAGAZINES]: ['Идеальное', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Плохое'],
+  [DefaultCategory.MUSIC]: ['Запечатанный', 'Mint (M)', 'Near Mint (NM)', 'Very Good (VG)', 'Good (G)', 'Poor (P)'],
+  [DefaultCategory.VIDEO]: ['Запечатанный', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Не проверено', 'Не работает'],
+  [DefaultCategory.TOYS]: ['MISB (Sealed Box)', 'MIB (In Box)', 'Отличное (Loose)', 'Хорошее', 'Удовлетворительное', 'Для реставрации'],
+  [DefaultCategory.COMPUTERS]: ['Новый (Sealed)', 'Отличное', 'Хорошее', 'Требует ремонта', 'На запчасти', 'Нерабочий'],
+  [DefaultCategory.CAMERAS]: ['Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'Poor/Parts'],
+  [DefaultCategory.MISC]: ['Новый', 'Отличное', 'Хорошее', 'Удовлетворительное', 'Нерабочий']
 };
 
-// Standard keys for categories to help user fill specs (Expanded to ~10 items)
-export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
-  [DefaultCategory.PHONES]: [
-      'Бренд', 'Модель', 'Год выпуска', 'ОС / Платформа', 'Тип связи (GSM/CDMA)', 
-      'Тип экрана', 'Батарея', 'Камера (Мп)', 'Особенности конструкции', 'Комплектация'
-  ],
-  [DefaultCategory.GAMES]: [
-      'Платформа', 'Название игры', 'Выпуск картриджа', 'Жанр', 'Разработчик', 'Издатель', 
-      'Год релиза', 'Регион (PAL/NTSC)', 'Носитель', 'Мануал (Есть/Нет)', 'Коробка (Есть/Нет)'
-  ],
-  [DefaultCategory.MAGAZINES]: [
-      'Номер выпуска', 'Год издания', 'Месяц', 'Издательство', 
-      'Язык', 'Количество страниц', 'Тема номера', 'Постер в комплекте', 'Сохранность обложки'
-  ],
-  [DefaultCategory.MUSIC]: [
-      'Исполнитель', 'Альбом', 'Год релиза', 'Лейбл', 'Страна издания', 
-      'Формат (CD/Vinyl/Cassette)', 'Жанр', 'Скорость (RPM)', 'Тип упаковки', 'Бонус-треки'
-  ],
-  [DefaultCategory.COMPUTERS]: [
-      'Производитель', 'Модель', 'Процессор', 'Тактовая частота', 'ОЗУ (RAM)', 
-      'Видеоадаптер', 'Жесткий диск (HDD)', 'Операционная система', 'Тип корпуса', 'Год выпуска'
-  ],
-  [DefaultCategory.CAMERAS]: [
-      'Бренд', 'Модель', 'Тип камеры', 'Матрица / Пленка', 'Разрешение (Мп)', 
-      'Объектив', 'Зум (Оптический)', 'Тип носителя памяти', 'Питание', 'Год анонса'
-  ],
-  [DefaultCategory.VIDEO]: [
-      'Формат (VHS/DVD/LD)', 'Год выпуска', 'Режиссер', 'Студия', 
-      'Язык / Перевод', 'Регион', 'Хронометраж', 'Особенности издания', 'Коробка'
-  ],
-  [DefaultCategory.TOYS]: [
-      'Серия / Линейка', 'Производитель', 'Год выпуска', 'Материал', 
-      'Размер (см)', 'Артикуляция', 'Аксессуары', 'Тип упаковки', 'Редкость'
-  ],
-  [DefaultCategory.MISC]: [
-      'Назначение', 'Производитель', 'Страна происхождения', 'Год производства', 
-      'Материал', 'Размеры', 'Вес', 'Цвет', 'Редкость'
-=======
 // 4. Specs Templates - More generic starting points, user can add/remove
 export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
   [DefaultCategory.PHONES]: [
@@ -159,7 +69,6 @@ export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
   ],
   [DefaultCategory.MISC]: [
       'Предмет', 'Производитель', 'Год'
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
   ]
 };
 
@@ -181,6 +90,23 @@ export const COMMON_SPEC_VALUES: Record<string, string[]> = {
     'Материал': ['Пластик', 'Металл', 'Дерево', 'Стекло', 'Винил'],
     'ОС': ['Symbian', 'Windows Mobile', 'Palm OS', 'Android 1.6', 'iOS 3', 'Java MIDP 2.0'],
     'Цвет': ['Черный', 'Белый', 'Серебристый', 'Прозрачный', 'Синий', 'Красный', 'Желтый']
+};
+
+export const BADGES = {
+    'HELLO_WORLD': { label: 'HELLO WORLD', desc: 'Первый вход в систему', color: 'bg-green-500', icon: 'Terminal' },
+    'UPLOADER': { label: 'DATA_MINER', desc: 'Загружено 5+ артефактов', color: 'bg-blue-500', icon: 'Upload' },
+    'INFLUENCER': { label: 'NET_CELEB', desc: '100+ Лайков на контенте', color: 'bg-purple-500', icon: 'Star' },
+    'CRITIC': { label: 'OBSERVER', desc: 'Оставлено 5+ комментариев', color: 'bg-yellow-500', icon: 'MessageSquare' },
+    'LEGEND': { label: 'THE_ONE', desc: 'Владелец Легендарного артефакта', color: 'bg-red-500', icon: 'Zap' },
+    'COLLECTOR': { label: 'ARCHIVIST', desc: 'Создана первая коллекция', color: 'bg-orange-500', icon: 'Layers' }
+};
+
+export const STATUS_OPTIONS = {
+    'ONLINE': { label: 'В сети', color: 'text-green-500', icon: Circle },
+    'AWAY': { label: 'Отошел', color: 'text-yellow-500', icon: Moon },
+    'DND': { label: 'Не беспокоить', color: 'text-red-500', icon: MinusCircle },
+    'INVISIBLE': { label: 'Невидимка', color: 'text-gray-400', icon: EyeOff },
+    'FREE_FOR_CHAT': { label: 'Готов болтать', color: 'text-blue-500', icon: MessageCircle },
 };
 
 export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -255,8 +181,6 @@ export const TIER_CONFIG: Record<TierType, {
         icon: Zap
     }
 };
-<<<<<<< HEAD
-=======
 
 export const MOCK_USER: UserProfile = {
   username: "Neo_User_01",
@@ -273,4 +197,3 @@ export const MOCK_COLLECTIONS: Collection[] = [];
 export const MOCK_NOTIFICATIONS: Notification[] = [];
 export const MOCK_MESSAGES: Message[] = [];
 export const INITIAL_EXHIBITS: Exhibit[] = [];
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4

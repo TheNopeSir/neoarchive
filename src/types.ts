@@ -4,8 +4,8 @@ export interface Comment {
   author: string;
   text: string;
   timestamp: string;
-  likes: number; // Added
-  likedBy: string[]; // Added
+  likes: number;
+  likedBy: string[];
 }
 
 export interface Exhibit {
@@ -16,26 +16,17 @@ export interface Exhibit {
   imageUrls: string[];
   videoUrl?: string; 
   category: string; 
-<<<<<<< HEAD
-  subcategory?: string; // Added
-=======
   subcategory?: string; 
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
   owner: string;
   timestamp: string;
   likes: number;
   likedBy?: string[]; // List of users who liked this
   views: number;
-  // rating removed
   condition?: string;
   quality: string;
   specs: Record<string, string>;
   comments: Comment[];
-<<<<<<< HEAD
-  isDraft?: boolean; // Added
-=======
   isDraft?: boolean; 
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
 }
 
 export interface Collection {
@@ -49,7 +40,7 @@ export interface Collection {
   timestamp: string;
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT'; // Added LIKE_COMMENT
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT';
 
 export interface Notification {
   id: string;

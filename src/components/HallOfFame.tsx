@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Trophy, ArrowLeft, Lock } from 'lucide-react';
 import { BADGES } from '../constants';

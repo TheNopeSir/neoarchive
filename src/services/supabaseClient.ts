@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 // ==========================================
@@ -20,8 +19,4 @@ if (SUPABASE_KEY.includes("ВСТАВЬТЕ_СЮДА")) {
 export const supabase = createClient(
   SUPABASE_URL, 
   SUPABASE_KEY
-<<<<<<< HEAD
 );
-=======
-);
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4

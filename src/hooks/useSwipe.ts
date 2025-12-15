@@ -41,18 +41,28 @@ export default function useSwipe({ onSwipeLeft, onSwipeRight, onSwipeUp, onSwipe
         const distanceY = touchStartY - touchEndY;
         const isHorizontalSwipe = Math.abs(distanceX) > Math.abs(distanceY);
 
+        // Check if it's a horizontal swipe (prevents triggering on scroll)
         if (isHorizontalSwipe) {
             const isLeftSwipe = distanceX > minSwipeDistance;
             const isRightSwipe = distanceX < -minSwipeDistance;
 
-            if (isLeftSwipe && onSwipeLeft) onSwipeLeft();
-            if (isRightSwipe && onSwipeRight) onSwipeRight();
+            if (isLeftSwipe && onSwipeLeft) {
+                onSwipeLeft();
+            }
+            if (isRightSwipe && onSwipeRight) {
+                onSwipeRight();
+            }
         } else {
+            // Vertical Swipe
             const isUpSwipe = distanceY > minSwipeDistance;
             const isDownSwipe = distanceY < -minSwipeDistance;
 
-            if (isUpSwipe && onSwipeUp) onSwipeUp();
-            if (isDownSwipe && onSwipeDown) onSwipeDown();
+            if (isUpSwipe && onSwipeUp) {
+                onSwipeUp();
+            }
+            if (isDownSwipe && onSwipeDown) {
+                onSwipeDown();
+            }
         }
     };
 

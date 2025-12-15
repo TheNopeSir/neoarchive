@@ -16,11 +16,7 @@ let cache = {
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-<<<<<<< HEAD
-const CACHE_VERSION = '2.4.0-GlobalForceUpdate'; 
-=======
 const CACHE_VERSION = '2.5.3-QuotaFix'; 
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -73,10 +69,6 @@ const loadFromLocalCache = (): boolean => {
         try {
             const parsed = JSON.parse(json);
             if (!parsed.version || parsed.version !== CACHE_VERSION) {
-<<<<<<< HEAD
-                console.log(`♻️ [Cache] Version mismatch. Clearing.`);
-=======
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
                 localStorage.removeItem(LOCAL_STORAGE_KEY);
                 return false;
             }
@@ -100,58 +92,6 @@ const loadFromLocalCache = (): boolean => {
     return false;
 };
 
-<<<<<<< HEAD
-// --- STORAGE MANAGEMENT (NEW) ---
-
-export const getStorageEstimate = async () => {
-  if (navigator.storage && navigator.storage.estimate) {
-    try {
-      const { usage, quota } = await navigator.storage.estimate();
-      if (usage !== undefined && quota !== undefined) {
-        return {
-          usage,
-          quota,
-          percentage: (usage / quota) * 100
-        };
-      }
-    } catch (e) {
-      console.warn("Storage estimate failed", e);
-    }
-  }
-  return null;
-};
-
-export const clearLocalCache = () => {
-    try {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        // Optional: clear image cache if utilizing specific cache names
-        if ('caches' in window) {
-            caches.keys().then(names => {
-                for (let name of names) caches.delete(name);
-            });
-        }
-        window.location.reload();
-    } catch(e) {
-        console.error("Failed to clear cache", e);
-    }
-};
-
-export const autoCleanStorage = async () => {
-    const estimate = await getStorageEstimate();
-    if (estimate && estimate.percentage > 95) {
-        console.warn("⚠️ Storage critical (>95%). Auto-cleaning cache...");
-        // Keep user session if possible, but clear data
-        const sessionUser = localStorage.getItem(SESSION_USER_KEY);
-        localStorage.clear();
-        if (sessionUser) localStorage.setItem(SESSION_USER_KEY, sessionUser);
-        
-        window.location.reload(); 
-    }
-};
-
-// --- IMAGE COMPRESSION UTILITY ---
-=======
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
 export const compressImage = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -171,17 +111,11 @@ export const compressImage = async (file: File): Promise<string> => {
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
-<<<<<<< HEAD
-                ctx?.drawImage(img, 0, 0, width, height);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                resolve(dataUrl);
-=======
                 if (ctx) {
                     ctx.drawImage(img, 0, 0, width, height);
                     const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
                     resolve(dataUrl);
                 } else { reject(new Error("Canvas context is null")); }
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
             };
             img.onerror = (err) => reject(err);
         };
@@ -194,23 +128,9 @@ export const fileToBase64 = compressImage;
 const toDbPayload = (item: any) => ({ id: item.id, data: item, timestamp: new Date().toISOString() });
 
 const fetchTable = async <T>(tableName: string): Promise<T[]> => {
-<<<<<<< HEAD
-    const { data, error } = await supabase
-        .from(tableName)
-        .select('data');
-
-    if (error) return [];
-
-    const items = (data || [])
-        .map((row: any) => row.data)
-        .filter((item: any) => item !== null && item !== undefined);
-
-    return items;
-=======
     const { data, error } = await supabase.from(tableName).select('data');
     if (error) return [];
     return (data || []).map((row: any) => row.data).filter((item: any) => item !== null && item !== undefined);
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
 };
 
 const mergeUsers = (local: UserProfile[], cloud: UserProfile[]): UserProfile[] => {
@@ -224,15 +144,7 @@ const mergeData = <T extends { id: string, timestamp?: string }>(local: T[], clo
     const map = new Map<string, T>();
     local.forEach(item => { if (!deletedIds.includes(item.id)) map.set(item.id, item); });
     cloud.forEach(item => { if (!deletedIds.includes(item.id)) map.set(item.id, item); });
-<<<<<<< HEAD
-    return Array.from(map.values()).sort((a, b) => {
-        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return tB - tA;
-    });
-=======
     return Array.from(map.values()).sort((a, b) => parseRuDate(b.timestamp || '') - parseRuDate(a.timestamp || ''));
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
 };
 
 const performCloudSync = async () => {
@@ -281,35 +193,6 @@ export const backgroundSync = async (): Promise<boolean> => {
 
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
-<<<<<<< HEAD
-// --- AUTH & CRUD ---
-export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string): Promise<UserProfile> => {
-    const usernameExists = cache.users.some(u => u.username.toLowerCase() === username.toLowerCase());
-    if (usernameExists) throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
-
-    const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { username } }
-    });
-
-    if (error) throw new Error(error.message);
-    if (!data.user) throw new Error("Подтвердите email для завершения регистрации");
-
-    const isSuperAdmin = email === 'admin@neoarchive.net';
-    const userProfile: UserProfile = {
-        username: isSuperAdmin ? 'TheArchitect' : username,
-        email,
-        tagline: isSuperAdmin ? 'System Administrator' : tagline,
-        avatarUrl: getUserAvatar(username),
-        joinedDate: new Date().toLocaleString('ru-RU'),
-        following: [],
-        achievements: isSuperAdmin ? ['HELLO_WORLD', 'LEGEND', 'THE_ONE'] : ['HELLO_WORLD'],
-        isAdmin: isSuperAdmin,
-        telegram: telegram
-    };
-
-=======
 export const getSystemStats = () => ({
     totalUsers: cache.users.length || 1,
     onlineUsers: Math.floor(Math.random() * ((cache.users.length || 1) / 2)) + 1
@@ -317,7 +200,6 @@ export const getSystemStats = () => ({
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string): Promise<UserProfile> => {
     const userProfile: UserProfile = { username, email, tagline, telegram, avatarUrl: getUserAvatar(username), joinedDate: new Date().toLocaleString('ru-RU'), following: [], achievements: ['HELLO_WORLD'], isAdmin: false, status: 'ONLINE' };
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
     cache.users.push(userProfile);
     saveToLocalCache();
     await supabase.from('users').upsert({ username, data: userProfile });
@@ -356,10 +238,6 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
 };
 export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
-<<<<<<< HEAD
-  cache.notifications = cache.notifications.filter(n => n.targetId !== id);
-=======
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
   cache.deletedIds.push(id); 
   saveToLocalCache();
   await supabase.from('exhibits').delete().eq('id', id);
@@ -390,27 +268,8 @@ export const saveNotification = async (notif: Notification) => {
     await supabase.from('notifications').upsert(toDbPayload(notif));
 };
 export const markNotificationsRead = async (recipient: string) => {
-<<<<<<< HEAD
-    let hasUpdates = false;
-    const toUpdate: Notification[] = [];
-    cache.notifications.forEach(n => {
-        if (n.recipient === recipient && !n.isRead) {
-             n.isRead = true;
-             toUpdate.push(n);
-             hasUpdates = true;
-        }
-    });
-    if (hasUpdates) {
-        saveToLocalCache();
-        if (toUpdate.length > 0) {
-            const payload = toUpdate.map(n => toDbPayload(n));
-            await supabase.from('notifications').upsert(payload);
-        }
-    }
-=======
     cache.notifications.forEach(n => { if(n.recipient === recipient) n.isRead = true; });
     saveToLocalCache();
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
 };
 
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
@@ -438,12 +297,4 @@ export const saveMessage = async (msg: Message) => {
 export const markMessagesRead = async (sender: string, receiver: string) => {
     cache.messages.forEach(m => { if(m.sender === sender && m.receiver === receiver) m.isRead = true; });
     saveToLocalCache();
-<<<<<<< HEAD
-    if (toUpdate.length > 0) {
-        const payload = toUpdate.map(m => toDbPayload(m));
-        await supabase.from('messages').upsert(payload);
-    }
 };
-=======
-};
->>>>>>> f74c34ead9253a28649043abba5b595368a057c4
