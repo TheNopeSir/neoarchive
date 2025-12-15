@@ -1577,7 +1577,7 @@ export default function App() {
                  guestbook={guestbook}
                  theme={theme}
                  onBack={() => { setView('FEED'); updateHash('/feed'); }}
-                 onLogout={onLogout}
+                 onLogout={handleLogout}
                  onFollow={handleFollow}
                  onChat={handleOpenChat}
                  onExhibitClick={handleExhibitClick}
