@@ -131,6 +131,15 @@ export const CATEGORY_CONDITIONS: Record<string, string[]> = {
   ]
 };
 
+// Precise conditions overrides
+export const SUBCATEGORY_CONDITIONS: Record<string, string[]> = {
+    'Винил (LP/EP)': ['SEALED', 'MINT (M)', 'NEAR MINT (NM)', 'EXCELLENT (EX)', 'VERY GOOD+ (VG+)', 'VERY GOOD (VG)', 'GOOD (G)', 'POOR (P)'],
+    'Аудиокассеты': ['SEALED', 'MINT (J-Card Mint)', 'NM', 'VG+', 'VG', 'G (Tested)', 'AS-IS'],
+    'Портативные консоли': ['NEW (SEALED)', 'CIB (MINT)', 'CIB (USED)', 'LOOSE (GOOD)', 'LOOSE (SCRATCHED)', 'FOR PARTS/REPAIR'],
+    'Картриджи (8-bit/16-bit)': ['NEW', 'CIB', 'LOOSE (Label Mint)', 'LOOSE (Label Damage)', 'REPRO (Новодел)'],
+    'Диски (CD/DVD/BD)': ['SEALED', 'MINT', 'NM', 'VG+', 'VG', 'SCRATCHED (Рабочий)', 'BAD (Не рабочий)']
+};
+
 // Common values for autocomplete suggestions
 export const COMMON_SPEC_VALUES: Record<string, string[]> = {
     'Выпуск картриджа': [
@@ -156,15 +165,43 @@ export const COMMON_SPEC_VALUES: Record<string, string[]> = {
 
 export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 
-export const calculateArtifactScore = (item: Exhibit): number => {
-    const likeScore = item.likes * 25;
-    const commentScore = (item.comments?.length || 0) * 10;
-    const viewScore = Math.floor(item.views * 1); 
-    return likeScore + commentScore + viewScore;
+export const calculateArtifactScore = (item: Exhibit, userPreferences?: Record<string, number>): number => {
+    // 1. Popularity Base
+    const likeScore = item.likes * 10;
+    const commentScore = (item.comments?.length || 0) * 5;
+    const viewScore = Math.floor(item.views * 0.5); 
+    
+    // 2. Freshness Boost (Time Decay)
+    // Items created in the last 48 hours get a massive boost that decays rapidly
+    const now = new Date().getTime();
+    // Parse timestamp "dd.mm.yyyy, hh:mm:ss" or ISO
+    let itemTime = now;
+    try {
+        if(item.timestamp.includes(',')) {
+            const parts = item.timestamp.split(',')[0].split('.');
+            // simple parse for RU format approx
+            itemTime = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+        } else {
+            itemTime = new Date(item.timestamp).getTime();
+        }
+    } catch(e) {}
+
+    const hoursSinceCreation = Math.max(0, (now - itemTime) / (1000 * 60 * 60));
+    // Decay factor: New items (0 hours) get +500, items 24h old get ~200, 1 week old get ~30
+    const freshnessScore = 1000 / (hoursSinceCreation + 2);
+
+    // 3. User Personalization (Smart Feed)
+    let preferenceBoost = 0;
+    if (userPreferences && userPreferences[item.category]) {
+        // Boost factor matches user preference weight (0.1 to 2.0 typically)
+        preferenceBoost = userPreferences[item.category] * 100;
+    }
+
+    return likeScore + commentScore + viewScore + freshnessScore + preferenceBoost;
 };
 
 export const getArtifactTier = (item: Exhibit): TierType => {
-    const score = calculateArtifactScore(item);
+    const score = (item.likes * 25) + ((item.comments?.length || 0) * 10) + item.views;
     const filledSpecs = Object.values(item.specs || {}).filter(v => v && v.trim().length > 0).length;
     const imageCount = item.imageUrls?.length || 0;
     const isHighQuality = filledSpecs >= 5 && imageCount >= 2;

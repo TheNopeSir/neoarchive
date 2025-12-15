@@ -120,6 +120,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
+      e.stopPropagation(); // Stop bubbling
+      
       if (!email || !password) {
           setError('ВВЕДИТЕ EMAIL И ПАРОЛЬ');
           return;
@@ -133,13 +135,14 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
           onLogin(user, rememberMe);
       } catch (err: any) {
           setError(err.message || 'ОШИБКА АВТОРИЗАЦИИ');
-      } finally {
           setIsLoading(false);
       }
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+
     if (!email || !password || !username) {
         setError('ЗАПОЛНИТЕ ОБЯЗАТЕЛЬНЫЕ ПОЛЯ');
         return;
@@ -245,7 +248,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
         );
     }
 
-    // Login and Register views remain same...
+    // Login and Register views
     if (step === 'LOGIN') {
         return (
             <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
@@ -266,6 +269,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="user@example.com"
                             autoComplete="username"
+                            required
                         />
                     </div>
                  </div>
@@ -280,6 +284,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="******"
                             autoComplete="current-password"
+                            required
                         />
                     </div>
                  </div>
@@ -299,6 +304,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                  )}
 
                  <button 
+                     type="submit"
                      disabled={isLoading}
                      className={`mt-4 py-3 font-bold font-pixel uppercase ${
                          theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'
@@ -325,6 +331,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="user@example.com"
                             autoComplete="email"
+                            required
                         />
                     </div>
                 </div>
@@ -340,6 +347,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="******"
                             autoComplete="new-password"
+                            required
                         />
                     </div>
                 </div>
@@ -354,6 +362,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
                             placeholder="Neo"
                             autoComplete="username"
+                            required
                         />
                     </div>
                 </div>
@@ -374,6 +383,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                 {error && <div className="text-red-500 font-bold text-xs font-mono text-center border border-red-500 p-2">{error}</div>}
 
                 <button 
+                     type="submit"
                      disabled={isLoading}
                      className={`mt-4 py-3 font-bold font-pixel uppercase ${
                          theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'

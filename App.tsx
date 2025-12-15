@@ -21,7 +21,7 @@ import StorageMonitor from './components/StorageMonitor';
 import UserProfileView from './components/UserProfileView';
 import CollectionCard from './components/CollectionCard';
 import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Message, GuestbookEntry, UserStatus } from './types';
-import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, SUBCATEGORY_SPECS, CATEGORY_CONDITIONS, COMMON_SPEC_VALUES, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from './constants';
+import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, SUBCATEGORY_SPECS, CATEGORY_CONDITIONS, SUBCATEGORY_CONDITIONS, COMMON_SPEC_VALUES, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
 import { compressImage, isOffline, getUserAvatar, autoCleanStorage, updateUserPreference } from './services/storageService';
@@ -41,10 +41,21 @@ const generateSpecsForCategory = (cat: string, subcat?: string) => {
     return specs;
 };
 
-// Helper to get default condition for category
-const getDefaultCondition = (cat: string) => {
+// Helper to get default condition for category/subcategory
+const getDefaultCondition = (cat: string, subcat?: string) => {
+    // Check specific subcategory conditions first
+    if (subcat && SUBCATEGORY_CONDITIONS[subcat]) {
+        return SUBCATEGORY_CONDITIONS[subcat][0];
+    }
     const conditions = CATEGORY_CONDITIONS[cat] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
     return conditions[0];
+};
+
+const getConditionsList = (cat: string, subcat?: string) => {
+    if (subcat && SUBCATEGORY_CONDITIONS[subcat]) {
+        return SUBCATEGORY_CONDITIONS[subcat];
+    }
+    return CATEGORY_CONDITIONS[cat] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
 };
 
 const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null }> = ({ theme, user }) => (
@@ -293,6 +304,26 @@ export default function App() {
       }, 15000); 
       return () => clearInterval(interval);
   }, [view]);
+
+  // Infinite Scroll Observer
+  useEffect(() => {
+    if (view !== 'FEED' && view !== 'SEARCH') return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => prev + 12);
+        }
+      },
+      { threshold: 1.0, rootMargin: '100px' }
+    );
+
+    if (loadMoreRef.current) {
+        observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [view, feedMode, selectedCategory, searchQuery, exhibits]);
 
   useEffect(() => {
     autoCleanStorage();
@@ -808,25 +839,49 @@ export default function App() {
   };
 
   const groupNotifications = (notifs: Notification[]) => {
-      const grouped: { [key: string]: Notification & { count: number, ids: string[] } } = {};
-      notifs.forEach(n => {
-          const key = `${n.actor}-${n.type}`;
+      const grouped: { [key: string]: Notification & { count: number, ids: string[], isRead: boolean } } = {};
+      
+      // Sort to process latest first
+      const sortedNotifs = [...notifs].sort((a, b) => b.id.localeCompare(a.id));
+
+      sortedNotifs.forEach(n => {
+          // Robust key generation handling case sensitivity and spacing
+          const key = `${n.actor.trim().toLowerCase()}-${n.type}`;
+          
           if (!grouped[key]) {
-              grouped[key] = { ...n, count: 1, ids: [n.id] };
+              grouped[key] = { ...n, count: 1, ids: [n.id], isRead: n.isRead };
           } else {
               grouped[key].count++;
               grouped[key].ids.push(n.id);
+              // If ANY item in the group is unread, the whole group is marked as having unread content
+              if (!n.isRead) {
+                  grouped[key].isRead = false;
+              }
+              // Keep latest preview/timestamp
               if (n.id > grouped[key].id) {
-                  grouped[key].id = n.id; 
+                  grouped[key].id = n.id;
                   grouped[key].timestamp = n.timestamp;
-                  grouped[key].targetId = n.targetId;
                   grouped[key].targetPreview = n.targetPreview;
               }
-              // If ANY notification in the group is unread, the group is unread.
-              if (!n.isRead) grouped[key].isRead = false;
           }
       });
       return Object.values(grouped).sort((a,b) => b.id.localeCompare(a.id));
+  };
+
+  const renderNotificationText = (n: Notification & { count: number }) => {
+      // Robust text rendering that never returns empty
+      switch (n.type) {
+          case 'LIKE':
+              return n.count > 1 ? `оценил ${n.count} артефактов` : 'оценил ваш артефакт';
+          case 'COMMENT':
+              return n.count > 1 ? `оставил ${n.count} комментариев` : 'оставил комментарий';
+          case 'FOLLOW':
+              return 'теперь читает вас';
+          case 'GUESTBOOK':
+              return 'оставил запись в гостевой книге';
+          default:
+              return n.targetPreview || 'Новое действие';
+      }
   };
 
   const handleNotificationClick = (n: Notification & { count?: number }) => {
@@ -903,15 +958,10 @@ export default function App() {
              return true;
         });
 
+        // Smart Sort: Combines Time, Popularity and Personal Preferences
         const sortedFeed = filteredExhibits.sort((a,b) => {
-              let scoreA = calculateArtifactScore(a);
-              let scoreB = calculateArtifactScore(b);
-              if (user && user.preferences) {
-                  const weightA = user.preferences[a.category] || 0;
-                  const weightB = user.preferences[b.category] || 0;
-                  scoreA = scoreA * (1 + (weightA * 0.5));
-                  scoreB = scoreB * (1 + (weightB * 0.5));
-              }
+              const scoreA = calculateArtifactScore(a, user?.preferences);
+              const scoreB = calculateArtifactScore(b, user?.preferences);
               return scoreB - scoreA;
         });
 
@@ -963,6 +1013,9 @@ export default function App() {
     }
 
     if (view === 'CREATE_ARTIFACT') {
+        // Prepare dynamic condition options based on subcategory OR category
+        const conditionOptions = getConditionsList(newExhibit.category || DefaultCategory.MISC, newExhibit.subcategory);
+
         return (
             <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in pb-32">
                  <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
@@ -1009,7 +1062,8 @@ export default function App() {
                                              ...newExhibit, 
                                              subcategory: sub,
                                              // Re-generate specs based on exact subcategory
-                                             specs: generateSpecsForCategory(newExhibit.category || DefaultCategory.MISC, sub)
+                                             specs: generateSpecsForCategory(newExhibit.category || DefaultCategory.MISC, sub),
+                                             condition: getDefaultCondition(newExhibit.category || DefaultCategory.MISC, sub)
                                          });
                                      }}
                                      className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim' : 'bg-white text-black border-light-dim'}`}
@@ -1021,6 +1075,20 @@ export default function App() {
                              </div>
                          </div>
                      )}
+
+                     <div>
+                         <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">СОСТОЯНИЕ</label>
+                         <div className="relative">
+                             <select
+                                 value={newExhibit.condition || ''}
+                                 onChange={(e) => setNewExhibit({...newExhibit, condition: e.target.value})}
+                                 className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim' : 'bg-white text-black border-light-dim'}`}
+                             >
+                                 {conditionOptions.map((cond: string) => <option key={cond} value={cond}>{cond}</option>)}
+                             </select>
+                             <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                         </div>
+                     </div>
 
                      <div>
                          <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОПИСАНИЕ</label>
@@ -1126,7 +1194,7 @@ export default function App() {
         return (
             <div className="max-w-2xl mx-auto animate-in fade-in">
                 <div className="flex gap-4 border-b border-gray-500/30 mb-6"><button onClick={() => setActivityTab('UPDATES')} className={`pb-2 font-pixel text-xs ${activityTab === 'UPDATES' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>УВЕДОМЛЕНИЯ</button><button onClick={() => setActivityTab('DIALOGS')} className={`pb-2 font-pixel text-xs ${activityTab === 'DIALOGS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>СООБЩЕНИЯ</button></div>
-                {activityTab === 'UPDATES' ? (<div className="space-y-4">{aggregatedNotifications.length === 0 ? (<div className="text-center opacity-50 py-10 font-mono text-sm">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className="font-bold text-xs">@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className="text-[10px] font-mono leading-tight">{n.type === 'LIKE' && (n.count > 1 ? `оценил ${n.count} артефактов` : 'оценил ваш артефакт')}{n.type === 'COMMENT' && (n.count > 1 ? `оставил ${n.count} комментариев` : 'оставил комментарий')}{n.type === 'FOLLOW' && 'теперь читает вас'}</div></div>)))}</div>) : (<div className="space-y-2">{/* Dialogs logic */ (() => { const partners = new Set<string>(); messages.forEach(m => { if(m.sender === user?.username) partners.add(m.receiver); else if(m.receiver === user?.username) partners.add(m.sender); }); if(partners.size === 0) return <div className="text-center opacity-50 py-10 font-mono text-sm">Нет диалогов</div>; return Array.from(partners).map(partner => { const lastMsg = messages.filter(m => (m.sender === partner && m.receiver === user?.username) || (m.sender === user?.username && m.receiver === partner)).sort((a,b) => b.id.localeCompare(a.id))[0]; return (<div key={partner} onClick={() => handleOpenChat(partner)} className="p-4 border rounded cursor-pointer hover:bg-white/5 flex gap-4 items-center"><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(partner)} alt={partner} /></div><div className="flex-1 min-w-0"><div className="flex justify-between mb-1"><span className="font-bold font-pixel text-xs">@{partner}</span><span className="text-[10px] opacity-50">{lastMsg.timestamp}</span></div><p className="text-xs font-mono opacity-70 truncate">{lastMsg.sender === user?.username ? 'Вы: ' : ''}{lastMsg.text}</p></div></div>); }); })()}</div>)}
+                {activityTab === 'UPDATES' ? (<div className="space-y-4">{aggregatedNotifications.length === 0 ? (<div className="text-center opacity-50 py-10 font-mono text-sm">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className={`font-bold text-xs ${!n.isRead ? 'text-green-500' : ''}`}>@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className={`text-[10px] font-mono leading-tight ${!n.isRead ? 'text-white' : 'opacity-70'}`}>{renderNotificationText(n)}</div></div>)))}</div>) : (<div className="space-y-2">{/* Dialogs logic */ (() => { const partners = new Set<string>(); messages.forEach(m => { if(m.sender === user?.username) partners.add(m.receiver); else if(m.receiver === user?.username) partners.add(m.sender); }); if(partners.size === 0) return <div className="text-center opacity-50 py-10 font-mono text-sm">Нет диалогов</div>; return Array.from(partners).map(partner => { const lastMsg = messages.filter(m => (m.sender === partner && m.receiver === user?.username) || (m.sender === user?.username && m.receiver === partner)).sort((a,b) => b.id.localeCompare(a.id))[0]; return (<div key={partner} onClick={() => handleOpenChat(partner)} className="p-4 border rounded cursor-pointer hover:bg-white/5 flex gap-4 items-center"><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(partner)} alt={partner} /></div><div className="flex-1 min-w-0"><div className="flex justify-between mb-1"><span className="font-bold font-pixel text-xs">@{partner}</span><span className="text-[10px] opacity-50">{lastMsg.timestamp}</span></div><p className="text-xs font-mono opacity-70 truncate">{lastMsg.sender === user?.username ? 'Вы: ' : ''}{lastMsg.text}</p></div></div>); }); })()}</div>)}
             </div>
         );
     }
@@ -1154,7 +1222,7 @@ export default function App() {
           {view !== 'AUTH' && (
               <header className={`p-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
                  <a href="#/feed" onClick={handleResetFeed} className="flex items-center gap-3 group"><div className={`p-2 rounded border transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary group-hover:bg-white group-hover:text-black' : 'bg-light-accent text-white border-light-accent group-hover:bg-black group-hover:text-white'}`}><Terminal size={20} /></div><span className={`font-pixel text-lg hidden md:block transition-colors ${theme === 'dark' ? 'text-white group-hover:text-dark-primary' : 'text-black group-hover:text-light-accent'}`}>NEO_ARCHIVE</span></a>
-                 <div className="flex items-center gap-4"><div className="relative hidden md:block"><button onClick={() => setShowDesktopNotifications(!showDesktopNotifications)} className="relative p-2"><Bell size={20} className={userNotifications.length > 0 ? "animate-pulse text-green-500" : ""} />{userNotifications.length > 0 && <span className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full"></span>}</button>{showDesktopNotifications && (<div className={`absolute top-full right-0 mt-2 w-72 rounded border shadow-xl z-50 overflow-hidden ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}><div className="p-2 border-b border-gray-500/30 text-[10px] font-pixel opacity-70">SYSTEM_ALERTS</div><div className="max-h-64 overflow-y-auto">{aggregatedNotifications.length === 0 ? (<div className="p-4 text-center text-xs font-mono opacity-50">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className="font-bold text-xs">@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className="text-[10px] font-mono leading-tight">{n.type === 'LIKE' && (n.count > 1 ? `оценил ${n.count} артефактов` : 'оценил ваш артефакт')}{n.type === 'COMMENT' && (n.count > 1 ? `оставил ${n.count} комментариев` : 'оставил комментарий')}{n.type === 'FOLLOW' && 'теперь читает вас'}</div></div>)))}</div><button onClick={handleOpenUpdates} className="w-full py-2 text-center text-[10px] font-pixel border-t border-gray-500/30 hover:bg-white/5">ПОКАЗАТЬ ВСЕ</button></div>)}</div>{user && (<div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}><div className="text-right hidden md:block"><div className={`font-pixel text-xs font-bold ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>@{user.username}</div></div><div className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden border border-gray-500"><img src={user.avatarUrl} alt="Avatar" /></div></div>)}<button onClick={() => setView('SETTINGS')}><Settings size={20} /></button><button onClick={handleLogout} className="text-red-500"><LogOut size={20} /></button></div>
+                 <div className="flex items-center gap-4"><div className="relative hidden md:block"><button onClick={() => setShowDesktopNotifications(!showDesktopNotifications)} className="relative p-2"><Bell size={20} className={userNotifications.some(n => !n.isRead) ? "animate-pulse text-green-500" : ""} />{userNotifications.some(n => !n.isRead) && <span className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full"></span>}</button>{showDesktopNotifications && (<div className={`absolute top-full right-0 mt-2 w-72 rounded border shadow-xl z-50 overflow-hidden ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}><div className="p-2 border-b border-gray-500/30 text-[10px] font-pixel opacity-70">SYSTEM_ALERTS</div><div className="max-h-64 overflow-y-auto">{aggregatedNotifications.length === 0 ? (<div className="p-4 text-center text-xs font-mono opacity-50">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className={`font-bold text-xs ${!n.isRead ? 'text-green-500' : ''}`}>@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className={`text-[10px] font-mono leading-tight ${!n.isRead ? 'text-white' : 'opacity-70'}`}>{renderNotificationText(n)}</div></div>)))}</div><button onClick={handleOpenUpdates} className="w-full py-2 text-center text-[10px] font-pixel border-t border-gray-500/30 hover:bg-white/5">ПОКАЗАТЬ ВСЕ</button></div>)}</div>{user && (<div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}><div className="text-right hidden md:block"><div className={`font-pixel text-xs font-bold ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>@{user.username}</div></div><div className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden border border-gray-500"><img src={user.avatarUrl} alt="Avatar" /></div></div>)}<button onClick={() => setView('SETTINGS')}><Settings size={20} /></button><button onClick={handleLogout} className="text-red-500"><LogOut size={20} /></button></div>
               </header>
           )}
           <main className="flex-1 p-4 md:p-6 overflow-x-hidden">
@@ -1162,7 +1230,7 @@ export default function App() {
               {view === 'EXHIBIT' && selectedExhibit && (<ExhibitDetailPage exhibit={selectedExhibit} theme={theme} onBack={handleBack} onShare={(id) => handleShareCollection({id, title: selectedExhibit.title, description: selectedExhibit.description, coverImage: selectedExhibit.imageUrls[0]} as Collection)} onFavorite={(id) => toggleFavorite(id)} onLike={(id) => toggleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false} onPostComment={handlePostComment} onAuthorClick={handleAuthorClick} onFollow={handleFollow} onMessage={handleOpenChat} onDelete={user?.username === selectedExhibit.owner || user?.isAdmin ? handleDeleteExhibit : undefined} onEdit={user?.username === selectedExhibit.owner ? handleEditExhibit : undefined} isFollowing={user?.following.includes(selectedExhibit.owner) || false} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} />)}
               {view !== 'EXHIBIT' && renderContentArea()}
           </main>
-          {view !== 'AUTH' && (<MobileNavigation theme={theme} view={view} setView={setView} updateHash={updateHash} hasNotifications={userNotifications.length > 0} username={user?.username || ''} onResetFeed={handleResetFeed} onProfileClick={() => { if (user) { setViewedProfile(user.username); setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); } }} />)}
+          {view !== 'AUTH' && (<MobileNavigation theme={theme} view={view} setView={setView} updateHash={updateHash} hasNotifications={userNotifications.some(n => !n.isRead)} username={user?.username || ''} onResetFeed={handleResetFeed} onProfileClick={() => { if (user) { setViewedProfile(user.username); setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); } }} />)}
        </div>
     </div>
   );
