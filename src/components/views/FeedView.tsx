@@ -28,13 +28,13 @@ interface FeedViewProps {
     updateHash: (path: string) => void;
 }
 
-const shuffleArray = <T,>(array: T[]): T[] => {
-    const newArr = [...array];
-    for (let i = newArr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-    }
-    return newArr;
+const parseDate = (str: string) => {
+    try {
+        const [d, t] = str.split(', ');
+        const [day, month, year] = d.split('.').map(Number);
+        const [h, m, s] = t.split(':').map(Number);
+        return new Date(year, month - 1, day, h, m, s).getTime();
+    } catch { return 0; }
 };
 
 const FeedView: React.FC<FeedViewProps> = ({ 
@@ -45,29 +45,40 @@ const FeedView: React.FC<FeedViewProps> = ({
     const { followedItems, recommendedItems } = useMemo(() => {
         let allItems = exhibits.filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory));
         
-        if (!user) return { followedItems: [], recommendedItems: shuffleArray(allItems) };
+        if (!user) {
+            // Sort by date descending for guests (stable feed)
+            return { 
+                followedItems: [], 
+                recommendedItems: allItems.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)) 
+            };
+        }
 
         // Items from people I follow
         const followed = allItems.filter(item => user.following.includes(item.owner));
         
-        // Include everything else (including my own items) that I'm not following
+        // Everything else (including my own items)
         const others = allItems.filter(item => !user.following.includes(item.owner));
         
         return {
-            followedItems: followed.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), // Newest first
-            recommendedItems: shuffleArray(others) // Random freshness
+            followedItems: followed.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)), // Newest first
+            recommendedItems: others.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)) // Newest first (Stable)
         };
     }, [exhibits, selectedCategory, user]);
 
     const { followedCollections, recommendedCollections } = useMemo(() => {
-        if (!user) return { followedCollections: [], recommendedCollections: shuffleArray(collections) };
+        if (!user) {
+            return { 
+                followedCollections: [], 
+                recommendedCollections: collections.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)) 
+            };
+        }
 
         const followed = collections.filter(c => user.following.includes(c.owner));
         const others = collections.filter(c => !user.following.includes(c.owner));
 
         return {
-            followedCollections: followed.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-            recommendedCollections: shuffleArray(others)
+            followedCollections: followed.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)),
+            recommendedCollections: others.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp))
         };
     }, [collections, user]);
 

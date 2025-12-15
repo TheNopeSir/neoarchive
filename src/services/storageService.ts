@@ -58,7 +58,7 @@ const saveToLocalCache = () => {
         const payload = { version: CACHE_VERSION, data: cache };
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
     } catch (e: any) { 
-        console.warn("⚠️ [Storage] Cache save failed (Quota Exceeded?):", e.name); 
+        console.warn("⚠️ [Storage] Cache save failed (Quota Exceeded?):", e?.name || e); 
         // We do not throw here to prevent app crash. The app continues in-memory.
     }
 };
@@ -298,4 +298,3 @@ export const markMessagesRead = async (sender: string, receiver: string) => {
     cache.messages.forEach(m => { if(m.sender === sender && m.receiver === receiver) m.isRead = true; });
     saveToLocalCache();
 };
-    
