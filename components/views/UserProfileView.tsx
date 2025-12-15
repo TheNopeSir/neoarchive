@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X } from 'lucide-react';
 import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus } from '../../types';

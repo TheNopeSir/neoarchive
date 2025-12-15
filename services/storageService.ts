@@ -1,3 +1,4 @@
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -503,6 +504,21 @@ export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
     saveToLocalCache();
     await supabase.from('guestbook').upsert(toDbPayload(entry));
+};
+
+export const updateGuestbookEntry = async (entry: GuestbookEntry) => {
+    const idx = cache.guestbook.findIndex(g => g.id === entry.id);
+    if (idx !== -1) {
+        cache.guestbook[idx] = entry;
+        saveToLocalCache();
+        await supabase.from('guestbook').upsert(toDbPayload(entry));
+    }
+};
+
+export const deleteGuestbookEntry = async (id: string) => {
+    cache.guestbook = cache.guestbook.filter(g => g.id !== id);
+    saveToLocalCache();
+    await supabase.from('guestbook').delete().eq('id', id);
 };
 
 export const getMessages = (): Message[] => cache.messages;
