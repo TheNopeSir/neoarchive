@@ -35,15 +35,77 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
+
         runtimeCaching: [
+          // Внешние изображения - долгое кэширование
+          {
+            urlPattern: /^https:\/\/.*\.(png|jpg|jpeg|svg|gif|webp)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'external-images',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 дней
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+
+          // API запросы - Network First с коротким кэшем
+          {
+            urlPattern: /^https?:\/\/.*\/api\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              networkTimeoutSeconds: 10,
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 5 // 5 минут
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+
+          // Supabase Storage - долгое кэширование
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'supabase-storage',
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 дней
+              }
+            }
+          },
+
+          // UI Avatars - долгое кэширование
+          {
+            urlPattern: /^https:\/\/ui-avatars\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'avatar-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 дней
+              }
+            }
+          },
+
+          // Picsum Photos (если используются)
           {
             urlPattern: /^https:\/\/picsum\.photos\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'image-cache',
+              cacheName: 'placeholder-images',
               expiration: {
                 maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
+                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 дней
               }
             }
           }
