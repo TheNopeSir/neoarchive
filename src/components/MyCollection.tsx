@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { ArrowLeft, Box, FolderOpen, Share2 } from 'lucide-react';
 import { Exhibit, UserProfile, Collection } from '../types';
@@ -142,7 +143,6 @@ const MyCollection: React.FC<MyCollectionProps> = ({ theme, user, exhibits, coll
                             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                                 {filteredExhibits.map((item) => (
                                     <div key={item.id} className="relative group">
-                                        {/* Shelf Underline visual */}
                                         <div className={`absolute bottom-0 left-[-10px] right-[-10px] h-3 z-0 rounded-sm transform translate-y-1/2 ${
                                             theme === 'dark' 
                                             ? 'bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 shadow-black shadow-lg' 

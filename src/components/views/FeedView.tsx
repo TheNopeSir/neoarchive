@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Box, Grid, Sparkles, UserCheck, FolderOpen } from 'lucide-react';
 import { Exhibit, Collection, UserProfile, ViewState } from '../../types';
@@ -45,31 +46,32 @@ const FeedView: React.FC<FeedViewProps> = ({
     const { followedItems, recommendedItems } = useMemo(() => {
         let allItems = exhibits.filter(ex => !ex.isDraft && (selectedCategory === 'ВСЕ' || ex.category === selectedCategory));
         
+        // Sorting logic: Newest first (by timestamp) instead of random shuffle
+        const sortFn = (a: Exhibit, b: Exhibit) => parseDate(b.timestamp) - parseDate(a.timestamp);
+
         if (!user) {
-            // Sort by date descending for guests (stable feed)
             return { 
                 followedItems: [], 
-                recommendedItems: allItems.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)) 
+                recommendedItems: allItems.sort(sortFn) 
             };
         }
 
-        // Items from people I follow
         const followed = allItems.filter(item => user.following.includes(item.owner));
-        
-        // Everything else (including my own items)
         const others = allItems.filter(item => !user.following.includes(item.owner));
         
         return {
-            followedItems: followed.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)), // Newest first
-            recommendedItems: others.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)) // Newest first (Stable)
+            followedItems: followed.sort(sortFn),
+            recommendedItems: others.sort(sortFn)
         };
     }, [exhibits, selectedCategory, user]);
 
     const { followedCollections, recommendedCollections } = useMemo(() => {
+        const sortFn = (a: Collection, b: Collection) => parseDate(b.timestamp) - parseDate(a.timestamp);
+
         if (!user) {
             return { 
                 followedCollections: [], 
-                recommendedCollections: collections.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)) 
+                recommendedCollections: collections.sort(sortFn) 
             };
         }
 
@@ -77,8 +79,8 @@ const FeedView: React.FC<FeedViewProps> = ({
         const others = collections.filter(c => !user.following.includes(c.owner));
 
         return {
-            followedCollections: followed.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp)),
-            recommendedCollections: others.sort((a,b) => parseDate(b.timestamp) - parseDate(a.timestamp))
+            followedCollections: followed.sort(sortFn),
+            recommendedCollections: others.sort(sortFn)
         };
     }, [collections, user]);
 
