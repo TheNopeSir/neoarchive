@@ -16,7 +16,7 @@ let cache = {
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '2.4.0-GlobalForceUpdate'; 
+const CACHE_VERSION = '2.4.2-RecSys'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -138,6 +138,28 @@ export const autoCleanStorage = async () => {
         
         window.location.reload(); 
     }
+};
+
+// --- PREFERENCES LOGIC ---
+export const updateUserPreference = async (username: string, category: string, weight: number) => {
+    const userIndex = cache.users.findIndex(u => u.username === username);
+    if (userIndex === -1) return;
+
+    const user = cache.users[userIndex];
+    const currentPrefs = user.preferences || {};
+    const newWeight = (currentPrefs[category] || 0) + weight;
+    
+    // Update local state
+    const updatedUser = { 
+        ...user, 
+        preferences: { ...currentPrefs, [category]: newWeight } 
+    };
+    cache.users[userIndex] = updatedUser;
+    
+    // Save (Debounced save logic would be better in real app, but direct for now)
+    saveToLocalCache();
+    // We don't await the DB update to keep UI snappy
+    supabase.from('users').upsert({ username: user.username, data: updatedUser });
 };
 
 // --- IMAGE COMPRESSION UTILITY ---
@@ -293,7 +315,8 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
                 avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
                 joinedDate: new Date().toLocaleDateString(),
                 following: [],
-                achievements: []
+                achievements: [],
+                preferences: {}
             };
         }
     }
@@ -336,7 +359,8 @@ export const registerUser = async (username: string, password: string, tagline: 
         following: [],
         achievements: isSuperAdmin ? ['HELLO_WORLD', 'LEGEND', 'THE_ONE'] : ['HELLO_WORLD'],
         isAdmin: isSuperAdmin,
-        telegram: telegram
+        telegram: telegram,
+        preferences: {}
     };
 
     cache.users.push(userProfile);
@@ -357,7 +381,8 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
             following: [],
             achievements: ['LEGEND', 'THE_ONE'],
             isAdmin: true,
-            status: 'ONLINE'
+            status: 'ONLINE',
+            preferences: {}
         };
         cache.users = cache.users.filter(u => u.username !== 'TheArchitect');
         cache.users.push(adminProfile);
@@ -389,7 +414,8 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
                 avatarUrl: getUserAvatar(username),
                 joinedDate: new Date().toLocaleString('ru-RU'),
                 following: [],
-                achievements: []
+                achievements: [],
+                preferences: {}
             };
             await supabase.from('users').upsert({ username, data: newProfile });
             cache.users.push(newProfile);

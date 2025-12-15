@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { Mail, Lock, ArrowRight, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mail, Lock, ArrowRight, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square, Send } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -9,7 +9,7 @@ interface MatrixLoginProps {
   onLogin: (user: UserProfile, remember: boolean) => void;
 }
 
-type AuthStep = 'ENTRY' | 'LOGIN' | 'REGISTER';
+type AuthStep = 'ENTRY' | 'LOGIN' | 'REGISTER' | 'TELEGRAM';
 
 const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const [step, setStep] = useState<AuthStep>('ENTRY');
@@ -20,6 +20,10 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const [username, setUsername] = useState('');
   const [tagline, setTagline] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
+  
+  // Telegram State
+  const [tgUsername, setTgUsername] = useState('');
+  const telegramWrapperRef = useRef<HTMLDivElement>(null);
 
   // UI State
   const [error, setError] = useState('');
@@ -36,12 +40,31 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     return () => clearInterval(interval);
   }, []);
 
+  // Telegram Widget Injection
+  useEffect(() => {
+      if (step === 'TELEGRAM' && telegramWrapperRef.current) {
+          // Clear previous scripts if any
+          telegramWrapperRef.current.innerHTML = '';
+          
+          const script = document.createElement('script');
+          script.src = "https://telegram.org/js/telegram-widget.js?22";
+          script.async = true;
+          script.setAttribute('data-telegram-login', 'TrusterStoryBot');
+          script.setAttribute('data-size', 'medium');
+          script.setAttribute('data-auth-url', 'https://neoarchive.ru/');
+          script.setAttribute('data-request-access', 'write');
+          
+          telegramWrapperRef.current.appendChild(script);
+      }
+  }, [step]);
+
   const resetForm = () => {
       setError('');
       setInfoMessage('');
       setPassword('');
       setUsername('');
       setTagline('');
+      setTgUsername('');
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -95,6 +118,39 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     }
   };
 
+  const handleTelegramAuthManual = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!tgUsername) {
+          setError('ВВЕДИТЕ TELEGRAM USERNAME');
+          return;
+      }
+      setIsLoading(true);
+      
+      // Simulation of Telegram Widget behavior for client-side demo
+      setTimeout(async () => {
+          try {
+              const cleanTg = tgUsername.replace('@', '');
+              // We create a mock account linked to TG
+              const mockEmail = `${cleanTg}@telegram.neoarchive`;
+              const mockPass = `tg_secure_${cleanTg}`;
+              
+              try {
+                  // Try login first
+                  const user = await db.loginUser(mockEmail, mockPass);
+                  onLogin(user, rememberMe);
+              } catch {
+                  // If fails, register
+                  const user = await db.registerUser(cleanTg, mockPass, 'Telegram User', mockEmail, cleanTg);
+                  onLogin(user, rememberMe);
+              }
+          } catch (err: any) {
+              setError(err.message || "ОШИБКА TELEGRAM AUTH");
+          } finally {
+              setIsLoading(false);
+          }
+      }, 1500);
+  };
+
   const renderContent = () => {
     if (step === 'ENTRY') {
         return (
@@ -108,6 +164,17 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                     <span>ВХОД</span>
                     <Terminal size={24} className="group-hover:animate-pulse" />
                 </button>
+                
+                <button 
+                  onClick={() => { setStep('TELEGRAM'); resetForm(); }}
+                  className={`py-4 px-6 border-2 font-pixel text-lg uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${
+                      theme === 'dark' ? 'border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black' : 'border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white'
+                  }`}
+                >
+                    <span>TELEGRAM</span>
+                    <Send size={24} />
+                </button>
+
                 <button 
                   onClick={() => { setStep('REGISTER'); resetForm(); }}
                   className={`py-4 px-6 border-2 font-pixel text-lg uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${
@@ -119,6 +186,59 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                 </button>
             </div>
         )
+    }
+
+    if (step === 'TELEGRAM') {
+        return (
+            <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
+                 <div className="text-center font-mono text-xs opacity-70 mb-2">
+                     АВТОРИЗАЦИЯ ЧЕРЕЗ TELEGRAM
+                 </div>
+                 
+                 {/* Widget Container */}
+                 <div className="flex justify-center my-4 p-4 bg-white/5 rounded" ref={telegramWrapperRef}>
+                     <RetroLoader text="WIDGET_LOADING" />
+                 </div>
+
+                 <div className="relative flex items-center justify-center my-2">
+                     <span className="bg-black px-2 text-[10px] text-gray-500 z-10">ИЛИ ВРУЧНУЮ</span>
+                     <div className="absolute w-full border-t border-gray-800"></div>
+                 </div>
+
+                 {/* Manual Fallback */}
+                 <form onSubmit={handleTelegramAuthManual} className="w-full">
+                     <div className="space-y-1">
+                        <label className="text-[10px] font-pixel uppercase opacity-70">TELEGRAM USERNAME</label>
+                        <div className="flex items-center gap-2 border-b-2 p-2 border-current focus-within:opacity-100 opacity-70 transition-opacity">
+                            <Send size={18} />
+                            <input 
+                                value={tgUsername}
+                                onChange={e => setTgUsername(e.target.value)}
+                                className="bg-transparent w-full focus:outline-none font-mono text-sm"
+                                placeholder="@neo_user"
+                            />
+                        </div>
+                     </div>
+
+                     {error && (
+                         <div className="flex items-center gap-2 text-red-500 font-bold text-xs font-mono justify-center animate-pulse border border-red-500 p-2 mt-4">
+                             <AlertCircle size={16}/> {error}
+                         </div>
+                     )}
+
+                     <button 
+                         disabled={isLoading}
+                         className={`mt-4 w-full py-3 font-bold font-pixel uppercase ${
+                             theme === 'dark' ? 'bg-blue-500 text-black' : 'bg-blue-600 text-white'
+                         }`}
+                     >
+                         {isLoading ? 'СОЕДИНЕНИЕ...' : 'ВОЙТИ'}
+                     </button>
+                 </form>
+                 
+                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
+            </div>
+        );
     }
 
     if (step === 'LOGIN') {
@@ -286,7 +406,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
          <div className="mb-8 relative overflow-hidden">
              <h2 className={`text-lg md:text-xl font-pixel font-bold uppercase ${glitchIntensity > 0.5 ? 'translate-x-1 text-red-500' : ''}`}>
                  {step === 'ENTRY' ? 'ИДЕНТИФИКАЦИЯ' : 
-                  step === 'LOGIN' ? 'ВХОД В СИСТЕМУ' : 'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}
+                  step === 'LOGIN' ? 'ВХОД В СИСТЕМУ' : 
+                  step === 'TELEGRAM' ? 'TELEGRAM LINK' : 'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}
              </h2>
          </div>
 
@@ -295,5 +416,13 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     </div>
   );
 };
+
+// Simple internal Loader for widget
+const RetroLoader = ({text}: {text: string}) => (
+    <div className="flex flex-col items-center">
+        <div className="w-4 h-4 border-2 border-t-transparent border-current rounded-full animate-spin mb-2"></div>
+        <span className="text-[9px] font-mono animate-pulse">{text}</span>
+    </div>
+);
 
 export default MatrixLogin;

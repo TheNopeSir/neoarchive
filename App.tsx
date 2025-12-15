@@ -6,7 +6,6 @@ import {
   ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, Send, 
   Video, Image as ImageIcon, WifiOff, Download, Box, Package, User,
   X, ArrowLeft, Upload, Home, PlusCircle, Heart, MessageSquare, MessageCircle, FolderOpen,
-  // FIX: Import 'Settings' icon from lucide-react
   Settings
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
@@ -25,7 +24,7 @@ import { Exhibit, ViewState, Comment, UserProfile, Collection, Notification, Mes
 import { DefaultCategory, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS, COMMON_SPEC_VALUES, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from './constants';
 import { moderateContent, moderateImage } from './services/geminiService';
 import * as db from './services/storageService';
-import { compressImage, isOffline, getUserAvatar, autoCleanStorage } from './services/storageService';
+import { compressImage, isOffline, getUserAvatar, autoCleanStorage, updateUserPreference } from './services/storageService';
 import useSwipe from './hooks/useSwipe';
 
 // Helper to generate specs based on category
@@ -219,7 +218,8 @@ export default function App() {
   const [viewedProfile, setViewedProfile] = useState<string | null>(null);
   const [activityTab, setActivityTab] = useState<'UPDATES' | 'DIALOGS'>('UPDATES');
   const [badgeIndex, setBadgeIndex] = useState(0);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false); 
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [showDesktopNotifications, setShowDesktopNotifications] = useState(false);
   
   // Pagination State
   const [visibleCount, setVisibleCount] = useState(12);
@@ -503,6 +503,10 @@ export default function App() {
   const handleExhibitClick = (item: Exhibit) => {
       if (!item) return;
       if (!viewedExhibitsSession.has(item.id)) {
+          // Increase view weight by 0.1
+          if(user) {
+              db.updateUserPreference(user.username, item.category, 0.1);
+          }
           const updatedItem = { ...item, views: item.views + 1 };
           db.updateExhibit(updatedItem);
           const exIndex = exhibits.findIndex(x => x.id === item.id);
@@ -763,6 +767,10 @@ export default function App() {
       } else {
           ex.likes++;
           ex.likedBy.push(username);
+          // Increase preference weight by 1.0 for like
+          if(user) {
+              db.updateUserPreference(user.username, ex.category, 1.0);
+          }
           if (ex.owner !== username) {
              const notif: Notification = {
                  id: Date.now().toString(),
@@ -793,6 +801,10 @@ export default function App() {
       const updatedExhibits = [...exhibits];
       const ex = { ...updatedExhibits[exIndex] }; 
       const username = user?.username || 'Guest';
+      // Increase preference weight by 2.0 for comment
+      if(user) {
+          db.updateUserPreference(user.username, ex.category, 2.0);
+      }
       const newComment: Comment = {
           id: Date.now().toString(),
           author: username,
@@ -1609,11 +1621,36 @@ export default function App() {
 
       default:
       case 'FEED':
+          // Recommendation Engine Logic
           const feedItems = feedMode === 'ARTIFACTS' 
-             ? exhibits.filter(e => !e.isDraft && (selectedCategory === 'ВСЕ' || e.category === selectedCategory))
+             ? exhibits.filter(e => {
+                 // Remove drafts
+                 if (e.isDraft) return false;
+                 // HARD FILTER: Remove specific bad artifact ID
+                 if (e.id === '-2746') return false; 
+                 // Category filter
+                 if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
+                 return true;
+             })
              : [];
-          // ... sorting ...
-          const sortedFeed = feedItems.sort((a,b) => calculateArtifactScore(b) - calculateArtifactScore(a)).slice(0, visibleCount);
+          
+          // Weighted Sort Algorithm
+          const sortedFeed = feedItems.sort((a,b) => {
+              let scoreA = calculateArtifactScore(a);
+              let scoreB = calculateArtifactScore(b);
+
+              // Apply User Preference Weights if logged in
+              if (user && user.preferences) {
+                  const weightA = user.preferences[a.category] || 0;
+                  const weightB = user.preferences[b.category] || 0;
+                  
+                  // Simple multiplier: 1 + (weight * 0.5) to keep likes relevant but boost preferred cats
+                  scoreA = scoreA * (1 + (weightA * 0.5));
+                  scoreB = scoreB * (1 + (weightB * 0.5));
+              }
+
+              return scoreB - scoreA;
+          }).slice(0, visibleCount);
           
           return (
               <div className="animate-in fade-in">
@@ -1661,6 +1698,8 @@ export default function App() {
     }
   };
 
+  const userNotifications = user ? notifications.filter(n => n.recipient === user.username && !n.isRead) : [];
+
   return (
     <div className={`min-h-screen transition-colors duration-500 ${theme === 'dark' ? 'bg-black text-gray-300' : 'bg-gray-50 text-gray-800'} font-sans selection:bg-green-500 selection:text-black`}>
        <MatrixRain theme={theme} />
@@ -1682,6 +1721,57 @@ export default function App() {
                      <span className={`font-pixel text-lg hidden md:block transition-colors ${theme === 'dark' ? 'text-white group-hover:text-dark-primary' : 'text-black group-hover:text-light-accent'}`}>NEO_ARCHIVE</span>
                  </a>
                  <div className="flex items-center gap-4">
+                     {/* Desktop Notifications Dropdown */}
+                     <div className="relative hidden md:block">
+                         <button 
+                            onClick={() => setShowDesktopNotifications(!showDesktopNotifications)}
+                            className="relative p-2"
+                         >
+                             <Bell size={20} className={userNotifications.length > 0 ? "animate-pulse text-red-500" : ""} />
+                             {userNotifications.length > 0 && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>}
+                         </button>
+                         
+                         {showDesktopNotifications && (
+                             <div className={`absolute top-full right-0 mt-2 w-72 rounded border shadow-xl z-50 overflow-hidden ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
+                                 <div className="p-2 border-b border-gray-500/30 text-[10px] font-pixel opacity-70">SYSTEM_ALERTS</div>
+                                 <div className="max-h-64 overflow-y-auto">
+                                     {userNotifications.length === 0 ? (
+                                         <div className="p-4 text-center text-xs font-mono opacity-50">Нет новых событий</div>
+                                     ) : (
+                                         userNotifications.map(n => (
+                                             <div 
+                                                key={n.id} 
+                                                onClick={() => {
+                                                    setShowDesktopNotifications(false);
+                                                    if(n.targetId) {
+                                                        const item = exhibits.find(e => e.id === n.targetId);
+                                                        if(item) handleExhibitClick(item);
+                                                    } else {
+                                                        handleAuthorClick(n.actor);
+                                                    }
+                                                }}
+                                                className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}
+                                             >
+                                                 <div className="flex items-center justify-between mb-1">
+                                                     <span className="font-bold text-xs">@{n.actor}</span>
+                                                     <span className="text-[9px] opacity-50">{n.timestamp}</span>
+                                                 </div>
+                                                 <div className="text-[10px] font-mono leading-tight">
+                                                     {n.type === 'LIKE' && 'оценил ваш артефакт'}
+                                                     {n.type === 'COMMENT' && 'оставил комментарий'}
+                                                     {n.type === 'FOLLOW' && 'теперь читает вас'}
+                                                 </div>
+                                             </div>
+                                         ))
+                                     )}
+                                 </div>
+                                 <button onClick={handleOpenUpdates} className="w-full py-2 text-center text-[10px] font-pixel border-t border-gray-500/30 hover:bg-white/5">
+                                     ПОКАЗАТЬ ВСЕ
+                                 </button>
+                             </div>
+                         )}
+                     </div>
+
                      {user && (
                          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}>
                              <div className="text-right hidden md:block">
@@ -1730,7 +1820,7 @@ export default function App() {
                  view={view} 
                  setView={setView} 
                  updateHash={updateHash} 
-                 hasNotifications={notifications.some(n => !n.isRead && n.recipient === user?.username)}
+                 hasNotifications={userNotifications.length > 0}
                  username={user?.username || ''}
                  onResetFeed={handleResetFeed}
                  onProfileClick={() => {
