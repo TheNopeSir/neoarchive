@@ -1109,12 +1109,17 @@ export default function App() {
       </div>
   );
 
-  // Group notifications logic
+  // Group notifications logic by Actor & Type
   const groupNotifications = (notifs: Notification[]) => {
       const grouped: { [key: string]: Notification & { count: number, ids: string[] } } = {};
       
       notifs.forEach(n => {
-          const key = `${n.actor}-${n.type}-${n.targetId || ''}`;
+          // Key based on actor and type
+          const key = `${n.actor}-${n.type}`;
+          
+          // Special handling: if different targets, we still group by actor+type to clean up UI
+          // e.g. "UserX liked 5 items"
+          
           if (!grouped[key]) {
               grouped[key] = { ...n, count: 1, ids: [n.id] };
           } else {
@@ -1123,14 +1128,28 @@ export default function App() {
               // Update timestamp to latest
               if(new Date(n.timestamp) > new Date(grouped[key].timestamp)) {
                   grouped[key].timestamp = n.timestamp;
+                  // Keep targetId of the latest action to link to it
+                  grouped[key].targetId = n.targetId;
+                  grouped[key].targetPreview = n.targetPreview;
               }
           }
       });
       
-      return Object.values(grouped).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+      return Object.values(grouped).sort((a,b) => {
+          // Parse Russian date format or fallback to timestamp string sort
+          // Since our timestamp is locale string, simplistic sort might fail, but for now we assume consistency
+          // Better approach in real app: store ISO timestamp
+          return b.id.localeCompare(a.id); 
+      });
   };
 
-  const handleNotificationClick = (n: Notification) => {
+  const handleNotificationClick = (n: Notification & { count?: number }) => {
+      // Logic:
+      // If it's a single item or latest item has target -> go to item
+      // If it's a generic action (follow) or user wants to see user -> go to profile
+      // If aggregated and multiple items, prefer going to User Profile to see their activity, OR latest item.
+      // Let's go to latest item if available.
+      
       if (n.targetId) {
           const item = exhibits.find(e => e.id === n.targetId);
           if (item) {

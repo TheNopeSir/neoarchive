@@ -64,23 +64,23 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
               try {
                   // Determine username
                   const neoUsername = user.username || `tg_${user.id}`;
-                  // Create a consistent email for the system
+                  // Create a consistent email for the system (mock email for TG users)
                   const neoEmail = `${user.id}@telegram.neoarchive`;
-                  // Password generation (in real app, use auth token, here we simulate)
-                  const neoPassword = `tg_hash_${user.id}`; // Simple simulation
+                  // Password generation (using hash as secret for demo consistency)
+                  const neoPassword = `tg_secure_${user.id}_${user.hash?.substring(0,8) || 'key'}`;
 
                   let userProfile: UserProfile;
 
                   try {
-                      // Try to login first
+                      // Try to login first (if user exists)
                       userProfile = await db.loginUser(neoEmail, neoPassword);
                   } catch {
-                      // If login fails, register
+                      // If login fails, register new user
                       const displayName = user.username ? `@${user.username}` : `${user.first_name}`;
                       userProfile = await db.registerUser(
                           neoUsername, 
                           neoPassword, 
-                          `Telegram User: ${displayName}`, 
+                          `Telegram Agent: ${displayName}`, 
                           neoEmail, 
                           user.username,
                           user.photo_url
@@ -95,7 +95,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
               }
           };
 
-          // Inject Script
+          // Inject Script dynamically
           telegramWrapperRef.current.innerHTML = '';
           const script = document.createElement('script');
           script.src = "https://telegram.org/js/telegram-widget.js?22";
@@ -153,13 +153,11 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     
     try {
         await db.registerUser(username, password, tagline || 'Новый пользователь', email);
-        
-        // Successful registration usually requires email confirmation in Supabase
-        setInfoMessage('РЕГИСТРАЦИЯ ПРОШЛА УСПЕШНО! ПРОВЕРЬТЕ ПОЧТУ ДЛЯ ПОДТВЕРЖДЕНИЯ АККАУНТА, ЗАТЕМ ВОЙДИТЕ.');
+        setInfoMessage('РЕГИСТРАЦИЯ УСПЕШНА. ВЫПОЛНИТЕ ВХОД.');
         setTimeout(() => {
             setStep('LOGIN');
             setPassword('');
-        }, 5000);
+        }, 3000);
 
     } catch (err: any) {
         setError(err.message || "ОШИБКА РЕГИСТРАЦИИ");

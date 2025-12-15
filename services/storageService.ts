@@ -16,8 +16,8 @@ let cache = {
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-// BUMP VERSION TO CLEAR CACHE
-const CACHE_VERSION = '2.5.0-ForceClear'; 
+// BUMP VERSION TO CLEAR CACHE & FIX QUOTA ISSUES
+const CACHE_VERSION = '2.6.0-QuotaFix'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -60,7 +60,22 @@ const saveToLocalCache = () => {
             data: cache
         };
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
-    } catch (e) { console.error("Cache Error", e); }
+    } catch (e: any) { 
+        // Handle QuotaExceededError
+        if (e.name === 'QuotaExceededError' || e.code === 22 || e.message?.includes('quota')) {
+            console.error("🔴 [Cache] Storage Quota Exceeded! Clearing storage to prevent crash...");
+            try {
+                // Emergency clear
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                // Attempt to save a lightweight version (keep users/msgs, drop exhibits if needed, but for now just clear)
+                // Ideally, we might want to trim old exhibits here, but a fresh start is safer for now.
+            } catch (retryErr) {
+                console.error("🔴 [Cache] Critical Storage Failure", retryErr);
+            }
+        } else {
+            console.error("Cache Save Error", e); 
+        }
+    }
 };
 
 const loadFromLocalCache = (): boolean => {
@@ -86,6 +101,7 @@ const loadFromLocalCache = (): boolean => {
             };
             return true;
         } catch (e) { 
+            console.warn("Cache parse error, clearing.", e);
             localStorage.removeItem(LOCAL_STORAGE_KEY);
             return false; 
         }
@@ -157,7 +173,7 @@ export const updateUserPreference = async (username: string, category: string, w
     };
     cache.users[userIndex] = updatedUser;
     
-    // Save (Debounced save logic would be better in real app, but direct for now)
+    // Save
     saveToLocalCache();
     // We don't await the DB update to keep UI snappy
     supabase.from('users').upsert({ username: user.username, data: updatedUser });
@@ -340,7 +356,7 @@ export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOStr
 export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string, avatarUrl?: string): Promise<UserProfile> => {
     const usernameExists = cache.users.some(u => u.username.toLowerCase() === username.toLowerCase());
     if (usernameExists) {
-        // If it's a telegram login, we might want to return the existing user instead of throwing error if password matches or if it's external auth flow
+        // If it's a telegram login, assume login if telegram match
         const existing = cache.users.find(u => u.username.toLowerCase() === username.toLowerCase());
         if(existing && telegram && existing.telegram === telegram) return existing;
         if(!telegram) throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
@@ -353,7 +369,6 @@ export const registerUser = async (username: string, password: string, tagline: 
     });
 
     if (error) throw new Error(error.message);
-    // Note: In real world, email confirmation is needed. For demo/TG, we proceed nicely.
 
     const isSuperAdmin = email === 'admin@neoarchive.net';
     const userProfile: UserProfile = {
@@ -367,7 +382,7 @@ export const registerUser = async (username: string, password: string, tagline: 
         isAdmin: isSuperAdmin,
         telegram: telegram,
         preferences: {},
-        password: password // Storing for convenience in this client-side demo only
+        password: password
     };
 
     cache.users.push(userProfile);
@@ -399,7 +414,7 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     
-    // Fallback to local search if offline or network error
+    // Fallback to local
     if (error || !data.user) {
         const localUser = cache.users.find(u => u.email === email && u.password === password);
         if (localUser) return localUser;
