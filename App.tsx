@@ -448,8 +448,9 @@ export default function App() {
   };
 
   const globalSwipeHandlers = useSwipe({
-      onSwipeLeft: handleGlobalSwipeLeft,
-      onSwipeRight: handleGlobalSwipeRight
+      // FIX: Corrected prop names from onSwipeLeft/Right to onSwipedLeft/Right to match useSwipe hook definition.
+      onSwipedLeft: handleGlobalSwipeLeft,
+      onSwipedRight: handleGlobalSwipeRight
   });
 
   // Reset pagination
@@ -1671,12 +1672,15 @@ export default function App() {
        <div className="relative z-10 max-w-7xl mx-auto min-h-screen flex flex-col" {...globalSwipeHandlers}>
           {view !== 'AUTH' && (
               <header className={`p-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
-                 <div className="flex items-center gap-3">
-                     <div className={`p-2 rounded border ${theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary' : 'bg-light-accent text-white border-light-accent'}`}>
+                 <button 
+                    onClick={() => { handleResetFeed(); setView('FEED'); updateHash('/feed'); }}
+                    className="flex items-center gap-3 group"
+                  >
+                     <div className={`p-2 rounded border transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary group-hover:bg-white group-hover:text-black' : 'bg-light-accent text-white border-light-accent group-hover:bg-black group-hover:text-white'}`}>
                          <Terminal size={20} />
                      </div>
-                     <span className={`font-pixel text-lg hidden md:block ${theme === 'dark' ? 'text-white' : 'text-black'}`}>NEO_ARCHIVE</span>
-                 </div>
+                     <span className={`font-pixel text-lg hidden md:block transition-colors ${theme === 'dark' ? 'text-white group-hover:text-dark-primary' : 'text-black group-hover:text-light-accent'}`}>NEO_ARCHIVE</span>
+                 </button>
                  <div className="flex items-center gap-4">
                      {user && (
                          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}>
