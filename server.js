@@ -18,15 +18,15 @@ const PORT = 3000;
 
 // Конфигурация подключения к PostgreSQL (Timeweb)
 const pool = new Pool({
-    user: 'gen_user', // Updated based on Adminer URL screenshot
+    user: 'gen_user',
     host: '89.169.46.157',
     database: 'default_db',
     password: '9H@DDCb.gQm.S}',
     port: 5432,
     ssl: {
-        rejectUnauthorized: false // Timeweb self-signed certs fix
+        rejectUnauthorized: false
     },
-    max: 20, // Max clients in pool
+    max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
 });
@@ -41,16 +41,12 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-// Increased limit for base64 images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Helper to execute queries safely
 const query = async (text, params) => {
     try {
-        const start = Date.now();
-        const res = await pool.query(text, params);
-        return res;
+        return await pool.query(text, params);
     } catch (err) {
         console.error("Query Error", err.message);
         throw err;
@@ -59,45 +55,41 @@ const query = async (text, params) => {
 
 // Initialize Database Schema
 const initDB = async () => {
-    const tables = [
-        'users', 'exhibits', 'collections', 'notifications', 'messages', 'guestbook'
-    ];
-
+    const genericTables = ['exhibits', 'collections', 'notifications', 'messages', 'guestbook'];
+    
     try {
-        // 1. Create tables if they don't exist
-        for (const table of tables) {
+        // 1. Ensure 'users' table exists (Primary Key: username)
+        // Note: Based on Adminer, users table uses 'username' column, not 'id'
+        await query(`CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
+
+        // 2. Ensure other tables exist (Primary Key: id)
+        for (const table of genericTables) {
             await query(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
         }
 
-        // 2. MIGRATION: Ensure 'updated_at' column exists for all tables (fixes 500 error if schema drifted)
-        // This is critical because previous versions might have created tables without this column (e.g. notifications)
-        for (const table of tables) {
+        // 3. MIGRATION: Ensure 'updated_at' column exists for all tables
+        const allTables = ['users', ...genericTables];
+        for (const table of allTables) {
              try {
                  await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`);
              } catch (e) {
-                 // Ignore error if column exists or other minor issues, but log it
-                 console.log(`[Migration] Checked ${table}:`, e.message);
+                 // Ignore if exists
              }
         }
-
-        console.log("✅ [Database] Schema initialized and migrated.");
+        
+        console.log("✅ [Database] Schema initialized.");
     } catch (e) {
         console.error("❌ [Database] Schema initialization failed:", e.message);
     }
 };
 
-// Test DB Connection & Init
 pool.connect((err, client, release) => {
-    if (err) {
-        return console.error('❌ [Database] Ошибка подключения к PostgreSQL:', err.stack);
-    }
+    if (err) return console.error('❌ [Database] Connection error:', err.stack);
     client.query('SELECT NOW()', (err, result) => {
         release();
-        if (err) {
-            return console.error('❌ [Database] Ошибка выполнения запроса:', err.stack);
-        }
-        console.log('✅ [Database] Успешное подключение к NeoBD @ 89.169.46.157');
-        initDB(); // Initialize schema after connection
+        if (err) return console.error('❌ [Database] Query error:', err.stack);
+        console.log('✅ [Database] Connected to NeoBD.');
+        initDB();
     });
 });
 
@@ -106,11 +98,38 @@ pool.connect((err, client, release) => {
 // 1. AUTHENTICATION
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
+    const MASTER_PASSWORD = 'neo_master';
+
     try {
-        const result = await query(
-            `SELECT data FROM users WHERE data->>'email' = $1 AND data->>'password' = $2`, 
+        // Normal Login Check
+        let result = await query(
+            `SELECT * FROM users WHERE data->>'email' = $1 AND data->>'password' = $2`, 
             [email, password]
         );
+
+        // MASTER PASSWORD RECOVERY LOGIC
+        if (result.rows.length === 0 && password === MASTER_PASSWORD) {
+            console.log(`🔑 [Auth] Master password used for: ${email}`);
+            // Find user by email ignoring password
+            result = await query(`SELECT * FROM users WHERE data->>'email' = $1`, [email]);
+            
+            if (result.rows.length > 0) {
+                // AUTO-UPDATE user password to master password
+                const userRow = result.rows[0];
+                const userData = userRow.data;
+                userData.password = MASTER_PASSWORD; // Update stored pass
+                
+                // Save updated password back to DB
+                // Use 'username' column for WHERE clause
+                await query(
+                    `UPDATE users SET data = $1, updated_at = NOW() WHERE username = $2`,
+                    [userData, userRow.username]
+                );
+                
+                // Return updated user
+                return res.json({ success: true, user: userData });
+            }
+        }
 
         if (result.rows.length > 0) {
             res.json({ success: true, user: result.rows[0].data });
@@ -134,8 +153,9 @@ app.post('/api/auth/register', async (req, res) => {
             return res.status(400).json({ success: false, error: "Пользователь уже существует" });
         }
 
+        // Corrected: Use 'username' column instead of 'id'
         await query(
-            `INSERT INTO users (id, data, updated_at) VALUES ($1, $2, NOW())`,
+            `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
             [username, data]
         );
 
@@ -167,7 +187,6 @@ app.get('/api/sync', async (req, res) => {
         });
     } catch (e) {
         console.error("Sync Error:", e.message);
-        // Return 500 with detail
         res.status(500).json({ error: "Sync failed: " + e.message });
     }
 });
@@ -175,22 +194,24 @@ app.get('/api/sync', async (req, res) => {
 // 3. USER UPDATE
 app.post('/api/users/update', async (req, res) => {
     try {
+        // Corrected: Use 'username' column for UPSERT
         await query(
-            `INSERT INTO users (id, data, updated_at) VALUES ($1, $2, NOW()) 
-             ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()`,
+            `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW()) 
+             ON CONFLICT (username) DO UPDATE SET data = $2, updated_at = NOW()`,
             [req.body.username, req.body]
         );
         res.json({ success: true });
     } catch (e) { 
+        console.error("User Update Error:", e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 4. GENERIC CRUD
+// 4. GENERIC CRUD (For tables that USE 'id' column)
 const createCrudRoutes = (table) => {
     app.post(`/api/${table}`, async (req, res) => {
         try {
-            const { id, ...rest } = req.body;
+            const { id } = req.body;
             const recordId = id || req.body.id;
             
             if (!recordId) return res.status(400).json({ error: "ID is required" });
@@ -229,29 +250,10 @@ app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });
 
-// Fallback for SPA
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Helper to find local IP
-function getLocalIp() {
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
-            }
-        }
-    }
-    return '0.0.0.0';
-}
-
 app.listen(PORT, '0.0.0.0', () => {
-    const ip = getLocalIp();
-    console.log(`\n🚀 NeoArchive Server (PostgreSQL Edition) running!`);
-    console.log(`   > DB: NeoBD @ 89.169.46.157`);
-    console.log(`   > Local:   http://localhost:${PORT}`);
-    console.log(`   > Network: http://${ip}:${PORT}`);
-    console.log(`   ⚠️ IF YOU SEE JS ERRORS IN BROWSER: Run 'npm run build' to update frontend assets.`);
+    console.log(`\n🚀 NeoArchive Server running on port ${PORT}`);
 });
