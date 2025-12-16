@@ -33,12 +33,17 @@ const pool = new Pool({
 
 // Настройка почты (GMAIL)
 // ВАЖНО: Используйте "Пароль приложения" (App Password), а не пароль от аккаунта!
+// Используем явные настройки (Port 465 + SSL) для стабильности
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Nodemailer имеет встроенные настройки для Gmail
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // Используем SSL
     auth: {
         user: 'truester1337@gmail.com', 
         pass: 'qkpv igjx hgib uoqf'   
-    }
+    },
+    connectionTimeout: 10000, // 10 секунд тайм-аут
+    greetingTimeout: 10000
 });
 
 /* 
