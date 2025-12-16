@@ -29,8 +29,8 @@ RUN npm install --omit=dev
 # Копируем собранный фронтенд из предыдущего этапа
 COPY --from=builder /app/dist ./dist
 
-# Копируем файл сервера
-COPY server.js ./
+# Копируем файлы сервера (оба варианта + db.js для PostgreSQL)
+COPY server.js server-postgres.js db.js ./
 
 # Создаем папку для данных
 RUN mkdir -p data
@@ -42,5 +42,5 @@ ENV HOST=0.0.0.0
 # Открываем порт
 EXPOSE 3000
 
-# Запускаем сервер
-CMD ["node", "server.js"]
+# Запускаем сервер (используем npm start, который запустит server-postgres.js)
+CMD ["npm", "start"]
