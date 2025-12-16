@@ -18,7 +18,7 @@ const PORT = 3000;
 
 // Конфигурация подключения к PostgreSQL (Timeweb)
 const pool = new Pool({
-    user: 'NeoBD',
+    user: 'gen_user', // Updated based on Adminer URL screenshot (NeoBD is likely cluster name)
     host: '89.169.46.157',
     database: 'default_db',
     password: '9H@DDCb.gQm.S}',
