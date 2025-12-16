@@ -31,14 +31,26 @@ const pool = new Pool({
     connectionTimeoutMillis: 2000,
 });
 
-// Настройка почты (SMTP)
+// Настройка почты (SMTP) - Port 2525 (STARTTLS)
 const transporter = nodemailer.createTransport({
     host: 'smtp.timeweb.ru',
-    port: 465,
-    secure: true, // SSL
+    port: 2525,
+    secure: false, // false for STARTTLS (port 587 or 2525)
     auth: {
         user: 'morpheus@neoarch.ru',
         pass: 'RTZ0JwbaRDXdD='
+    },
+    tls: {
+        rejectUnauthorized: false
+    }
+});
+
+// Verify SMTP connection on start
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error("❌ [Mail] SMTP Connection Error:", error);
+    } else {
+        console.log("✅ [Mail] SMTP Server is ready to take our messages");
     }
 });
 
@@ -99,24 +111,31 @@ pool.connect((err, client, release) => {
 
 // --- HELPER: SEND EMAIL ---
 const sendRecoveryEmail = async (email, newPassword) => {
-    const mailOptions = {
-        from: '"NeoArchive System" <morpheus@neoarch.ru>',
-        to: email,
-        subject: 'NeoArchive: Восстановление доступа',
-        text: `Ваш новый пароль доступа к Архиву: ${newPassword}\n\nПожалуйста, измените его после входа, если это необходимо.\n\nWake up...`,
-        html: `
-            <div style="background: black; color: #4ade80; padding: 20px; font-family: monospace;">
-                <h2 style="border-bottom: 1px dashed #4ade80; padding-bottom: 10px;">ВОССТАНОВЛЕНИЕ ДОСТУПА</h2>
-                <p>Система сгенерировала новый ключ доступа для вашей учетной записи.</p>
-                <div style="background: #111; padding: 15px; margin: 20px 0; border: 1px solid #4ade80; font-size: 20px; font-weight: bold; letter-spacing: 2px; text-align: center;">
-                    ${newPassword}
+    try {
+        const mailOptions = {
+            from: '"NeoArchive System" <morpheus@neoarch.ru>',
+            to: email,
+            subject: 'NeoArchive: Восстановление доступа',
+            text: `Ваш новый пароль доступа к Архиву: ${newPassword}\n\nПожалуйста, измените его после входа, если это необходимо.\n\nWake up...`,
+            html: `
+                <div style="background: black; color: #4ade80; padding: 20px; font-family: monospace;">
+                    <h2 style="border-bottom: 1px dashed #4ade80; padding-bottom: 10px;">ВОССТАНОВЛЕНИЕ ДОСТУПА</h2>
+                    <p>Система сгенерировала новый ключ доступа для вашей учетной записи.</p>
+                    <div style="background: #111; padding: 15px; margin: 20px 0; border: 1px solid #4ade80; font-size: 20px; font-weight: bold; letter-spacing: 2px; text-align: center;">
+                        ${newPassword}
+                    </div>
+                    <p style="opacity: 0.7; font-size: 12px;">Используйте этот пароль для входа. Добро пожаловать домой.</p>
+                    <p style="margin-top: 30px; font-size: 10px; color: #666;">NeoArchive System Protocol v3.0</p>
                 </div>
-                <p style="opacity: 0.7; font-size: 12px;">Используйте этот пароль для входа. Добро пожаловать домой.</p>
-                <p style="margin-top: 30px; font-size: 10px; color: #666;">NeoArchive System Protocol v3.0</p>
-            </div>
-        `
-    };
-    await transporter.sendMail(mailOptions);
+            `
+        };
+        const info = await transporter.sendMail(mailOptions);
+        console.log("Message sent: %s", info.messageId);
+        return true;
+    } catch (error) {
+        console.error("SendMail Error:", error);
+        throw error;
+    }
 };
 
 // --- API ROUTES ---
@@ -160,12 +179,15 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/auth/recover', async (req, res) => {
     const { email } = req.body;
+    console.log(`[Recovery] Request for: ${email}`);
+    
     try {
         const result = await query(`SELECT * FROM users WHERE data->>'email' = $1`, [email]);
         
         if (result.rows.length === 0) {
             // Security: Don't reveal if user exists, simulate success delay
             await new Promise(r => setTimeout(r, 1000));
+            console.log(`[Recovery] User not found: ${email}`);
             return res.json({ success: true, message: "Если email существует, инструкции отправлены." });
         }
 
@@ -185,8 +207,8 @@ app.post('/api/auth/recover', async (req, res) => {
 
         res.json({ success: true, message: "Новый пароль отправлен на почту." });
     } catch (e) {
-        console.error("Recovery Error:", e);
-        res.status(500).json({ success: false, error: "Ошибка почтового сервиса" });
+        console.error("Recovery Critical Error:", e);
+        res.status(500).json({ success: false, error: "Ошибка почтового сервиса: " + e.message });
     }
 });
 
@@ -218,9 +240,6 @@ app.get('/api/sync', async (req, res) => {
     const { username } = req.query; // If logged in, prioritize their data
     try {
         // Optimization: Don't fetch ALL exhibits. 
-        // 1. Fetch ALL users (lightweight enough usually, or paginate later)
-        // 2. Fetch MY exhibits + Top 20 Global
-        // 3. Fetch MY collections + Top 20 Global
         
         let exhibitQuery = `SELECT data FROM exhibits ORDER BY updated_at DESC LIMIT 20`;
         let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 20`;

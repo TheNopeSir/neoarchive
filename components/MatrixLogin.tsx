@@ -42,6 +42,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   // UI State
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
+  const [showRecoverOption, setShowRecoverOption] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [glitchIntensity, setGlitchIntensity] = useState(0);
 
@@ -119,6 +120,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const resetForm = () => {
       setError('');
       setInfoMessage('');
+      setShowRecoverOption(false);
       setPassword('');
       setUsername('');
       setTagline('');
@@ -170,6 +172,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
     setIsLoading(true);
     setError('');
+    setShowRecoverOption(false);
     
     try {
         await db.registerUser(username, password, tagline || 'Новый пользователь', email);
@@ -183,6 +186,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
         setError(err.message || "ОШИБКА РЕГИСТРАЦИИ");
         // Suggest recovery if duplicate
         if (err.message.includes('уже существует') || err.message.includes('заняты')) {
+            setShowRecoverOption(true);
             setInfoMessage("Email занят. Попробуйте восстановить пароль.");
         }
     } finally {
@@ -204,7 +208,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
           setInfoMessage(res.message || "Инструкции отправлены на email");
           setTimeout(() => setStep('LOGIN'), 4000);
       } catch (err: any) {
-          setError("ОШИБКА ОТПРАВКИ");
+          setError("ОШИБКА ОТПРАВКИ: " + (err.message || "Сервис недоступен"));
       } finally {
           setIsLoading(false);
       }
@@ -299,7 +303,15 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НИКНЕЙМ *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><User size={18} /><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">СТАТУС (TAGLINE)</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><Terminal size={18} /><input value={tagline} onChange={e => setTagline(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" /></div></div>
                 
-                {infoMessage && <button type="button" onClick={() => setStep('RECOVERY')} className="text-yellow-500 text-xs font-mono border border-yellow-500 p-2 text-center hover:bg-yellow-500/10 block w-full">{infoMessage}</button>}
+                {infoMessage && <button type="button" onClick={() => setStep('RECOVERY')} className="text-yellow-500 text-xs font-mono border border-yellow-500 p-2 text-center hover:bg-yellow-500/10 block w-full mb-2">{infoMessage}</button>}
+                
+                {/* Specific option to recover if email exists */}
+                {showRecoverOption && (
+                    <button type="button" onClick={() => setStep('RECOVERY')} className="w-full py-2 bg-yellow-500/20 text-yellow-500 border border-yellow-500 font-pixel text-xs font-bold animate-pulse hover:bg-yellow-500 hover:text-black">
+                        ВОССТАНОВИТЬ ПАРОЛЬ ДЛЯ {email}
+                    </button>
+                )}
+
                 {error && <div className="text-red-500 font-bold text-xs font-mono text-center border border-red-500 p-2">{error}</div>}
 
                 <button type="submit" disabled={isLoading} className={`mt-4 py-3 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'СОЗДАНИЕ...' : 'ЗАРЕГИСТРИРОВАТЬСЯ'}</button>

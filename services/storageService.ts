@@ -108,14 +108,40 @@ const slugify = (text: string): string => {
     return text.toString().toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').replace(/-+$/, '');
 };
 
+// CACHE PRUNING LOGIC
+// We only want to save relevant data to disk to avoid clogging
+const prepareCacheForStorage = (currentCache: typeof cache) => {
+    const activeUser = localStorage.getItem(SESSION_USER_KEY);
+    
+    // 1. Always keep users (small dataset usually, needed for avatars)
+    const users = currentCache.users;
+
+    // 2. Filter Exhibits: Keep MY items and last 50 feed items
+    const allExhibits = currentCache.exhibits;
+    const myExhibits = activeUser ? allExhibits.filter(e => e.owner === activeUser) : [];
+    // Sort rest by date and take 50
+    const feedExhibits = allExhibits
+        .filter(e => e.owner !== activeUser)
+        .sort((a,b) => b.id.localeCompare(a.id)) // Assuming ID roughly correlates to time or use timestamp
+        .slice(0, 50);
+    
+    // Combine and deduplicate
+    const combinedExhibits = [...myExhibits, ...feedExhibits];
+    const uniqueExhibits = Array.from(new Map(combinedExhibits.map(item => [item.id, item])).values());
+
+    return {
+        ...currentCache,
+        exhibits: uniqueExhibits,
+        // Optional: Prune other large collections if needed
+    };
+};
+
 const saveToLocalCache = async () => {
     try {
-        // Optimization: Don't cache the entire global feed if it gets massive
-        // We mainly want to cache user data and settings
-        // For now, we save what is in memory, but memory is now managed by optimized sync
+        const optimizedCache = prepareCacheForStorage(cache);
         const payload = {
             version: CACHE_VERSION,
-            data: cache
+            data: optimizedCache
         };
         await idb.put(CACHE_KEY, payload);
     } catch (e) { 
@@ -182,6 +208,7 @@ export const loadFeedBatch = async (page: number) => {
             const existingIds = new Set(cache.exhibits.map(e => e.id));
             const uniqueNew = newItems.filter(e => !existingIds.has(e.id));
             cache.exhibits = [...cache.exhibits, ...uniqueNew];
+            // We don't save full history to disk here, only in saveToLocalCache (which prunes)
             return uniqueNew;
         }
         return [];
@@ -201,14 +228,8 @@ const performCloudSync = async () => {
     
     if (data.users) cache.users = data.users;
     
-    // Merge exhibits cleverly: replace existing, add new if not present
-    // But for sync init, we overwrite loosely or merge if we want to keep offline edits
+    // Merge exhibits cleverly
     if (data.exhibits) {
-        // Simple strategy: Server is truth for these fields on load
-        const serverIds = new Set(data.exhibits.map((e: Exhibit) => e.id));
-        // Keep local items that are NOT on server (might be unsynced drafts?)
-        // actually, for this optimization, let's just adopt server state + what we have
-        // But preventing bloat:
         cache.exhibits = data.exhibits; 
     }
     
