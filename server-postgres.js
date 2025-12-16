@@ -52,7 +52,8 @@ app.get('/sw.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'sw.js'));
 });
 
-app.get('/workbox-*.js', (req, res) => {
+// Workbox files - no cache (use regex for Express 5)
+app.get(/^\/workbox-.*\.js$/, (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(__dirname, 'dist', req.path));
 });
@@ -175,13 +176,13 @@ createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
 
-// Handle 404 for API
-app.all('/api/*', (req, res) => {
+// Handle 404 for API (use regex for Express 5)
+app.all(/^\/api\/.*/, (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });
 
 // Fallback for SPA (Must be last)
-app.get('*', (req, res) => {
+app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
