@@ -18,7 +18,7 @@ const PORT = 3000;
 
 // Конфигурация подключения к PostgreSQL (Timeweb)
 const pool = new Pool({
-    user: 'gen_user', // Updated based on Adminer URL screenshot (NeoBD is likely cluster name)
+    user: 'gen_user', // Updated based on Adminer URL screenshot
     host: '89.169.46.157',
     database: 'default_db',
     password: '9H@DDCb.gQm.S}',
@@ -45,7 +45,48 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Test DB Connection
+// Helper to execute queries safely
+const query = async (text, params) => {
+    try {
+        const start = Date.now();
+        const res = await pool.query(text, params);
+        return res;
+    } catch (err) {
+        console.error("Query Error", err.message);
+        throw err;
+    }
+};
+
+// Initialize Database Schema
+const initDB = async () => {
+    const tables = [
+        'users', 'exhibits', 'collections', 'notifications', 'messages', 'guestbook'
+    ];
+
+    try {
+        // 1. Create tables if they don't exist
+        for (const table of tables) {
+            await query(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
+        }
+
+        // 2. MIGRATION: Ensure 'updated_at' column exists for all tables (fixes 500 error if schema drifted)
+        // This is critical because previous versions might have created tables without this column (e.g. notifications)
+        for (const table of tables) {
+             try {
+                 await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`);
+             } catch (e) {
+                 // Ignore error if column exists or other minor issues, but log it
+                 console.log(`[Migration] Checked ${table}:`, e.message);
+             }
+        }
+
+        console.log("✅ [Database] Schema initialized and migrated.");
+    } catch (e) {
+        console.error("❌ [Database] Schema initialization failed:", e.message);
+    }
+};
+
+// Test DB Connection & Init
 pool.connect((err, client, release) => {
     if (err) {
         return console.error('❌ [Database] Ошибка подключения к PostgreSQL:', err.stack);
@@ -56,31 +97,16 @@ pool.connect((err, client, release) => {
             return console.error('❌ [Database] Ошибка выполнения запроса:', err.stack);
         }
         console.log('✅ [Database] Успешное подключение к NeoBD @ 89.169.46.157');
+        initDB(); // Initialize schema after connection
     });
 });
 
 // --- API ROUTES ---
 
-// Helper to execute queries safely
-const query = async (text, params) => {
-    try {
-        const start = Date.now();
-        const res = await pool.query(text, params);
-        // const duration = Date.now() - start;
-        // console.log('executed query', { text, duration, rows: res.rowCount });
-        return res;
-    } catch (err) {
-        console.error("Query Error", err.message);
-        throw err;
-    }
-};
-
 // 1. AUTHENTICATION
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     try {
-        // Ищем пользователя, где JSON поле email и password совпадают
-        // В продакшене пароли должны быть хешированы, здесь используем прямое сравнение для миграции
         const result = await query(
             `SELECT data FROM users WHERE data->>'email' = $1 AND data->>'password' = $2`, 
             [email, password]
@@ -99,7 +125,6 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
     const { username, email, password, data } = req.body;
     try {
-        // Проверка на существование
         const check = await query(
             `SELECT 1 FROM users WHERE data->>'username' = $1 OR data->>'email' = $2`,
             [username, email]
@@ -109,12 +134,9 @@ app.post('/api/auth/register', async (req, res) => {
             return res.status(400).json({ success: false, error: "Пользователь уже существует" });
         }
 
-        // Вставка
-        // Используем email или username как ID для простоты, или генерируем UUID на клиенте
-        // Предполагаем, что клиент присылает полный объект user в 'data'
         await query(
             `INSERT INTO users (id, data, updated_at) VALUES ($1, $2, NOW())`,
-            [username, data] // ID таблицы = username
+            [username, data]
         );
 
         res.json({ success: true, user: data });
@@ -145,7 +167,8 @@ app.get('/api/sync', async (req, res) => {
         });
     } catch (e) {
         console.error("Sync Error:", e.message);
-        res.status(500).json({ error: "Sync failed" });
+        // Return 500 with detail
+        res.status(500).json({ error: "Sync failed: " + e.message });
     }
 });
 
@@ -163,13 +186,11 @@ app.post('/api/users/update', async (req, res) => {
     }
 });
 
-// 4. GENERIC CRUD (Upsert & Delete)
+// 4. GENERIC CRUD
 const createCrudRoutes = (table) => {
     app.post(`/api/${table}`, async (req, res) => {
         try {
             const { id, ...rest } = req.body;
-            // Предполагаем, что тело запроса - это объект данных целиком
-            // Извлекаем ID из тела JSON
             const recordId = id || req.body.id;
             
             if (!recordId) return res.status(400).json({ error: "ID is required" });
@@ -232,4 +253,5 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`   > DB: NeoBD @ 89.169.46.157`);
     console.log(`   > Local:   http://localhost:${PORT}`);
     console.log(`   > Network: http://${ip}:${PORT}`);
+    console.log(`   ⚠️ IF YOU SEE JS ERRORS IN BROWSER: Run 'npm run build' to update frontend assets.`);
 });

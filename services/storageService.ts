@@ -214,7 +214,16 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
         if (body) options.body = JSON.stringify(body);
         
         const res = await fetch(`${API_BASE}${endpoint}`, options);
-        if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+        if (!res.ok) {
+            let errorMsg = res.statusText;
+            try {
+                const errBody = await res.json();
+                if (errBody.error) errorMsg = errBody.error;
+            } catch (e) {
+                // Ignore parsing error, stick to statusText
+            }
+            throw new Error(`API Error ${res.status}: ${errorMsg}`);
+        }
         return await res.json();
     } catch (error) {
         console.error(`API Call Failed (${endpoint}):`, error);
@@ -306,6 +315,7 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
 
     try {
         console.log("☁️ [Sync] Connecting to NeoArchive Node (PostgreSQL)...");
+        // Reduce timeout for faster failure feedback
         const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Connection timed out')), 5000)
         );
