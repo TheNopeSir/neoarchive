@@ -1,3 +1,4 @@
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -15,7 +16,8 @@ let cache = {
 
 const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '2.4.0-GlobalForceUpdate'; 
+// BUMP VERSION TO CLEAR CACHE & FIX QUOTA ISSUES
+const CACHE_VERSION = '2.7.0-QuotaFix'; 
 let isOfflineMode = false;
 
 // --- EXPORTS ---
@@ -58,7 +60,31 @@ const saveToLocalCache = () => {
             data: cache
         };
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
-    } catch (e) { console.error("Cache Error", e); }
+    } catch (e: any) { 
+        // Handle QuotaExceededError
+        if (e.name === 'QuotaExceededError' || e.code === 22 || e.message?.includes('quota')) {
+            console.error("🔴 [Cache] Storage Quota Exceeded! Clearing storage to prevent crash...");
+            try {
+                // Emergency clear
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                // Try to save minimal data
+                const minimalPayload = {
+                    version: CACHE_VERSION,
+                    data: {
+                        ...cache,
+                        exhibits: cache.exhibits.slice(0, 50), // Keep only recent
+                        collections: cache.collections.slice(0, 10),
+                        notifications: cache.notifications.slice(0, 20)
+                    }
+                };
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(minimalPayload));
+            } catch (retryErr) {
+                console.error("🔴 [Cache] Critical Storage Failure", retryErr);
+            }
+        } else {
+            console.error("Cache Save Error", e); 
+        }
+    }
 };
 
 const loadFromLocalCache = (): boolean => {
@@ -67,7 +93,7 @@ const loadFromLocalCache = (): boolean => {
         try {
             const parsed = JSON.parse(json);
             if (!parsed.version || parsed.version !== CACHE_VERSION) {
-                console.log(`♻️ [Cache] Version mismatch. Clearing.`);
+                console.log(`♻️ [Cache] Version mismatch (${parsed.version} vs ${CACHE_VERSION}). Clearing cache.`);
                 localStorage.removeItem(LOCAL_STORAGE_KEY);
                 return false;
             }
@@ -84,6 +110,7 @@ const loadFromLocalCache = (): boolean => {
             };
             return true;
         } catch (e) { 
+            console.warn("Cache parse error, clearing.", e);
             localStorage.removeItem(LOCAL_STORAGE_KEY);
             return false; 
         }
@@ -137,6 +164,28 @@ export const autoCleanStorage = async () => {
         
         window.location.reload(); 
     }
+};
+
+// --- PREFERENCES LOGIC ---
+export const updateUserPreference = async (username: string, category: string, weight: number) => {
+    const userIndex = cache.users.findIndex(u => u.username === username);
+    if (userIndex === -1) return;
+
+    const user = cache.users[userIndex];
+    const currentPrefs = user.preferences || {};
+    const newWeight = (currentPrefs[category] || 0) + weight;
+    
+    // Update local state
+    const updatedUser = { 
+        ...user, 
+        preferences: { ...currentPrefs, [category]: newWeight } 
+    };
+    cache.users[userIndex] = updatedUser;
+    
+    // Save
+    saveToLocalCache();
+    // We don't await the DB update to keep UI snappy
+    supabase.from('users').upsert({ username: user.username, data: updatedUser });
 };
 
 // --- IMAGE COMPRESSION UTILITY ---
@@ -292,7 +341,8 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
                 avatarUrl: `https://ui-avatars.com/api/?name=${username}`,
                 joinedDate: new Date().toLocaleDateString(),
                 following: [],
-                achievements: []
+                achievements: [],
+                preferences: {}
             };
         }
     }
@@ -312,9 +362,14 @@ export const backgroundSync = async (): Promise<boolean> => {
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
 
 // --- AUTH & CRUD ---
-export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string): Promise<UserProfile> => {
+export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string, avatarUrl?: string): Promise<UserProfile> => {
     const usernameExists = cache.users.some(u => u.username.toLowerCase() === username.toLowerCase());
-    if (usernameExists) throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
+    if (usernameExists) {
+        // If it's a telegram login, assume login if telegram match
+        const existing = cache.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+        if(existing && telegram && existing.telegram === telegram) return existing;
+        if(!telegram) throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
+    }
 
     const { data, error } = await supabase.auth.signUp({
         email,
@@ -323,19 +378,20 @@ export const registerUser = async (username: string, password: string, tagline: 
     });
 
     if (error) throw new Error(error.message);
-    if (!data.user) throw new Error("Подтвердите email для завершения регистрации");
 
     const isSuperAdmin = email === 'admin@neoarchive.net';
     const userProfile: UserProfile = {
         username: isSuperAdmin ? 'TheArchitect' : username,
         email,
         tagline: isSuperAdmin ? 'System Administrator' : tagline,
-        avatarUrl: getUserAvatar(username),
+        avatarUrl: avatarUrl || getUserAvatar(username),
         joinedDate: new Date().toLocaleString('ru-RU'),
         following: [],
         achievements: isSuperAdmin ? ['HELLO_WORLD', 'LEGEND', 'THE_ONE'] : ['HELLO_WORLD'],
         isAdmin: isSuperAdmin,
-        telegram: telegram
+        telegram: telegram,
+        preferences: {},
+        password: password
     };
 
     cache.users.push(userProfile);
@@ -356,7 +412,8 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
             following: [],
             achievements: ['LEGEND', 'THE_ONE'],
             isAdmin: true,
-            status: 'ONLINE'
+            status: 'ONLINE',
+            preferences: {}
         };
         cache.users = cache.users.filter(u => u.username !== 'TheArchitect');
         cache.users.push(adminProfile);
@@ -365,8 +422,14 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
-    if (!data.user) throw new Error("Login failed");
+    
+    // Fallback to local
+    if (error || !data.user) {
+        const localUser = cache.users.find(u => u.email === email && u.password === password);
+        if (localUser) return localUser;
+        if (error) throw new Error(error.message);
+        throw new Error("Login failed");
+    }
 
     const username = data.user.user_metadata?.username;
     if (!username) throw new Error("User profile corrupted");
@@ -388,7 +451,8 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
                 avatarUrl: getUserAvatar(username),
                 joinedDate: new Date().toLocaleString('ru-RU'),
                 following: [],
-                achievements: []
+                achievements: [],
+                preferences: {}
             };
             await supabase.from('users').upsert({ username, data: newProfile });
             cache.users.push(newProfile);
@@ -503,6 +567,21 @@ export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
     saveToLocalCache();
     await supabase.from('guestbook').upsert(toDbPayload(entry));
+};
+
+export const updateGuestbookEntry = async (entry: GuestbookEntry) => {
+    const idx = cache.guestbook.findIndex(g => g.id === entry.id);
+    if (idx !== -1) {
+        cache.guestbook[idx] = entry;
+        saveToLocalCache();
+        await supabase.from('guestbook').upsert(toDbPayload(entry));
+    }
+};
+
+export const deleteGuestbookEntry = async (id: string) => {
+    cache.guestbook = cache.guestbook.filter(g => g.id !== id);
+    saveToLocalCache();
+    await supabase.from('guestbook').delete().eq('id', id);
 };
 
 export const getMessages = (): Message[] => cache.messages;

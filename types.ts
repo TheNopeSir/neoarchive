@@ -83,6 +83,7 @@ export interface UserProfile {
   joinedDate: string;
   following: string[]; // List of usernames
   achievements?: string[]; // List of Badge IDs
+  preferences?: Record<string, number>; // RECOMMENDATION ENGINE WEIGHTS
   // Auth simulation fields
   password?: string;
   isAdmin?: boolean;
