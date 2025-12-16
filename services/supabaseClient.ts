@@ -1,15 +1,6 @@
-/**
- * PostgreSQL API Client (previously Supabase)
- * Now using REST API to connect to PostgreSQL backend
- */
-import * as apiClient from './apiClient';
 
-// Export API client as if it were Supabase client
-// This maintains compatibility with existing code
-export const supabase = {
-    from: apiClient.from,
-    auth: apiClient.auth,
-};
+// SUPABASE CLIENT REMOVED
+// This application now connects directly to PostgreSQL via the Node.js backend.
+// See services/storageService.ts for API calls.
 
-// Export sync function for direct use
-export { syncAllData } from './apiClient';
+export const supabase = null;

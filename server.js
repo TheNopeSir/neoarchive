@@ -3,216 +3,196 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createClient } from '@supabase/supabase-js';
+import pg from 'pg';
 import os from 'os';
 
+const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ==========================================
-// ⚙️ НАСТРОЙКИ СЕРВЕРА
+// ⚙️ НАСТРОЙКИ СЕРВЕРА И БД
 // ==========================================
 
-// 1. Ссылка на проект
-const SUPABASE_URL = "https://kovcgjtqbvmuzhsrcktd.supabase.co";
-
-// 2. SERVICE_ROLE ключ
-const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdmNnanRxYnZtdXpoc3Jja3RkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTM2MTYyMCwiZXhwIjoyMDgwOTM3NjIwfQ.9dGlbb7TV9SRDnYQULdDMDpZrI4r5XO1FgTCoKqrpf4";
-
 const PORT = 3000;
+
+// Конфигурация подключения к PostgreSQL (Timeweb)
+const pool = new Pool({
+    user: 'gen_user', // Updated based on Adminer URL screenshot (NeoBD is likely cluster name)
+    host: '89.169.46.157',
+    database: 'default_db',
+    password: '9H@DDCb.gQm.S}',
+    port: 5432,
+    ssl: {
+        rejectUnauthorized: false // Timeweb self-signed certs fix
+    },
+    max: 20, // Max clients in pool
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+});
 
 // ==========================================
 
 const app = express();
 
-// Middleware
-// Enable CORS for ALL origins to fix mobile/external connection issues
 app.use(cors({
-    origin: true, // Reflect request origin
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
+// Increased limit for base64 images
 app.use(express.json({ limit: '50mb' }));
+app.use(express.static(path.join(__dirname, 'dist')));
 
-// ==========================================
-// ⚡ КЭШИРОВАНИЕ СТАТИЧЕСКИХ ФАЙЛОВ
-// ==========================================
-
-// Service Worker - НЕ кэшировать (всегда свежий)
-app.get('/sw.js', (req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.sendFile(path.join(__dirname, 'dist', 'sw.js'));
-});
-
-// Workbox files - no cache (use regex for Express 5)
-app.get(/^\/workbox-.*\.js$/, (req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.sendFile(path.join(__dirname, 'dist', req.path));
-});
-
-// Assets (JS, CSS, изображения) - долгое кэширование с immutable
-app.use('/assets', express.static(path.join(__dirname, 'dist/assets'), {
-    maxAge: '1y',
-    immutable: true,
-    setHeaders: (res, filePath) => {
-        // Все файлы в /assets/ версионированы Vite, можно кэшировать навсегда
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-
-        // Дополнительные заголовки для сжатия
-        if (filePath.endsWith('.js')) {
-            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-        } else if (filePath.endsWith('.css')) {
-            res.setHeader('Content-Type', 'text/css; charset=utf-8');
-        }
+// Test DB Connection
+pool.connect((err, client, release) => {
+    if (err) {
+        return console.error('❌ [Database] Ошибка подключения к PostgreSQL:', err.stack);
     }
-}));
-
-// Manifest и иконки - среднее кэширование
-app.get('/manifest.webmanifest', (req, res) => {
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 день
-    res.sendFile(path.join(__dirname, 'dist', 'manifest.webmanifest'));
+    client.query('SELECT NOW()', (err, result) => {
+        release();
+        if (err) {
+            return console.error('❌ [Database] Ошибка выполнения запроса:', err.stack);
+        }
+        console.log('✅ [Database] Успешное подключение к NeoBD @ 89.169.46.157');
+    });
 });
-
-// Остальные статические файлы - краткое кэширование
-app.use(express.static(path.join(__dirname, 'dist'), {
-    maxAge: '5m',
-    setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) {
-            // HTML - короткое кэширование для быстрых обновлений
-            res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
-        }
-    }
-}));
-
-let supabase = null;
-let isOfflineMode = false;
-
-// Initialization
-console.log("🚀 [Server] Initializing Direct Connection...");
-
-if (SUPABASE_SERVICE_ROLE_KEY.includes("ВСТАВЬТЕ_СЮДА") || !SUPABASE_SERVICE_ROLE_KEY) {
-    console.error("\n❌ ОШИБКА: Вы не вставили SERVICE_ROLE ключ в файл server.js!");
-    console.warn("   Сервер запущен в ОФФЛАЙН режиме. Данные не будут сохраняться.");
-    isOfflineMode = true;
-} else {
-    try {
-        supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
-        console.log("✅ [Server] Supabase Client Configured");
-    } catch (err) {
-        console.error("⚠️ [Server] Client Creation Error:", err.message);
-        isOfflineMode = true;
-    }
-}
-
-if (isOfflineMode) {
-    // Mock Client for stability
-    const mockDb = {
-        select: () => ({ order: () => ({ data: [], error: null }), data: [], error: null }),
-        insert: () => ({ select: () => ({ single: () => ({ data: {}, error: null }) }), error: null }),
-        upsert: () => ({ select: () => ({ single: () => ({ data: {}, error: null }) }), error: null }),
-        delete: () => ({ eq: () => ({ error: null }) }),
-        update: () => ({ eq: () => ({ error: null }) }),
-    };
-
-    supabase = {
-        from: () => mockDb,
-        auth: {
-            admin: {
-                createUser: () => ({ data: null, error: { message: "Offline Mode" } }),
-            }
-        }
-    };
-}
 
 // --- API ROUTES ---
 
-const ensureDb = (req, res, next) => {
-    next();
+// Helper to execute queries safely
+const query = async (text, params) => {
+    try {
+        const start = Date.now();
+        const res = await pool.query(text, params);
+        // const duration = Date.now() - start;
+        // console.log('executed query', { text, duration, rows: res.rowCount });
+        return res;
+    } catch (err) {
+        console.error("Query Error", err.message);
+        throw err;
+    }
 };
 
-// 1. GLOBAL SYNC
-app.get('/api/sync', ensureDb, async (req, res) => {
+// 1. AUTHENTICATION
+app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
     try {
-        if (isOfflineMode) {
-            return res.json({ users: [], exhibits: [], collections: [], notifications: [], messages: [], guestbook: [] });
+        // Ищем пользователя, где JSON поле email и password совпадают
+        // В продакшене пароли должны быть хешированы, здесь используем прямое сравнение для миграции
+        const result = await query(
+            `SELECT data FROM users WHERE data->>'email' = $1 AND data->>'password' = $2`, 
+            [email, password]
+        );
+
+        if (result.rows.length > 0) {
+            res.json({ success: true, user: result.rows[0].data });
+        } else {
+            res.status(401).json({ success: false, error: "Неверный email или пароль" });
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+    const { username, email, password, data } = req.body;
+    try {
+        // Проверка на существование
+        const check = await query(
+            `SELECT 1 FROM users WHERE data->>'username' = $1 OR data->>'email' = $2`,
+            [username, email]
+        );
+
+        if (check.rows.length > 0) {
+            return res.status(400).json({ success: false, error: "Пользователь уже существует" });
         }
 
-        const { data: users } = await supabase.from('users').select('data');
-        const { data: exhibits } = await supabase.from('exhibits').select('data').order('timestamp', { ascending: false });
-        const { data: collections } = await supabase.from('collections').select('data').order('timestamp', { ascending: false });
-        const { data: notifs } = await supabase.from('notifications').select('data').order('timestamp', { ascending: false });
-        const { data: msgs } = await supabase.from('messages').select('data').order('timestamp', { ascending: true });
-        const { data: gb } = await supabase.from('guestbook').select('data').order('timestamp', { ascending: false });
+        // Вставка
+        // Используем email или username как ID для простоты, или генерируем UUID на клиенте
+        // Предполагаем, что клиент присылает полный объект user в 'data'
+        await query(
+            `INSERT INTO users (id, data, updated_at) VALUES ($1, $2, NOW())`,
+            [username, data] // ID таблицы = username
+        );
+
+        res.json({ success: true, user: data });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// 2. GLOBAL SYNC
+app.get('/api/sync', async (req, res) => {
+    try {
+        const [users, exhibits, collections, notifications, messages, guestbook] = await Promise.all([
+            query('SELECT data FROM users'),
+            query('SELECT data FROM exhibits ORDER BY updated_at DESC LIMIT 1000'),
+            query('SELECT data FROM collections ORDER BY updated_at DESC'),
+            query('SELECT data FROM notifications ORDER BY updated_at DESC LIMIT 500'),
+            query('SELECT data FROM messages ORDER BY updated_at ASC LIMIT 1000'),
+            query('SELECT data FROM guestbook ORDER BY updated_at DESC LIMIT 500')
+        ]);
         
         res.json({
-            users: users ? users.map(r => r.data) : [],
-            exhibits: exhibits ? exhibits.map(r => r.data) : [],
-            collections: collections ? collections.map(r => r.data) : [],
-            notifications: notifs ? notifs.map(r => r.data) : [],
-            messages: msgs ? msgs.map(r => r.data) : [],
-            guestbook: gb ? gb.map(r => r.data) : [],
+            users: users.rows.map(r => r.data),
+            exhibits: exhibits.rows.map(r => r.data),
+            collections: collections.rows.map(r => r.data),
+            notifications: notifications.rows.map(r => r.data),
+            messages: messages.rows.map(r => r.data),
+            guestbook: guestbook.rows.map(r => r.data),
         });
     } catch (e) {
         console.error("Sync Error:", e.message);
-        res.json({ users: [], exhibits: [], collections: [], notifications: [], messages: [], guestbook: [] });
+        res.status(500).json({ error: "Sync failed" });
     }
 });
 
-// 2. USER PROFILE SYNC
-app.post('/api/users/update', ensureDb, async (req, res) => {
-    if (isOfflineMode) return res.json({ success: true });
+// 3. USER UPDATE
+app.post('/api/users/update', async (req, res) => {
     try {
-        await supabase
-            .from('users')
-            .upsert({ username: req.body.username, data: req.body }, { onConflict: 'username' });
+        await query(
+            `INSERT INTO users (id, data, updated_at) VALUES ($1, $2, NOW()) 
+             ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()`,
+            [req.body.username, req.body]
+        );
         res.json({ success: true });
     } catch (e) { 
-        console.error("User Update Error:", e.message);
-        res.status(200).json({ success: false, error: e.message });
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 3. CRUD OPERATIONS
-const createCrudRoutes = (resourceName) => {
-    app.post(`/api/${resourceName}`, ensureDb, async (req, res) => {
-        if (isOfflineMode) return res.json({ success: true });
+// 4. GENERIC CRUD (Upsert & Delete)
+const createCrudRoutes = (table) => {
+    app.post(`/api/${table}`, async (req, res) => {
         try {
-            const payload = {
-                id: req.body.id,
-                data: req.body,
-                timestamp: new Date().toISOString()
-            };
+            const { id, ...rest } = req.body;
+            // Предполагаем, что тело запроса - это объект данных целиком
+            // Извлекаем ID из тела JSON
+            const recordId = id || req.body.id;
             
-            await supabase
-                .from(resourceName)
-                .upsert(payload, { onConflict: 'id' });
+            if (!recordId) return res.status(400).json({ error: "ID is required" });
+
+            await query(
+                `INSERT INTO ${table} (id, data, updated_at) VALUES ($1, $2, NOW()) 
+                 ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()`,
+                [recordId, req.body]
+            );
 
             res.json({ success: true });
         } catch (e) { 
-            console.error(`${resourceName} Update Error:`, e.message);
-            res.status(200).json({ success: false, error: e.message }); 
+            console.error(`${table} Update Error:`, e.message);
+            res.status(500).json({ success: false, error: e.message }); 
         }
     });
 
-    app.delete(`/api/${resourceName}/:id`, ensureDb, async (req, res) => {
-        if (isOfflineMode) return res.json({ success: true });
+    app.delete(`/api/${table}/:id`, async (req, res) => {
         try {
-            await supabase
-                .from(resourceName)
-                .delete()
-                .eq('id', req.params.id);
-
+            await query(`DELETE FROM ${table} WHERE id = $1`, [req.params.id]);
             res.json({ success: true });
         } catch (e) { 
-             res.status(200).json({ success: false, error: e.message }); 
+             res.status(500).json({ success: false, error: e.message }); 
         }
     });
 };
@@ -223,17 +203,17 @@ createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
 
-// Handle 404 for API (use regex for Express 5)
-app.all(/^\/api\/.*/, (req, res) => {
+// Handle 404 for API
+app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });
 
-// Fallback for SPA (Must be last)
-app.get(/.*/, (req, res) => {
+// Fallback for SPA
+app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Helper to find local IP for display
+// Helper to find local IP
 function getLocalIp() {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
@@ -246,13 +226,10 @@ function getLocalIp() {
     return '0.0.0.0';
 }
 
-// Listen on 0.0.0.0 is crucial for external access
 app.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIp();
-    console.log(`\n🚀 NeoArchive Server running!`);
-    console.log(`   > URL: ${SUPABASE_URL}`);
-    console.log(`   > Status: ${isOfflineMode ? '🟡 OFFLINE (KEYS MISSING)' : '🟢 ONLINE'}`);
+    console.log(`\n🚀 NeoArchive Server (PostgreSQL Edition) running!`);
+    console.log(`   > DB: NeoBD @ 89.169.46.157`);
     console.log(`   > Local:   http://localhost:${PORT}`);
-    console.log(`   > Network: http://${ip}:${PORT}`); // Use this URL on your phone
-    console.log(`\n   Для доступа с телефона, убедитесь, что устройства в одной сети`);
+    console.log(`   > Network: http://${ip}:${PORT}`);
 });

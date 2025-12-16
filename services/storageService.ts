@@ -1,6 +1,5 @@
 
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
-import { supabase } from './supabaseClient';
 
 // Internal Cache
 let cache = {
@@ -14,11 +13,80 @@ let cache = {
     isLoaded: false
 };
 
-const LOCAL_STORAGE_KEY = 'neo_archive_client_cache';
+const DB_NAME = 'NeoArchiveDB';
+const STORE_NAME = 'client_cache';
+const CACHE_KEY = 'neo_archive_v1';
 const SESSION_USER_KEY = 'neo_active_user';
-// BUMP VERSION TO CLEAR CACHE & FIX QUOTA ISSUES
-const CACHE_VERSION = '2.7.0-QuotaFix'; 
+const CACHE_VERSION = '3.0.0-PG'; 
+
 let isOfflineMode = false;
+
+// Base API URL - relative for production/dev proxy
+const API_BASE = '/api';
+
+// --- INDEXEDDB WRAPPER ---
+const idb = {
+    open: (): Promise<IDBDatabase> => {
+        return new Promise((resolve, reject) => {
+            if (typeof indexedDB === 'undefined') {
+                reject(new Error("IndexedDB not supported"));
+                return;
+            }
+            const request = indexedDB.open(DB_NAME, 2);
+            request.onupgradeneeded = (event) => {
+                const db = (event.target as IDBOpenDBRequest).result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME);
+                }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    },
+    put: async (key: string, value: any) => {
+        try {
+            const db = await idb.open();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.put(value, key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        } catch (e) {
+            console.error("IDB Put Error", e);
+        }
+    },
+    get: async (key: string) => {
+        try {
+            const db = await idb.open();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.get(key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        } catch (e) {
+            console.warn("IDB Get Error (likely first run)", e);
+            return null;
+        }
+    },
+    clear: async () => {
+        try {
+            const db = await idb.open();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.clear();
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        } catch (e) {
+            console.error("IDB Clear Error", e);
+        }
+    }
+};
 
 // --- EXPORTS ---
 export const isOffline = () => isOfflineMode;
@@ -48,55 +116,27 @@ const slugify = (text: string): string => {
         .replace(/\s+/g, '-')
         .replace(/[^\w\-]+/g, '')
         .replace(/\-\-+/g, '-')
-        .replace(/^-+/, '')
         .replace(/-+$/, '');
 };
 
 // --- CLIENT CACHE ---
-const saveToLocalCache = () => {
+const saveToLocalCache = async () => {
     try {
         const payload = {
             version: CACHE_VERSION,
             data: cache
         };
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
-    } catch (e: any) { 
-        // Handle QuotaExceededError
-        if (e.name === 'QuotaExceededError' || e.code === 22 || e.message?.includes('quota')) {
-            console.error("🔴 [Cache] Storage Quota Exceeded! Clearing storage to prevent crash...");
-            try {
-                // Emergency clear
-                localStorage.removeItem(LOCAL_STORAGE_KEY);
-                // Try to save minimal data
-                const minimalPayload = {
-                    version: CACHE_VERSION,
-                    data: {
-                        ...cache,
-                        exhibits: cache.exhibits.slice(0, 50), // Keep only recent
-                        collections: cache.collections.slice(0, 10),
-                        notifications: cache.notifications.slice(0, 20)
-                    }
-                };
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(minimalPayload));
-            } catch (retryErr) {
-                console.error("🔴 [Cache] Critical Storage Failure", retryErr);
-            }
-        } else {
-            console.error("Cache Save Error", e); 
-        }
+        await idb.put(CACHE_KEY, payload);
+    } catch (e) { 
+        console.error("Cache Save Error", e);
     }
 };
 
-const loadFromLocalCache = (): boolean => {
-    const json = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (json) {
-        try {
-            const parsed = JSON.parse(json);
-            if (!parsed.version || parsed.version !== CACHE_VERSION) {
-                console.log(`♻️ [Cache] Version mismatch (${parsed.version} vs ${CACHE_VERSION}). Clearing cache.`);
-                localStorage.removeItem(LOCAL_STORAGE_KEY);
-                return false;
-            }
+const loadFromCache = async (): Promise<boolean> => {
+    try {
+        const stored: any = await idb.get(CACHE_KEY);
+        if (stored) {
+            const parsed = stored; 
             const data = parsed.data || parsed; 
             cache = {
                 exhibits: data.exhibits || [],
@@ -109,16 +149,15 @@ const loadFromLocalCache = (): boolean => {
                 isLoaded: true
             };
             return true;
-        } catch (e) { 
-            console.warn("Cache parse error, clearing.", e);
-            localStorage.removeItem(LOCAL_STORAGE_KEY);
-            return false; 
         }
+    } catch (e) { 
+        console.warn("Cache load error", e);
+        return false; 
     }
     return false;
 };
 
-// --- STORAGE MANAGEMENT (NEW) ---
+// --- STORAGE MANAGEMENT ---
 
 export const getStorageEstimate = async () => {
   if (navigator.storage && navigator.storage.estimate) {
@@ -138,14 +177,14 @@ export const getStorageEstimate = async () => {
   return null;
 };
 
-export const clearLocalCache = () => {
+export const clearLocalCache = async () => {
     try {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        // Optional: clear image cache if utilizing specific cache names
+        localStorage.removeItem(SESSION_USER_KEY);
+        localStorage.removeItem('neo_archive_client_cache');
+        await idb.clear();
         if ('caches' in window) {
-            caches.keys().then(names => {
-                for (let name of names) caches.delete(name);
-            });
+            const names = await caches.keys();
+            for (let name of names) await caches.delete(name);
         }
         window.location.reload();
     } catch(e) {
@@ -157,12 +196,29 @@ export const autoCleanStorage = async () => {
     const estimate = await getStorageEstimate();
     if (estimate && estimate.percentage > 95) {
         console.warn("⚠️ Storage critical (>95%). Auto-cleaning cache...");
-        // Keep user session if possible, but clear data
         const sessionUser = localStorage.getItem(SESSION_USER_KEY);
+        await idb.clear();
         localStorage.clear();
         if (sessionUser) localStorage.setItem(SESSION_USER_KEY, sessionUser);
-        
         window.location.reload(); 
+    }
+};
+
+// --- API CLIENT ---
+const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
+    try {
+        const options: RequestInit = {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+        };
+        if (body) options.body = JSON.stringify(body);
+        
+        const res = await fetch(`${API_BASE}${endpoint}`, options);
+        if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+        return await res.json();
+    } catch (error) {
+        console.error(`API Call Failed (${endpoint}):`, error);
+        throw error;
     }
 };
 
@@ -175,17 +231,15 @@ export const updateUserPreference = async (username: string, category: string, w
     const currentPrefs = user.preferences || {};
     const newWeight = (currentPrefs[category] || 0) + weight;
     
-    // Update local state
     const updatedUser = { 
         ...user, 
         preferences: { ...currentPrefs, [category]: newWeight } 
     };
     cache.users[userIndex] = updatedUser;
     
-    // Save
-    saveToLocalCache();
-    // We don't await the DB update to keep UI snappy
-    apiSave('users', updatedUser);
+    await saveToLocalCache();
+    // Background sync
+    apiCall('/users/update', 'POST', updatedUser).catch(console.warn);
 };
 
 // --- IMAGE COMPRESSION UTILITY ---
@@ -230,96 +284,39 @@ export const compressImage = async (file: File): Promise<string> => {
 
 export const fileToBase64 = compressImage;
 
-// --- CLOUD SYNC HELPERS ---
-
-const toDbPayload = (item: any) => {
-    return {
-        id: item.id,
-        data: item,
-        timestamp: new Date().toISOString()
-    };
-};
-
-// API Helper for PostgreSQL backend
-const apiSave = async (table: string, data: any) => {
-    try {
-        await fetch(`${window.location.origin}/api/${table}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-    } catch (e) {
-        console.warn(`[Storage] Failed to save ${table} to server`);
-    }
-};
-
-const apiDelete = async (table: string, id: string) => {
-    try {
-        await fetch(`${window.location.origin}/api/${table}/${id}`, {
-            method: 'DELETE'
-        });
-    } catch (e) {
-        console.warn(`[Storage] Failed to delete ${table} from server`);
-    }
-};
-
-// Fetch from PostgreSQL API (replaces Supabase calls)
-const fetchAllData = async () => {
-    const response = await fetch(`${window.location.origin}/api/sync`);
-    if (!response.ok) throw new Error('Sync failed');
-    return response.json();
-};
-
-const mergeUsers = (local: UserProfile[], cloud: UserProfile[]): UserProfile[] => {
-    const map = new Map<string, UserProfile>();
-    local.forEach(item => map.set(item.username, item));
-    cloud.forEach(item => map.set(item.username, item));
-    return Array.from(map.values());
-};
-
-const mergeData = <T extends { id: string, timestamp?: string }>(local: T[], cloud: T[], deletedIds: string[]): T[] => {
-    const map = new Map<string, T>();
-    local.forEach(item => { if (!deletedIds.includes(item.id)) map.set(item.id, item); });
-    cloud.forEach(item => { if (!deletedIds.includes(item.id)) map.set(item.id, item); });
-    return Array.from(map.values()).sort((a, b) => {
-        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return tB - tA;
-    });
-};
+// --- CLOUD SYNC LOGIC ---
 
 const performCloudSync = async () => {
-    const data = await fetchAllData();
+    const data = await apiCall('/sync');
+    
+    if (data.users) cache.users = data.users;
+    if (data.exhibits) cache.exhibits = data.exhibits;
+    if (data.collections) cache.collections = data.collections;
+    if (data.notifications) cache.notifications = data.notifications;
+    if (data.messages) cache.messages = data.messages;
+    if (data.guestbook) cache.guestbook = data.guestbook;
 
-    const { users = [], exhibits = [], collections = [], notifications = [], messages = [], guestbook = [] } = data;
-
-    if (users.length > 0) cache.users = mergeUsers(cache.users, users);
-    if (exhibits.length > 0) cache.exhibits = mergeData(cache.exhibits, exhibits, cache.deletedIds);
-    if (collections.length > 0) cache.collections = mergeData(cache.collections, collections, cache.deletedIds);
-    if (notifications.length > 0) cache.notifications = mergeData(cache.notifications, notifications, []);
-    if (messages.length > 0) cache.messages = mergeData(cache.messages, messages, []).sort((a,b) => a.timestamp.localeCompare(b.timestamp));
-    if (guestbook.length > 0) cache.guestbook = mergeData(cache.guestbook, guestbook, []);
-
-    saveToLocalCache();
+    await saveToLocalCache();
 };
 
 // --- INITIALIZATION ---
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
-    loadFromLocalCache();
+    // 1. Load local data
+    await loadFromCache();
 
     try {
-        console.log("☁️ [Sync] Connecting to NeoArchive (PostgreSQL)...");
-        const timeoutPromise = new Promise((_, reject) =>
+        console.log("☁️ [Sync] Connecting to NeoArchive Node (PostgreSQL)...");
+        const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Connection timed out')), 5000)
         );
 
         await Promise.race([performCloudSync(), timeoutPromise]);
-
+        
         cache.isLoaded = true;
         isOfflineMode = false;
-        console.log("✅ [Sync] Database synchronization complete.");
+        console.log("✅ [Sync] Synchronization complete.");
     } catch (e: any) {
-        console.warn("⚠️ [Sync] Database unavailable, switching to OFFLINE MODE.", e.message);
+        console.warn("⚠️ [Sync] Server unavailable, switching to OFFLINE MODE.", e.message);
         isOfflineMode = true;
     }
 
@@ -331,7 +328,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
             return cachedUser;
         }
     }
-
     return null;
 };
 
@@ -349,14 +345,6 @@ export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOStr
 
 // --- AUTH & CRUD ---
 export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string, avatarUrl?: string): Promise<UserProfile> => {
-    const usernameExists = cache.users.some(u => u.username.toLowerCase() === username.toLowerCase());
-    if (usernameExists) {
-        // If it's a telegram login, assume login if telegram match
-        const existing = cache.users.find(u => u.username.toLowerCase() === username.toLowerCase());
-        if(existing && telegram && existing.telegram === telegram) return existing;
-        if(!telegram) throw new Error("НИКНЕЙМ УЖЕ ЗАНЯТ! ВЫБЕРИТЕ ДРУГОЙ.");
-    }
-
     const isSuperAdmin = email === 'admin@neoarchive.net';
     const userProfile: UserProfile = {
         username: isSuperAdmin ? 'TheArchitect' : username,
@@ -369,24 +357,18 @@ export const registerUser = async (username: string, password: string, tagline: 
         isAdmin: isSuperAdmin,
         telegram: telegram,
         preferences: {},
-        password: password
+        password: password // In real world, hash this. Here we pass to server secure channel.
     };
 
-    cache.users.push(userProfile);
-    saveToLocalCache();
-
-    // Save to PostgreSQL via API
-    try {
-        await fetch(`${window.location.origin}/api/users/update`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(userProfile)
-        });
-    } catch (e) {
-        console.warn('[Auth] Failed to save user to server, using local only');
+    const res = await apiCall('/auth/register', 'POST', { username, email, password, data: userProfile });
+    
+    if (res.success) {
+        cache.users.push(userProfile);
+        await saveToLocalCache();
+        return userProfile;
+    } else {
+        throw new Error(res.error || "Registration failed");
     }
-
-    return userProfile;
 };
 
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
@@ -403,39 +385,51 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
             status: 'ONLINE',
             preferences: {}
         };
-        cache.users = cache.users.filter(u => u.username !== 'TheArchitect');
-        cache.users.push(adminProfile);
-        saveToLocalCache();
         return adminProfile;
     }
 
-    // Use local cache for authentication (no server-side auth)
-    const localUser = cache.users.find(u => u.email === email && u.password === password);
-    if (localUser) return localUser;
+    const res = await apiCall('/auth/login', 'POST', { email, password });
 
-    throw new Error("Неверный email или пароль");
+    if (res.success && res.user) {
+        const userProfile = res.user;
+        // Update local cache with latest from server
+        const idx = cache.users.findIndex(u => u.username === userProfile.username);
+        if (idx !== -1) cache.users[idx] = userProfile;
+        else cache.users.push(userProfile);
+        
+        await saveToLocalCache();
+        return userProfile;
+    }
+
+    throw new Error(res.error || "Login failed");
 };
 
 export const logoutUser = async () => {
     localStorage.removeItem(SESSION_USER_KEY);
+    // Server is stateless JWT/Sessionless for this migration, so no backend logout needed
 };
 
 export const updateUserProfile = async (user: UserProfile) => {
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
     else cache.users.push(user);
-    saveToLocalCache();
+    await saveToLocalCache();
+    await apiCall('/users/update', 'POST', user);
+};
 
-    // Save to PostgreSQL via API
+// Generic Helpers
+const syncItem = async (endpoint: string, item: any) => {
+    if (isOfflineMode) return;
     try {
-        await fetch(`${window.location.origin}/api/users/update`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(user)
-        });
-    } catch (e) {
-        console.warn('[Storage] Failed to save user to server');
-    }
+        await apiCall(endpoint, 'POST', item);
+    } catch(e) { console.error("Sync Item failed", e); }
+};
+
+const deleteItem = async (endpoint: string, id: string) => {
+    if (isOfflineMode) return;
+    try {
+        await apiCall(`${endpoint}/${id}`, 'DELETE');
+    } catch(e) { console.error("Delete Item failed", e); }
 };
 
 export const getExhibits = (): Exhibit[] => cache.exhibits;
@@ -448,16 +442,16 @@ export const saveExhibit = async (exhibit: Exhibit) => {
   } else {
       cache.exhibits.unshift(exhibit);
   }
-  saveToLocalCache();
-  await apiSave('exhibits', exhibit);
+  await saveToLocalCache();
+  await syncItem('/exhibits', exhibit);
 };
 
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
   const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
-    saveToLocalCache();
-    await apiSave('exhibits', updatedExhibit);
+    await saveToLocalCache();
+    await syncItem('/exhibits', updatedExhibit);
   }
 };
 
@@ -465,8 +459,8 @@ export const deleteExhibit = async (id: string) => {
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
   cache.notifications = cache.notifications.filter(n => n.targetId !== id);
   cache.deletedIds.push(id); 
-  saveToLocalCache();
-  await apiDelete('exhibits', id);
+  await saveToLocalCache();
+  await deleteItem('/exhibits', id);
 };
 
 export const getCollections = (): Collection[] => cache.collections;
@@ -474,32 +468,32 @@ export const getCollections = (): Collection[] => cache.collections;
 export const saveCollection = async (collection: Collection) => {
     collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
     cache.collections.unshift(collection);
-    saveToLocalCache();
-    await apiSave('collections', collection);
+    await saveToLocalCache();
+    await syncItem('/collections', collection);
 };
 
 export const updateCollection = async (updatedCollection: Collection) => {
     const index = cache.collections.findIndex(c => c.id === updatedCollection.id);
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
-        saveToLocalCache();
-        await apiSave('collections', updatedCollection);
+        await saveToLocalCache();
+        await syncItem('/collections', updatedCollection);
     }
 };
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
     cache.deletedIds.push(id);
-    saveToLocalCache();
-    await apiDelete('collections', id);
+    await saveToLocalCache();
+    await deleteItem('/collections', id);
 };
 
 export const getNotifications = (): Notification[] => cache.notifications;
 
 export const saveNotification = async (notif: Notification) => {
     cache.notifications.unshift(notif);
-    saveToLocalCache();
-    await apiSave('notifications', notif);
+    await saveToLocalCache();
+    await syncItem('/notifications', notif);
 };
 
 export const markNotificationsRead = async (recipient: string) => {
@@ -513,11 +507,9 @@ export const markNotificationsRead = async (recipient: string) => {
         }
     });
     if (hasUpdates) {
-        saveToLocalCache();
-        if (toUpdate.length > 0) {
-            const payload = toUpdate.map(n => toDbPayload(n));
-            await Promise.all(payload.map((n: any) => apiSave('notifications', n.data)));
-        }
+        await saveToLocalCache();
+        // Optimistic: Just send the updated ones to backend
+        toUpdate.forEach(n => syncItem('/notifications', n));
     }
 };
 
@@ -525,31 +517,31 @@ export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 
 export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
     cache.guestbook.push(entry);
-    saveToLocalCache();
-    await apiSave('guestbook', entry);
+    await saveToLocalCache();
+    await syncItem('/guestbook', entry);
 };
 
 export const updateGuestbookEntry = async (entry: GuestbookEntry) => {
     const idx = cache.guestbook.findIndex(g => g.id === entry.id);
     if (idx !== -1) {
         cache.guestbook[idx] = entry;
-        saveToLocalCache();
-        await apiSave('guestbook', entry);
+        await saveToLocalCache();
+        await syncItem('/guestbook', entry);
     }
 };
 
 export const deleteGuestbookEntry = async (id: string) => {
     cache.guestbook = cache.guestbook.filter(g => g.id !== id);
-    saveToLocalCache();
-    await apiDelete('guestbook', id);
+    await saveToLocalCache();
+    await deleteItem('/guestbook', id);
 };
 
 export const getMessages = (): Message[] => cache.messages;
 
 export const saveMessage = async (msg: Message) => {
     cache.messages.push(msg);
-    saveToLocalCache();
-    await apiSave('messages', msg);
+    await saveToLocalCache();
+    await syncItem('/messages', msg);
 };
 
 export const markMessagesRead = async (sender: string, receiver: string) => {
@@ -560,9 +552,6 @@ export const markMessagesRead = async (sender: string, receiver: string) => {
             toUpdate.push(m);
         }
     });
-    saveToLocalCache();
-    if (toUpdate.length > 0) {
-        const payload = toUpdate.map(m => toDbPayload(m));
-        await Promise.all(payload.map((m: any) => apiSave('messages', m.data)));
-    }
+    await saveToLocalCache();
+    toUpdate.forEach(m => syncItem('/messages', m));
 };
