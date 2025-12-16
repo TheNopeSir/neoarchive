@@ -9,7 +9,8 @@ const { Pool } = pg;
 // Создаем пул подключений
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // Всегда принимаем self-signed сертификаты для NeoBD
+  ssl: { rejectUnauthorized: false },
   max: 20, // Максимум 20 одновременных подключений
   idleTimeoutMillis: 30000, // Закрывать idle подключения через 30 сек
   connectionTimeoutMillis: 2000, // Таймаут подключения 2 сек
