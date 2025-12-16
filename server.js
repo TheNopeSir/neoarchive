@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
-import os from 'os';
+import nodemailer from 'nodemailer';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -29,6 +29,17 @@ const pool = new Pool({
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
+});
+
+// Настройка почты (SMTP)
+const transporter = nodemailer.createTransport({
+    host: 'smtp.timeweb.ru',
+    port: 465,
+    secure: true, // SSL
+    auth: {
+        user: 'morpheus@neoarch.ru',
+        pass: 'RTZ0JwbaRDXdD='
+    }
 });
 
 // ==========================================
@@ -58,23 +69,18 @@ const initDB = async () => {
     const genericTables = ['exhibits', 'collections', 'notifications', 'messages', 'guestbook'];
     
     try {
-        // 1. Ensure 'users' table exists (Primary Key: username)
-        // Note: Based on Adminer, users table uses 'username' column, not 'id'
         await query(`CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
-
-        // 2. Ensure other tables exist (Primary Key: id)
+        
         for (const table of genericTables) {
             await query(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
         }
 
-        // 3. MIGRATION: Ensure 'updated_at' column exists for all tables
+        // Migration: Ensure updated_at exists
         const allTables = ['users', ...genericTables];
         for (const table of allTables) {
              try {
                  await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`);
-             } catch (e) {
-                 // Ignore if exists
-             }
+             } catch (e) {}
         }
         
         console.log("✅ [Database] Schema initialized.");
@@ -87,46 +93,57 @@ pool.connect((err, client, release) => {
     if (err) return console.error('❌ [Database] Connection error:', err.stack);
     client.query('SELECT NOW()', (err, result) => {
         release();
-        if (err) return console.error('❌ [Database] Query error:', err.stack);
-        console.log('✅ [Database] Connected to NeoBD.');
         initDB();
     });
 });
 
+// --- HELPER: SEND EMAIL ---
+const sendRecoveryEmail = async (email, newPassword) => {
+    const mailOptions = {
+        from: '"NeoArchive System" <morpheus@neoarch.ru>',
+        to: email,
+        subject: 'NeoArchive: Восстановление доступа',
+        text: `Ваш новый пароль доступа к Архиву: ${newPassword}\n\nПожалуйста, измените его после входа, если это необходимо.\n\nWake up...`,
+        html: `
+            <div style="background: black; color: #4ade80; padding: 20px; font-family: monospace;">
+                <h2 style="border-bottom: 1px dashed #4ade80; padding-bottom: 10px;">ВОССТАНОВЛЕНИЕ ДОСТУПА</h2>
+                <p>Система сгенерировала новый ключ доступа для вашей учетной записи.</p>
+                <div style="background: #111; padding: 15px; margin: 20px 0; border: 1px solid #4ade80; font-size: 20px; font-weight: bold; letter-spacing: 2px; text-align: center;">
+                    ${newPassword}
+                </div>
+                <p style="opacity: 0.7; font-size: 12px;">Используйте этот пароль для входа. Добро пожаловать домой.</p>
+                <p style="margin-top: 30px; font-size: 10px; color: #666;">NeoArchive System Protocol v3.0</p>
+            </div>
+        `
+    };
+    await transporter.sendMail(mailOptions);
+};
+
 // --- API ROUTES ---
 
-// 1. AUTHENTICATION
+// 1. AUTHENTICATION & RECOVERY
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     const MASTER_PASSWORD = 'neo_master';
 
     try {
-        // Normal Login Check
+        // Try finding by Email OR Username
         let result = await query(
-            `SELECT * FROM users WHERE data->>'email' = $1 AND data->>'password' = $2`, 
+            `SELECT * FROM users WHERE (data->>'email' = $1 OR username = $1) AND data->>'password' = $2`, 
             [email, password]
         );
 
-        // MASTER PASSWORD RECOVERY LOGIC
+        // MASTER PASSWORD LOGIC
         if (result.rows.length === 0 && password === MASTER_PASSWORD) {
-            console.log(`🔑 [Auth] Master password used for: ${email}`);
-            // Find user by email ignoring password
-            result = await query(`SELECT * FROM users WHERE data->>'email' = $1`, [email]);
-            
+            result = await query(`SELECT * FROM users WHERE data->>'email' = $1 OR username = $1`, [email]);
             if (result.rows.length > 0) {
-                // AUTO-UPDATE user password to master password
                 const userRow = result.rows[0];
                 const userData = userRow.data;
-                userData.password = MASTER_PASSWORD; // Update stored pass
-                
-                // Save updated password back to DB
-                // Use 'username' column for WHERE clause
+                userData.password = MASTER_PASSWORD;
                 await query(
                     `UPDATE users SET data = $1, updated_at = NOW() WHERE username = $2`,
                     [userData, userRow.username]
                 );
-                
-                // Return updated user
                 return res.json({ success: true, user: userData });
             }
         }
@@ -134,10 +151,42 @@ app.post('/api/auth/login', async (req, res) => {
         if (result.rows.length > 0) {
             res.json({ success: true, user: result.rows[0].data });
         } else {
-            res.status(401).json({ success: false, error: "Неверный email или пароль" });
+            res.status(401).json({ success: false, error: "Неверный логин или пароль" });
         }
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/auth/recover', async (req, res) => {
+    const { email } = req.body;
+    try {
+        const result = await query(`SELECT * FROM users WHERE data->>'email' = $1`, [email]);
+        
+        if (result.rows.length === 0) {
+            // Security: Don't reveal if user exists, simulate success delay
+            await new Promise(r => setTimeout(r, 1000));
+            return res.json({ success: true, message: "Если email существует, инструкции отправлены." });
+        }
+
+        const userRow = result.rows[0];
+        const newPassword = Math.random().toString(36).slice(-8).toUpperCase(); // Generate 8 char alphanumeric
+        
+        // Update DB
+        const userData = userRow.data;
+        userData.password = newPassword;
+        await query(
+            `UPDATE users SET data = $1, updated_at = NOW() WHERE username = $2`,
+            [userData, userRow.username]
+        );
+
+        // Send Email
+        await sendRecoveryEmail(email, newPassword);
+
+        res.json({ success: true, message: "Новый пароль отправлен на почту." });
+    } catch (e) {
+        console.error("Recovery Error:", e);
+        res.status(500).json({ success: false, error: "Ошибка почтового сервиса" });
     }
 });
 
@@ -150,10 +199,9 @@ app.post('/api/auth/register', async (req, res) => {
         );
 
         if (check.rows.length > 0) {
-            return res.status(400).json({ success: false, error: "Пользователь уже существует" });
+            return res.status(400).json({ success: false, error: "Пользователь или Email уже заняты" });
         }
 
-        // Corrected: Use 'username' column instead of 'id'
         await query(
             `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
             [username, data]
@@ -165,16 +213,31 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-// 2. GLOBAL SYNC
+// 2. OPTIMIZED SYNC & FEED
 app.get('/api/sync', async (req, res) => {
+    const { username } = req.query; // If logged in, prioritize their data
     try {
+        // Optimization: Don't fetch ALL exhibits. 
+        // 1. Fetch ALL users (lightweight enough usually, or paginate later)
+        // 2. Fetch MY exhibits + Top 20 Global
+        // 3. Fetch MY collections + Top 20 Global
+        
+        let exhibitQuery = `SELECT data FROM exhibits ORDER BY updated_at DESC LIMIT 20`;
+        let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 20`;
+        
+        if (username) {
+            // Get my items AND recent global items
+            exhibitQuery = `SELECT data FROM exhibits WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 20)`;
+            collectionQuery = `SELECT data FROM collections WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM collections ORDER BY updated_at DESC LIMIT 20)`;
+        }
+
         const [users, exhibits, collections, notifications, messages, guestbook] = await Promise.all([
             query('SELECT data FROM users'),
-            query('SELECT data FROM exhibits ORDER BY updated_at DESC LIMIT 1000'),
-            query('SELECT data FROM collections ORDER BY updated_at DESC'),
-            query('SELECT data FROM notifications ORDER BY updated_at DESC LIMIT 500'),
-            query('SELECT data FROM messages ORDER BY updated_at ASC LIMIT 1000'),
-            query('SELECT data FROM guestbook ORDER BY updated_at DESC LIMIT 500')
+            query(exhibitQuery),
+            query(collectionQuery),
+            query('SELECT data FROM notifications ORDER BY updated_at DESC LIMIT 100'),
+            query('SELECT data FROM messages ORDER BY updated_at DESC LIMIT 200'),
+            query('SELECT data FROM guestbook ORDER BY updated_at DESC LIMIT 200')
         ]);
         
         res.json({
@@ -187,14 +250,27 @@ app.get('/api/sync', async (req, res) => {
         });
     } catch (e) {
         console.error("Sync Error:", e.message);
-        res.status(500).json({ error: "Sync failed: " + e.message });
+        res.status(500).json({ error: "Sync failed" });
+    }
+});
+
+// NEW: PAGINATED FEED
+app.get('/api/feed', async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 20;
+    const offset = (page - 1) * limit;
+
+    try {
+        const exhibits = await query(`SELECT data FROM exhibits ORDER BY updated_at DESC LIMIT $1 OFFSET $2`, [limit, offset]);
+        res.json(exhibits.rows.map(r => r.data));
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
 // 3. USER UPDATE
 app.post('/api/users/update', async (req, res) => {
     try {
-        // Corrected: Use 'username' column for UPSERT
         await query(
             `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW()) 
              ON CONFLICT (username) DO UPDATE SET data = $2, updated_at = NOW()`,
@@ -202,18 +278,16 @@ app.post('/api/users/update', async (req, res) => {
         );
         res.json({ success: true });
     } catch (e) { 
-        console.error("User Update Error:", e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 4. GENERIC CRUD (For tables that USE 'id' column)
+// 4. GENERIC CRUD
 const createCrudRoutes = (table) => {
     app.post(`/api/${table}`, async (req, res) => {
         try {
             const { id } = req.body;
             const recordId = id || req.body.id;
-            
             if (!recordId) return res.status(400).json({ error: "ID is required" });
 
             await query(

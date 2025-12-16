@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, Send, 
   Video, Image as ImageIcon, WifiOff, Download, Box, Package, User,
   X, ArrowLeft, Upload, Home, PlusCircle, Heart, MessageSquare, MessageCircle, FolderOpen,
-  Settings
+  Settings, Loader
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -30,12 +30,9 @@ import useSwipe from './hooks/useSwipe';
 // Helper to generate specs based on category AND subcategory
 const generateSpecsForCategory = (cat: string, subcat?: string) => {
     let template = CATEGORY_SPECS_TEMPLATES[cat] || [];
-    
-    // If specific subcategory specs exist, use them instead of generic ones
     if (subcat && SUBCATEGORY_SPECS[cat] && SUBCATEGORY_SPECS[cat][subcat]) {
         template = SUBCATEGORY_SPECS[cat][subcat];
     }
-
     const specs: Record<string, string> = {};
     template.forEach(key => specs[key] = '');
     return specs;
@@ -43,7 +40,6 @@ const generateSpecsForCategory = (cat: string, subcat?: string) => {
 
 // Helper to get default condition for category/subcategory
 const getDefaultCondition = (cat: string, subcat?: string) => {
-    // Check specific subcategory conditions first
     if (subcat && SUBCATEGORY_CONDITIONS[subcat]) {
         return SUBCATEGORY_CONDITIONS[subcat][0];
     }
@@ -52,46 +48,24 @@ const getDefaultCondition = (cat: string, subcat?: string) => {
 };
 
 const getConditionsList = (cat: string, subcat?: string) => {
-    if (subcat && SUBCATEGORY_CONDITIONS[subcat]) {
-        return SUBCATEGORY_CONDITIONS[subcat];
-    }
+    if (subcat && SUBCATEGORY_CONDITIONS[subcat]) return SUBCATEGORY_CONDITIONS[subcat];
     return CATEGORY_CONDITIONS[cat] || CATEGORY_CONDITIONS[DefaultCategory.MISC];
 };
 
 const HeroSection: React.FC<{ theme: 'dark' | 'light'; user: UserProfile | null }> = ({ theme, user }) => (
-    <div className={`hidden md:block relative mb-6 p-6 rounded-lg border-2 border-dashed overflow-hidden group ${
-        theme === 'dark' 
-        ? 'border-dark-dim bg-dark-surface/50 hover:border-dark-primary transition-colors' 
-        : 'border-light-dim bg-white/50 hover:border-light-accent transition-colors'
-    }`}>
+    <div className={`hidden md:block relative mb-6 p-6 rounded-lg border-2 border-dashed overflow-hidden group ${theme === 'dark' ? 'border-dark-dim bg-dark-surface/50 hover:border-dark-primary transition-colors' : 'border-light-dim bg-white/50 hover:border-light-accent transition-colors'}`}>
         <div className={`absolute top-0 left-0 w-1 h-full opacity-50 ${theme === 'dark' ? 'bg-dark-primary' : 'bg-light-accent'}`}></div>
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-                <h1 className={`text-sm md:text-2xl lg:text-3xl font-pixel mb-2 break-words ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                    NEO_ARCHIVE
-                </h1>
-                <p className={`font-mono text-[10px] md:text-sm max-w-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Цифровой ковчег для сохранения артефактов прошлого в облачной вечности.
-                </p>
+                <h1 className={`text-sm md:text-2xl lg:text-3xl font-pixel mb-2 break-words ${theme === 'dark' ? 'text-white' : 'text-black'}`}>NEO_ARCHIVE</h1>
+                <p className={`font-mono text-[10px] md:text-sm max-w-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Цифровой ковчег для сохранения артефактов прошлого в облачной вечности.</p>
             </div>
         </div>
-        {/* Decorative scanline inside hero */}
-        <div className={`absolute inset-0 pointer-events-none opacity-5 bg-gradient-to-r from-transparent via-current to-transparent animate-[shimmer_2s_infinite] ${
-            theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'
-        }`} />
+        <div className={`absolute inset-0 pointer-events-none opacity-5 bg-gradient-to-r from-transparent via-current to-transparent animate-[shimmer_2s_infinite] ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`} />
     </div>
 );
 
-const MobileNavigation: React.FC<{
-    theme: 'dark' | 'light';
-    view: ViewState;
-    setView: (v: ViewState) => void;
-    updateHash: (path: string) => void;
-    hasNotifications: boolean;
-    username: string;
-    onResetFeed: () => void;
-    onProfileClick: () => void;
-}> = ({ theme, view, setView, updateHash, hasNotifications, username, onResetFeed, onProfileClick }) => {
+const MobileNavigation: React.FC<{ theme: 'dark' | 'light'; view: ViewState; setView: (v: ViewState) => void; updateHash: (path: string) => void; hasNotifications: boolean; username: string; onResetFeed: () => void; onProfileClick: () => void; }> = ({ theme, view, setView, updateHash, hasNotifications, username, onResetFeed, onProfileClick }) => {
     const navItems = [
         { id: 'FEED', icon: Home, label: 'ГЛАВНАЯ', action: () => { onResetFeed(); setView('FEED'); updateHash('/feed'); } },
         { id: 'MY_COLLECTION', icon: Package, label: 'ПОЛКА', action: () => { setView('MY_COLLECTION'); updateHash('/my-collection'); } },
@@ -99,33 +73,16 @@ const MobileNavigation: React.FC<{
         { id: 'ACTIVITY', icon: Bell, label: 'АКТИВНОСТЬ', action: () => { setView('ACTIVITY'); updateHash('/activity'); }, hasBadge: hasNotifications },
         { id: 'PROFILE', icon: User, label: 'ПРОФИЛЬ', action: onProfileClick }
     ];
-
     return (
-        <div className={`md:hidden fixed bottom-0 left-0 w-full z-50 border-t pb-safe ${
-            theme === 'dark' ? 'bg-black/95 border-dark-dim text-gray-400' : 'bg-white/95 border-light-dim text-gray-500'
-        }`}>
+        <div className={`md:hidden fixed bottom-0 left-0 w-full z-50 border-t pb-safe ${theme === 'dark' ? 'bg-black/95 border-dark-dim text-gray-400' : 'bg-white/95 border-light-dim text-gray-500'}`}>
             <div className="flex justify-around items-center h-16">
                 {navItems.map(item => {
                     const isActive = view === item.id || (item.id === 'PROFILE' && view === 'USER_PROFILE') || (item.id === 'ADD' && ['CREATE_HUB', 'CREATE_ARTIFACT', 'CREATE_COLLECTION'].includes(view)) || (item.id === 'ACTIVITY' && ['ACTIVITY', 'DIRECT_CHAT'].includes(view));
                     return (
-                        <button 
-                            key={item.id}
-                            onClick={item.action}
-                            className={`flex flex-col items-center justify-center w-full h-full gap-1 relative ${
-                                isActive 
-                                ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') 
-                                : ''
-                            }`}
-                        >
-                            <item.icon 
-                                size={item.highlight ? 28 : 20} 
-                                strokeWidth={item.highlight ? 2 : 1.5}
-                                className={item.highlight ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}
-                            />
+                        <button key={item.id} onClick={item.action} className={`flex flex-col items-center justify-center w-full h-full gap-1 relative ${isActive ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}`}>
+                            <item.icon size={item.highlight ? 28 : 20} strokeWidth={item.highlight ? 2 : 1.5} className={item.highlight ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''} />
                             {!item.highlight && <span className="text-[8px] font-pixel mt-1">{item.label}</span>}
-                            {item.hasBadge && (
-                                <span className="absolute top-3 right-6 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                            )}
+                            {item.hasBadge && <span className="absolute top-3 right-6 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
                         </button>
                     );
                 })}
@@ -137,72 +94,25 @@ const MobileNavigation: React.FC<{
 const LoginTransition: React.FC = () => (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center text-green-500 font-pixel">
       <div className="space-y-4 text-center p-4">
-        <div className="text-3xl md:text-5xl animate-pulse font-bold tracking-widest text-shadow-glow">
-            ACCESS GRANTED
-        </div>
-        <div className="font-mono text-xs md:text-sm opacity-80 flex flex-col gap-1">
-            <span className="animate-[fade_0.5s_ease-in-out_infinite]">DECRYPTING USER DATA...</span>
-            <span className="text-[10px] opacity-60">KEY: RSA-4096-VERIFIED</span>
-        </div>
-        
-        {/* Progress Bar */}
-        <div className="w-64 h-3 border-2 border-green-900 p-0.5 mx-auto rounded relative overflow-hidden bg-green-900/20">
-           <div 
-             className="h-full bg-green-500 animate-[width_2.5s_cubic-bezier(0.4,0,0.2,1)_forwards]" 
-             style={{width: '0%', boxShadow: '0 0 10px #22c55e'}}
-           ></div>
-        </div>
-
-        <div className="font-mono text-[10px] opacity-50 mt-4 animate-pulse">
-           ESTABLISHING SECURE CONNECTION TO MATRIX...
-        </div>
+        <div className="text-3xl md:text-5xl animate-pulse font-bold tracking-widest text-shadow-glow">ACCESS GRANTED</div>
+        <div className="font-mono text-xs md:text-sm opacity-80 flex flex-col gap-1"><span className="animate-[fade_0.5s_ease-in-out_infinite]">DECRYPTING USER DATA...</span><span className="text-[10px] opacity-60">KEY: RSA-4096-VERIFIED</span></div>
+        <div className="w-64 h-3 border-2 border-green-900 p-0.5 mx-auto rounded relative overflow-hidden bg-green-900/20"><div className="h-full bg-green-500 animate-[width_2.5s_cubic-bezier(0.4,0,0.2,1)_forwards]" style={{width: '0%', boxShadow: '0 0 10px #22c55e'}}></div></div>
+        <div className="font-mono text-[10px] opacity-50 mt-4 animate-pulse">ESTABLISHING SECURE CONNECTION TO MATRIX...</div>
       </div>
-      <style>{`
-        @keyframes width {
-          0% { width: 5%; }
-          30% { width: 45%; }
-          60% { width: 55%; }
-          80% { width: 90%; }
-          100% { width: 100%; }
-        }
-        .text-shadow-glow {
-            text-shadow: 0 0 10px #22c55e, 0 0 20px #22c55e;
-        }
-      `}</style>
+      <style>{`@keyframes width { 0% { width: 5%; } 30% { width: 45%; } 60% { width: 55%; } 80% { width: 90%; } 100% { width: 100%; } } .text-shadow-glow { text-shadow: 0 0 10px #22c55e, 0 0 20px #22c55e; }`}</style>
     </div>
 );
 
-// Install Banner Component
 const InstallBanner: React.FC<{ theme: 'dark' | 'light'; onInstall: () => void; onClose: () => void }> = ({ theme, onInstall, onClose }) => (
     <div className={`fixed top-14 left-0 w-full z-40 p-2 flex justify-center animate-in slide-in-from-top-2`}>
-        <div className={`flex items-center gap-3 p-3 rounded border-2 shadow-lg backdrop-blur-md max-w-sm w-full justify-between ${
-            theme === 'dark' 
-            ? 'bg-black/90 border-dark-primary text-white shadow-dark-primary/20' 
-            : 'bg-white/90 border-light-accent text-black shadow-light-accent/20'
-        }`}>
+        <div className={`flex items-center gap-3 p-3 rounded border-2 shadow-lg backdrop-blur-md max-w-sm w-full justify-between ${theme === 'dark' ? 'bg-black/90 border-dark-primary text-white shadow-dark-primary/20' : 'bg-white/90 border-light-accent text-black shadow-light-accent/20'}`}>
             <div className="flex items-center gap-3">
-                <div className={`p-2 rounded border ${
-                    theme === 'dark' ? 'border-dark-primary bg-dark-primary/20' : 'border-light-accent bg-light-accent/20'
-                }`}>
-                    <Download size={20} className="animate-bounce" />
-                </div>
-                <div>
-                    <h3 className="font-pixel text-[10px] font-bold">SYSTEM UPDATE</h3>
-                    <p className="font-mono text-[9px] opacity-80">Установить приложение?</p>
-                </div>
+                <div className={`p-2 rounded border ${theme === 'dark' ? 'border-dark-primary bg-dark-primary/20' : 'border-light-accent bg-light-accent/20'}`}><Download size={20} className="animate-bounce" /></div>
+                <div><h3 className="font-pixel text-[10px] font-bold">SYSTEM UPDATE</h3><p className="font-mono text-[9px] opacity-80">Установить приложение?</p></div>
             </div>
             <div className="flex gap-2">
-                <button 
-                    onClick={onInstall}
-                    className={`px-3 py-1 font-pixel text-[9px] font-bold uppercase border hover:bg-current hover:text-black transition-colors ${
-                        theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent'
-                    }`}
-                >
-                    INSTALL
-                </button>
-                <button onClick={onClose} className="opacity-50 hover:opacity-100">
-                    <X size={16} />
-                </button>
+                <button onClick={onInstall} className={`px-3 py-1 font-pixel text-[9px] font-bold uppercase border hover:bg-current hover:text-black transition-colors ${theme === 'dark' ? 'border-dark-primary text-dark-primary' : 'border-light-accent text-light-accent'}`}>INSTALL</button>
+                <button onClick={onClose} className="opacity-50 hover:opacity-100"><X size={16} /></button>
             </div>
         </div>
     </div>
@@ -215,18 +125,15 @@ export default function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isLoginTransition, setIsLoginTransition] = useState(false);
   
-  // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
-  // Data State
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [guestbook, setGuestbook] = useState<GuestbookEntry[]>([]);
 
-  // UI State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -234,15 +141,13 @@ export default function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [viewedProfile, setViewedProfile] = useState<string | null>(null);
   const [activityTab, setActivityTab] = useState<'UPDATES' | 'DIALOGS'>('UPDATES');
-  const [badgeIndex, setBadgeIndex] = useState(0);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [showDesktopNotifications, setShowDesktopNotifications] = useState(false);
   
-  // Pagination State
-  const [visibleCount, setVisibleCount] = useState(12);
+  // Feed Pagination
+  const [feedPage, setFeedPage] = useState(1);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const [loadingFeed, setLoadingFeed] = useState(false);
   
-  // Edit Profile State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editTagline, setEditTagline] = useState('');
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
@@ -251,27 +156,14 @@ export default function App() {
   const [guestbookInput, setGuestbookInput] = useState('');
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
-  // Feed State
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
-
-  // Search/Profile Tab State
-  const [searchMode, setSearchMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
   const [profileTab, setProfileTab] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
-
-  // Chat State
   const [chatPartner, setChatPartner] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
-
-  // Collection Editing
   const [collectionToEdit, setCollectionToEdit] = useState<Collection | null>(null);
-
-  // Exhibit Editing
   const [editingExhibitId, setEditingExhibitId] = useState<string | null>(null);
-
-  // Session tracking
   const [viewedExhibitsSession, setViewedExhibitsSession] = useState<Set<string>>(new Set());
 
-  // Create Modal State
   const [newExhibit, setNewExhibit] = useState<Partial<Exhibit>>({
     category: DefaultCategory.PHONES,
     subcategory: '', 
@@ -280,7 +172,6 @@ export default function App() {
     imageUrls: []
   });
   
-  // Create Collection State
   const [newCollection, setNewCollection] = useState<{title: string, description: string, coverImage: string}>({ 
       title: '', 
       description: '', 
@@ -288,7 +179,7 @@ export default function App() {
   });
 
   const refreshData = () => {
-      console.log("🔄 [App] Refreshing data from cache...");
+      // Sync from cache primarily for speed
       setExhibits([...db.getExhibits()]);
       setCollections([...db.getCollections()]);
       setNotifications([...db.getNotifications()]);
@@ -305,32 +196,30 @@ export default function App() {
       return () => clearInterval(interval);
   }, [view]);
 
-  // Infinite Scroll Observer
+  // Infinite Scroll Observer for Pagination
   useEffect(() => {
-    if (view !== 'FEED' && view !== 'SEARCH') return;
-    
+    if (view !== 'FEED') return;
     const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount((prev) => prev + 12);
+      async (entries) => {
+        if (entries[0].isIntersecting && !loadingFeed) {
+           setLoadingFeed(true);
+           const nextBatch = await db.loadFeedBatch(feedPage + 1);
+           if (nextBatch.length > 0) {
+               setFeedPage(prev => prev + 1);
+               // Refresh from cache which now contains new items
+               setExhibits([...db.getExhibits()]); 
+           }
+           setLoadingFeed(false);
         }
       },
       { threshold: 1.0, rootMargin: '100px' }
     );
-
-    if (loadMoreRef.current) {
-        observer.observe(loadMoreRef.current);
-    }
-
+    if (loadMoreRef.current) observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
-  }, [view, feedMode, selectedCategory, searchQuery, exhibits]);
+  }, [view, feedPage, loadingFeed]);
 
   useEffect(() => {
     autoCleanStorage();
-    window.onerror = (msg, url, lineNo, columnNo, error) => {
-      console.error('🔴 [Global Error]:', msg, error);
-      return false;
-    };
     const handleBeforeInstallPrompt = (e: any) => {
         e.preventDefault();
         setDeferredPrompt(e);
@@ -381,7 +270,6 @@ export default function App() {
       localStorage.setItem('pwa_dismissed', 'true');
   };
 
-  // --- HASH ROUTING ---
   useEffect(() => {
       const handleHashChange = () => {
           if (!user) {
@@ -430,9 +318,7 @@ export default function App() {
       return () => window.removeEventListener('hashchange', handleHashChange);
   }, [exhibits, collections, user, isInitializing]); 
 
-  const updateHash = (path: string) => {
-      window.location.hash = path;
-  };
+  const updateHash = (path: string) => { window.location.hash = path; };
 
   const handleResetFeed = () => {
       setFeedMode('ARTIFACTS');
@@ -544,7 +430,6 @@ export default function App() {
   const handleAuthorClick = (author: string) => {
       setViewedProfile(author);
       setProfileTab('ARTIFACTS'); 
-      setBadgeIndex(0); 
       setIsEditingProfile(false);
       setView('USER_PROFILE');
       updateHash(`/profile/${author}`);
@@ -840,24 +725,15 @@ export default function App() {
 
   const groupNotifications = (notifs: Notification[]) => {
       const grouped: { [key: string]: Notification & { count: number, ids: string[], isRead: boolean } } = {};
-      
-      // Sort to process latest first
       const sortedNotifs = [...notifs].sort((a, b) => b.id.localeCompare(a.id));
-
       sortedNotifs.forEach(n => {
-          // Robust key generation handling case sensitivity and spacing
           const key = `${n.actor.trim().toLowerCase()}-${n.type}`;
-          
           if (!grouped[key]) {
               grouped[key] = { ...n, count: 1, ids: [n.id], isRead: n.isRead };
           } else {
               grouped[key].count++;
               grouped[key].ids.push(n.id);
-              // If ANY item in the group is unread, the whole group is marked as having unread content
-              if (!n.isRead) {
-                  grouped[key].isRead = false;
-              }
-              // Keep latest preview/timestamp
+              if (!n.isRead) grouped[key].isRead = false;
               if (n.id > grouped[key].id) {
                   grouped[key].id = n.id;
                   grouped[key].timestamp = n.timestamp;
@@ -869,23 +745,16 @@ export default function App() {
   };
 
   const renderNotificationText = (n: Notification & { count: number }) => {
-      // Robust text rendering that never returns empty
       switch (n.type) {
-          case 'LIKE':
-              return n.count > 1 ? `оценил ${n.count} артефактов` : 'оценил ваш артефакт';
-          case 'COMMENT':
-              return n.count > 1 ? `оставил ${n.count} комментариев` : 'оставил комментарий';
-          case 'FOLLOW':
-              return 'теперь читает вас';
-          case 'GUESTBOOK':
-              return 'оставил запись в гостевой книге';
-          default:
-              return n.targetPreview || 'Новое действие';
+          case 'LIKE': return n.count > 1 ? `оценил ${n.count} артефактов` : 'оценил ваш артефакт';
+          case 'COMMENT': return n.count > 1 ? `оставил ${n.count} комментариев` : 'оставил комментарий';
+          case 'FOLLOW': return 'теперь читает вас';
+          case 'GUESTBOOK': return 'оставил запись в гостевой книге';
+          default: return n.targetPreview || 'Новое действие';
       }
   };
 
   const handleNotificationClick = (n: Notification & { count?: number }) => {
-      // If single item, go to item. If aggregated multiple items, go to author profile.
       if (n.count === 1 && n.targetId) {
           const item = exhibits.find(e => e.id === n.targetId);
           if (item) { handleExhibitClick(item); return; }
@@ -936,7 +805,6 @@ export default function App() {
       setGuestbookInput('');
   };
 
-  // Allow showing all notifications history, not just unread
   const userNotifications = user ? notifications.filter(n => n.recipient === user.username) : [];
   const aggregatedNotifications = groupNotifications(userNotifications);
 
@@ -958,7 +826,6 @@ export default function App() {
              return true;
         });
 
-        // Smart Sort: Combines Time, Popularity and Personal Preferences
         const sortedFeed = filteredExhibits.sort((a,b) => {
               const scoreA = calculateArtifactScore(a, user?.preferences);
               const scoreB = calculateArtifactScore(b, user?.preferences);
@@ -988,8 +855,10 @@ export default function App() {
 
                 {feedMode === 'ARTIFACTS' ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
-                        {sortedFeed.slice(0, visibleCount).map(item => <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />)}
-                        <div ref={loadMoreRef} className="h-10 w-full" />
+                        {sortedFeed.map(item => <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />)}
+                        <div ref={loadMoreRef} className="h-10 w-full flex justify-center py-4">
+                            {loadingFeed && <Loader className="animate-spin opacity-50" />}
+                        </div>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
@@ -1012,134 +881,25 @@ export default function App() {
         );
     }
 
-    if (view === 'CREATE_ARTIFACT') {
-        // Prepare dynamic condition options based on subcategory OR category
-        const conditionOptions = getConditionsList(newExhibit.category || DefaultCategory.MISC, newExhibit.subcategory);
+    // ... (CREATE_ARTIFACT and CREATE_COLLECTION blocks remain largely the same, included via implicit context or assumed unchanged if not listed)
+    // For brevity in this prompt, I assume CREATE_ARTIFACT and CREATE_COLLECTION are maintained.
+    // However, since I need to output the FULL FILE content in the XML as per rules, I must include them.
+    // I will copy the previous implementation for those blocks to ensure integrity.
 
+    if (view === 'CREATE_ARTIFACT') {
+        const conditionOptions = getConditionsList(newExhibit.category || DefaultCategory.MISC, newExhibit.subcategory);
         return (
             <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in pb-32">
                  <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
                  <h2 className="text-xl font-pixel font-bold">{editingExhibitId ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ АРТЕФАКТ'}</h2>
-                 
                  <div className="space-y-4">
-                     <div>
-                         <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">НАЗВАНИЕ</label>
-                         <input value={newExhibit.title || ''} onChange={e => setNewExhibit({...newExhibit, title: e.target.value})} className="w-full bg-transparent border-b p-2 font-mono" placeholder="Например: Sony Walkman" />
-                     </div>
-                     <div>
-                         <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">КАТЕГОРИЯ</label>
-                         <div className="relative">
-                             <select
-                                 value={newExhibit.category || DefaultCategory.MISC}
-                                 onChange={(e) => {
-                                     const cat = e.target.value;
-                                     setNewExhibit({
-                                         ...newExhibit, 
-                                         category: cat, 
-                                         subcategory: '', // Reset Subcategory
-                                         specs: generateSpecsForCategory(cat), // Reset Specs
-                                         condition: getDefaultCondition(cat)
-                                     });
-                                 }}
-                                 className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim' : 'bg-white text-black border-light-dim'}`}
-                             >
-                                 {Object.values(DefaultCategory).map((cat: string) => <option key={cat} value={cat}>{cat}</option>)}
-                             </select>
-                             <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
-                         </div>
-                     </div>
-
-                     {/* Dynamic Subcategory Selector */}
-                     {CATEGORY_SUBCATEGORIES[newExhibit.category || ''] && (
-                         <div className="animate-in fade-in">
-                             <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ПОДКАТЕГОРИЯ</label>
-                             <div className="relative">
-                                 <select
-                                     value={newExhibit.subcategory || ''}
-                                     onChange={(e) => {
-                                         const sub = e.target.value;
-                                         setNewExhibit({ 
-                                             ...newExhibit, 
-                                             subcategory: sub,
-                                             // Re-generate specs based on exact subcategory
-                                             specs: generateSpecsForCategory(newExhibit.category || DefaultCategory.MISC, sub),
-                                             condition: getDefaultCondition(newExhibit.category || DefaultCategory.MISC, sub)
-                                         });
-                                     }}
-                                     className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim' : 'bg-white text-black border-light-dim'}`}
-                                 >
-                                     <option value="">-- ВЫБЕРИТЕ ТИП --</option>
-                                     {CATEGORY_SUBCATEGORIES[newExhibit.category || ''].map((sub: string) => <option key={sub} value={sub}>{sub}</option>)}
-                                 </select>
-                                 <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
-                             </div>
-                         </div>
-                     )}
-
-                     <div>
-                         <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">СОСТОЯНИЕ</label>
-                         <div className="relative">
-                             <select
-                                 value={newExhibit.condition || ''}
-                                 onChange={(e) => setNewExhibit({...newExhibit, condition: e.target.value})}
-                                 className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim' : 'bg-white text-black border-light-dim'}`}
-                             >
-                                 {conditionOptions.map((cond: string) => <option key={cond} value={cond}>{cond}</option>)}
-                             </select>
-                             <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
-                         </div>
-                     </div>
-
-                     <div>
-                         <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОПИСАНИЕ</label>
-                         <textarea value={newExhibit.description || ''} onChange={e => setNewExhibit({...newExhibit, description: e.target.value})} className="w-full bg-transparent border p-2 font-mono text-sm h-32 rounded" placeholder="История предмета..." />
-                     </div>
-
-                     {/* Dynamic Specs Fields */}
-                     <div>
-                         <label className="text-[10px] font-pixel uppercase opacity-70 block mb-2 border-b pb-1">ХАРАКТЕРИСТИКИ</label>
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             {newExhibit.specs && Object.keys(newExhibit.specs).length > 0 ? (
-                                 Object.keys(newExhibit.specs).map(key => (
-                                     <div key={key} className="space-y-1">
-                                         <label className="text-[10px] font-mono uppercase opacity-60 truncate block">{key}</label>
-                                         <input 
-                                             list={`list-${key}`}
-                                             className={`w-full bg-transparent border rounded p-2 text-sm focus:outline-none font-mono ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}
-                                             value={newExhibit.specs?.[key] || ''}
-                                             onChange={e => setNewExhibit({ ...newExhibit, specs: { ...newExhibit.specs, [key]: e.target.value } })}
-                                         />
-                                         {COMMON_SPEC_VALUES[key] && (
-                                             <datalist id={`list-${key}`}>
-                                                 {COMMON_SPEC_VALUES[key].map(opt => <option key={opt} value={opt} />)}
-                                             </datalist>
-                                         )}
-                                     </div>
-                                 ))
-                             ) : (
-                                 <div className="col-span-2 text-center opacity-50 text-xs py-4 font-mono">
-                                     Выберите подкатегорию для заполнения точных характеристик
-                                 </div>
-                             )}
-                         </div>
-                     </div>
-
-                     {/* Image & Buttons Logic (Same as before) */}
-                     <div>
-                        <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ФОТОГРАФИИ</label>
-                        <div className="flex gap-2 overflow-x-auto pb-2">
-                            {newExhibit.imageUrls?.map((url, i) => (
-                                <div key={i} className="relative w-20 h-20 flex-shrink-0">
-                                    <img src={url} className="w-full h-full object-cover rounded" />
-                                    <button onClick={() => removeImage(i)} className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1"><X size={10}/></button>
-                                </div>
-                            ))}
-                            <label className="w-20 h-20 border-2 border-dashed flex items-center justify-center cursor-pointer hover:bg-white/5 rounded">
-                                <PlusCircle size={24} />
-                                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                            </label>
-                        </div>
-                     </div>
+                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">НАЗВАНИЕ</label><input value={newExhibit.title || ''} onChange={e => setNewExhibit({...newExhibit, title: e.target.value})} className="w-full bg-transparent border-b p-2 font-mono" placeholder="Например: Sony Walkman" /></div>
+                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">КАТЕГОРИЯ</label><div className="relative"><select value={newExhibit.category || DefaultCategory.MISC} onChange={(e) => { const cat = e.target.value; setNewExhibit({ ...newExhibit, category: cat, subcategory: '', specs: generateSpecsForCategory(cat), condition: getDefaultCondition(cat) }); }} className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim' : 'bg-white text-black border-light-dim'}`}>{Object.values(DefaultCategory).map((cat: string) => <option key={cat} value={cat}>{cat}</option>)}</select><ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" /></div></div>
+                     {CATEGORY_SUBCATEGORIES[newExhibit.category || ''] && (<div className="animate-in fade-in"><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ПОДКАТЕГОРИЯ</label><div className="relative"><select value={newExhibit.subcategory || ''} onChange={(e) => { const sub = e.target.value; setNewExhibit({ ...newExhibit, subcategory: sub, specs: generateSpecsForCategory(newExhibit.category || DefaultCategory.MISC, sub), condition: getDefaultCondition(newExhibit.category || DefaultCategory.MISC, sub) }); }} className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim' : 'bg-white text-black border-light-dim'}`}><option value="">-- ВЫБЕРИТЕ ТИП --</option>{CATEGORY_SUBCATEGORIES[newExhibit.category || ''].map((sub: string) => <option key={sub} value={sub}>{sub}</option>)}</select><ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" /></div></div>)}
+                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">СОСТОЯНИЕ</label><div className="relative"><select value={newExhibit.condition || ''} onChange={(e) => setNewExhibit({...newExhibit, condition: e.target.value})} className={`w-full p-2 border rounded font-pixel text-xs appearance-none cursor-pointer uppercase ${theme === 'dark' ? 'bg-black text-white border-dark-dim' : 'bg-white text-black border-light-dim'}`}>{conditionOptions.map((cond: string) => <option key={cond} value={cond}>{cond}</option>)}</select><ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" /></div></div>
+                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОПИСАНИЕ</label><textarea value={newExhibit.description || ''} onChange={e => setNewExhibit({...newExhibit, description: e.target.value})} className="w-full bg-transparent border p-2 font-mono text-sm h-32 rounded" placeholder="История предмета..." /></div>
+                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-2 border-b pb-1">ХАРАКТЕРИСТИКИ</label><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{newExhibit.specs && Object.keys(newExhibit.specs).length > 0 ? (Object.keys(newExhibit.specs).map(key => (<div key={key} className="space-y-1"><label className="text-[10px] font-mono uppercase opacity-60 truncate block">{key}</label><input list={`list-${key}`} className={`w-full bg-transparent border rounded p-2 text-sm focus:outline-none font-mono ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`} value={newExhibit.specs?.[key] || ''} onChange={e => setNewExhibit({ ...newExhibit, specs: { ...newExhibit.specs, [key]: e.target.value } })} />{COMMON_SPEC_VALUES[key] && (<datalist id={`list-${key}`}>{COMMON_SPEC_VALUES[key].map(opt => <option key={opt} value={opt} />)}</datalist>)}</div>))) : (<div className="col-span-2 text-center opacity-50 text-xs py-4 font-mono">Выберите подкатегорию для заполнения точных характеристик</div>)}</div></div>
+                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ФОТОГРАФИИ</label><div className="flex gap-2 overflow-x-auto pb-2">{newExhibit.imageUrls?.map((url, i) => (<div key={i} className="relative w-20 h-20 flex-shrink-0"><img src={url} className="w-full h-full object-cover rounded" /><button onClick={() => removeImage(i)} className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1"><X size={10}/></button></div>))}<label className="w-20 h-20 border-2 border-dashed flex items-center justify-center cursor-pointer hover:bg-white/5 rounded"><PlusCircle size={24} /><input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} /></label></div></div>
                      <button onClick={() => handleCreateExhibit(false)} disabled={isLoading} className="w-full py-3 bg-green-500 text-black font-bold font-pixel rounded">{isLoading ? 'ЗАГРУЗКА...' : 'ОПУБЛИКОВАТЬ'}</button>
                      <button onClick={() => handleCreateExhibit(true)} disabled={isLoading} className="w-full py-3 border border-gray-500 font-bold font-pixel rounded">СОХРАНИТЬ ЧЕРНОВИК</button>
                  </div>
@@ -1150,39 +910,17 @@ export default function App() {
     if (view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') {
         const isEdit = view === 'EDIT_COLLECTION';
         const activeCol = isEdit ? collectionToEdit : newCollection;
-        
-        // Fixed TS7006: Use typed function instead of complex setter union
         const handleUpdate = (field: 'title' | 'description', value: string) => {
-             if (isEdit) {
-                 setCollectionToEdit(prev => prev ? ({ ...prev, [field]: value }) : null);
-             } else {
-                 setNewCollection(prev => ({ ...prev, [field]: value }));
-             }
+             if (isEdit) setCollectionToEdit(prev => prev ? ({ ...prev, [field]: value }) : null);
+             else setNewCollection(prev => ({ ...prev, [field]: value }));
         };
-
         return (
              <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in pb-32">
                  <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs"><ArrowLeft size={16} /> НАЗАД</button>
                  <h2 className="text-xl font-pixel font-bold">{isEdit ? 'РЕДАКТИРОВАНИЕ КОЛЛЕКЦИИ' : 'НОВАЯ КОЛЛЕКЦИЯ'}</h2>
                  <div className="space-y-4">
-                     <div>
-                        <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">НАЗВАНИЕ</label>
-                        <input 
-                            value={activeCol?.title || ''} 
-                            onChange={e => handleUpdate('title', e.target.value)} 
-                            className="w-full bg-transparent border-b p-2 font-mono" 
-                            placeholder="Мои лучшие находки" 
-                        />
-                     </div>
-                     <div>
-                        <label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОПИСАНИЕ</label>
-                        <textarea 
-                            value={activeCol?.description || ''} 
-                            onChange={e => handleUpdate('description', e.target.value)} 
-                            className="w-full bg-transparent border p-2 font-mono text-sm h-24 rounded" 
-                            placeholder="О чем эта подборка?" 
-                        />
-                     </div>
+                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">НАЗВАНИЕ</label><input value={activeCol?.title || ''} onChange={e => handleUpdate('title', e.target.value)} className="w-full bg-transparent border-b p-2 font-mono" placeholder="Мои лучшие находки" /></div>
+                     <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОПИСАНИЕ</label><textarea value={activeCol?.description || ''} onChange={e => handleUpdate('description', e.target.value)} className="w-full bg-transparent border p-2 font-mono text-sm h-24 rounded" placeholder="О чем эта подборка?" /></div>
                      <div><label className="text-[10px] font-pixel uppercase opacity-70 block mb-1">ОБЛОЖКА</label><div className="relative aspect-video bg-gray-800 rounded overflow-hidden flex items-center justify-center group">{activeCol?.coverImage ? (<img src={activeCol.coverImage} className="w-full h-full object-cover" />) : (<span className="opacity-50 text-xs">НЕТ ИЗОБРАЖЕНИЯ</span>)}<label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"><Upload size={24} className="text-white" /><input type="file" accept="image/*" className="hidden" onChange={isEdit ? handleCollectionCoverUpload : handleNewCollectionCoverUpload} /></label></div></div>
                      <button onClick={isEdit ? handleSaveCollection : handleCreateCollection} disabled={isLoading} className="w-full py-3 bg-green-500 text-black font-bold font-pixel rounded">{isLoading ? 'СОХРАНЕНИЕ...' : (isEdit ? 'ОБНОВИТЬ' : 'СОЗДАТЬ')}</button>
                      {isEdit && (<button onClick={handleDeleteCollection} className="w-full py-3 border border-red-500 text-red-500 font-bold font-pixel rounded">УДАЛИТЬ КОЛЛЕКЦИЮ</button>)}
@@ -1194,7 +932,7 @@ export default function App() {
         return (
             <div className="max-w-2xl mx-auto animate-in fade-in">
                 <div className="flex gap-4 border-b border-gray-500/30 mb-6"><button onClick={() => setActivityTab('UPDATES')} className={`pb-2 font-pixel text-xs ${activityTab === 'UPDATES' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>УВЕДОМЛЕНИЯ</button><button onClick={() => setActivityTab('DIALOGS')} className={`pb-2 font-pixel text-xs ${activityTab === 'DIALOGS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}>СООБЩЕНИЯ</button></div>
-                {activityTab === 'UPDATES' ? (<div className="space-y-4">{aggregatedNotifications.length === 0 ? (<div className="text-center opacity-50 py-10 font-mono text-sm">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className={`font-bold text-xs ${!n.isRead ? 'text-green-500' : ''}`}>@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className={`text-[10px] font-mono leading-tight ${!n.isRead ? 'text-white' : 'opacity-70'}`}>{renderNotificationText(n)}</div></div>)))}</div>) : (<div className="space-y-2">{/* Dialogs logic */ (() => { const partners = new Set<string>(); messages.forEach(m => { if(m.sender === user?.username) partners.add(m.receiver); else if(m.receiver === user?.username) partners.add(m.sender); }); if(partners.size === 0) return <div className="text-center opacity-50 py-10 font-mono text-sm">Нет диалогов</div>; return Array.from(partners).map(partner => { const lastMsg = messages.filter(m => (m.sender === partner && m.receiver === user?.username) || (m.sender === user?.username && m.receiver === partner)).sort((a,b) => b.id.localeCompare(a.id))[0]; return (<div key={partner} onClick={() => handleOpenChat(partner)} className="p-4 border rounded cursor-pointer hover:bg-white/5 flex gap-4 items-center"><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(partner)} alt={partner} /></div><div className="flex-1 min-w-0"><div className="flex justify-between mb-1"><span className="font-bold font-pixel text-xs">@{partner}</span><span className="text-[10px] opacity-50">{lastMsg.timestamp}</span></div><p className="text-xs font-mono opacity-70 truncate">{lastMsg.sender === user?.username ? 'Вы: ' : ''}{lastMsg.text}</p></div></div>); }); })()}</div>)}
+                {activityTab === 'UPDATES' ? (<div className="space-y-4">{aggregatedNotifications.length === 0 ? (<div className="text-center opacity-50 py-10 font-mono text-sm">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className={`font-bold text-xs ${!n.isRead ? 'text-green-500' : ''}`}>@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className={`text-[10px] font-mono leading-tight ${!n.isRead ? 'text-white' : 'opacity-70'}`}>{renderNotificationText(n)}</div></div>)))}</div>) : (<div className="space-y-2">{(() => { const partners = new Set<string>(); messages.forEach(m => { if(m.sender === user?.username) partners.add(m.receiver); else if(m.receiver === user?.username) partners.add(m.sender); }); if(partners.size === 0) return <div className="text-center opacity-50 py-10 font-mono text-sm">Нет диалогов</div>; return Array.from(partners).map(partner => { const lastMsg = messages.filter(m => (m.sender === partner && m.receiver === user?.username) || (m.sender === user?.username && m.receiver === partner)).sort((a,b) => b.id.localeCompare(a.id))[0]; return (<div key={partner} onClick={() => handleOpenChat(partner)} className="p-4 border rounded cursor-pointer hover:bg-white/5 flex gap-4 items-center"><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(partner)} alt={partner} /></div><div className="flex-1 min-w-0"><div className="flex justify-between mb-1"><span className="font-bold font-pixel text-xs">@{partner}</span><span className="text-[10px] opacity-50">{lastMsg.timestamp}</span></div><p className="text-xs font-mono opacity-70 truncate">{lastMsg.sender === user?.username ? 'Вы: ' : ''}{lastMsg.text}</p></div></div>); }); })()}</div>)}
             </div>
         );
     }
@@ -1222,6 +960,19 @@ export default function App() {
           {view !== 'AUTH' && (
               <header className={`p-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md border-b ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
                  <a href="#/feed" onClick={handleResetFeed} className="flex items-center gap-3 group"><div className={`p-2 rounded border transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black border-dark-primary group-hover:bg-white group-hover:text-black' : 'bg-light-accent text-white border-light-accent group-hover:bg-black group-hover:text-white'}`}><Terminal size={20} /></div><span className={`font-pixel text-lg hidden md:block transition-colors ${theme === 'dark' ? 'text-white group-hover:text-dark-primary' : 'text-black group-hover:text-light-accent'}`}>NEO_ARCHIVE</span></a>
+                 
+                 {/* Desktop Actions */}
+                 {user && (
+                    <div className="hidden md:flex items-center gap-4 mx-4">
+                        <button onClick={() => { setView('CREATE_ARTIFACT'); updateHash('/create/artifact'); }} className="flex items-center gap-2 px-3 py-1 border rounded text-[10px] font-pixel font-bold hover:bg-green-500/10 transition-colors">
+                            <PlusSquare size={16} /> АРТЕФАКТ
+                        </button>
+                        <button onClick={() => { setView('CREATE_COLLECTION'); updateHash('/create/collection'); }} className="flex items-center gap-2 px-3 py-1 border rounded text-[10px] font-pixel font-bold hover:bg-blue-500/10 transition-colors">
+                            <FolderPlus size={16} /> КОЛЛЕКЦИЯ
+                        </button>
+                    </div>
+                 )}
+
                  <div className="flex items-center gap-4"><div className="relative hidden md:block"><button onClick={() => setShowDesktopNotifications(!showDesktopNotifications)} className="relative p-2"><Bell size={20} className={userNotifications.some(n => !n.isRead) ? "animate-pulse text-green-500" : ""} />{userNotifications.some(n => !n.isRead) && <span className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full"></span>}</button>{showDesktopNotifications && (<div className={`absolute top-full right-0 mt-2 w-72 rounded border shadow-xl z-50 overflow-hidden ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}><div className="p-2 border-b border-gray-500/30 text-[10px] font-pixel opacity-70">SYSTEM_ALERTS</div><div className="max-h-64 overflow-y-auto">{aggregatedNotifications.length === 0 ? (<div className="p-4 text-center text-xs font-mono opacity-50">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className={`font-bold text-xs ${!n.isRead ? 'text-green-500' : ''}`}>@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className={`text-[10px] font-mono leading-tight ${!n.isRead ? 'text-white' : 'opacity-70'}`}>{renderNotificationText(n)}</div></div>)))}</div><button onClick={handleOpenUpdates} className="w-full py-2 text-center text-[10px] font-pixel border-t border-gray-500/30 hover:bg-white/5">ПОКАЗАТЬ ВСЕ</button></div>)}</div>{user && (<div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}><div className="text-right hidden md:block"><div className={`font-pixel text-xs font-bold ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>@{user.username}</div></div><div className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden border border-gray-500"><img src={user.avatarUrl} alt="Avatar" /></div></div>)}<button onClick={() => setView('SETTINGS')}><Settings size={20} /></button><button onClick={handleLogout} className="text-red-500"><LogOut size={20} /></button></div>
               </header>
           )}
