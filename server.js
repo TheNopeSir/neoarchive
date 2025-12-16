@@ -47,7 +47,8 @@ app.get('/sw.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'sw.js'));
 });
 
-app.get('/workbox-*.js', (req, res) => {
+// Workbox files - no cache (use regex for Express 5)
+app.get(/^\/workbox-.*\.js$/, (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(__dirname, 'dist', req.path));
 });
