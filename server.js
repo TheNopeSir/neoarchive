@@ -47,7 +47,8 @@ app.get('/sw.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'sw.js'));
 });
 
-app.get('/workbox-*.js', (req, res) => {
+// Express 5 compatible: используем regex вместо wildcard
+app.get(/^\/workbox-.*\.js$/, (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(__dirname, 'dist', req.path));
 });
