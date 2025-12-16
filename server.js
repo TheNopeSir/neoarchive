@@ -34,7 +34,57 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'dist')));
+
+// ==========================================
+// ⚡ КЭШИРОВАНИЕ СТАТИЧЕСКИХ ФАЙЛОВ
+// ==========================================
+
+// Service Worker - НЕ кэшировать (всегда свежий)
+app.get('/sw.js', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(path.join(__dirname, 'dist', 'sw.js'));
+});
+
+app.get('/workbox-*.js', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.join(__dirname, 'dist', req.path));
+});
+
+// Assets (JS, CSS, изображения) - долгое кэширование с immutable
+app.use('/assets', express.static(path.join(__dirname, 'dist/assets'), {
+    maxAge: '1y',
+    immutable: true,
+    setHeaders: (res, filePath) => {
+        // Все файлы в /assets/ версионированы Vite, можно кэшировать навсегда
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+        // Дополнительные заголовки для сжатия
+        if (filePath.endsWith('.js')) {
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        } else if (filePath.endsWith('.css')) {
+            res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        }
+    }
+}));
+
+// Manifest и иконки - среднее кэширование
+app.get('/manifest.webmanifest', (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 день
+    res.sendFile(path.join(__dirname, 'dist', 'manifest.webmanifest'));
+});
+
+// Остальные статические файлы - краткое кэширование
+app.use(express.static(path.join(__dirname, 'dist'), {
+    maxAge: '5m',
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+            // HTML - короткое кэширование для быстрых обновлений
+            res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+        }
+    }
+}));
 
 let supabase = null;
 let isOfflineMode = false;
