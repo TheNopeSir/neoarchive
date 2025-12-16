@@ -223,8 +223,8 @@ createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
 
-// Handle 404 for API
-app.all('/api/*', (req, res) => {
+// Handle 404 for API (use regex for Express 5)
+app.all(/^\/api\/.*/, (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });
 
