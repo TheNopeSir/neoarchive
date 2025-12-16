@@ -31,26 +31,36 @@ const pool = new Pool({
     connectionTimeoutMillis: 2000,
 });
 
-// Настройка почты (SMTP) - Port 2525 (STARTTLS)
+// Настройка почты (GMAIL)
+// ВАЖНО: Используйте "Пароль приложения" (App Password), а не пароль от аккаунта!
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // Nodemailer имеет встроенные настройки для Gmail
+    auth: {
+        user: 'truester1337@gmail.com', 
+        pass: 'qkpv igjx hgib uoqf'   
+    }
+});
+
+/* 
+// Резервная настройка (Timeweb) - раскомментируйте, если нужно вернуться
 const transporter = nodemailer.createTransport({
     host: 'smtp.timeweb.ru',
     port: 2525,
-    secure: false, // false for STARTTLS (port 587 or 2525)
+    secure: false, 
     auth: {
         user: 'morpheus@neoarch.ru',
         pass: 'RTZ0JwbaRDXdD='
     },
-    tls: {
-        rejectUnauthorized: false
-    }
+    tls: { rejectUnauthorized: false }
 });
+*/
 
 // Verify SMTP connection on start
 transporter.verify(function (error, success) {
     if (error) {
         console.error("❌ [Mail] SMTP Connection Error:", error);
     } else {
-        console.log("✅ [Mail] SMTP Server is ready to take our messages");
+        console.log("✅ [Mail] SMTP Server (Gmail) is ready");
     }
 });
 
@@ -113,7 +123,7 @@ pool.connect((err, client, release) => {
 const sendRecoveryEmail = async (email, newPassword) => {
     try {
         const mailOptions = {
-            from: '"NeoArchive System" <morpheus@neoarch.ru>',
+            from: '"NeoArchive System" <truester1337@gmail.com>',
             to: email,
             subject: 'NeoArchive: Восстановление доступа',
             text: `Ваш новый пароль доступа к Архиву: ${newPassword}\n\nПожалуйста, измените его после входа, если это необходимо.\n\nWake up...`,
