@@ -16,17 +16,55 @@ export const DefaultCategory = {
   MISC: 'ПРОЧЕЕ'
 } as const;
 
-// 2. Subcategories (Restored)
+// 2. Subcategories
 export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
-    [DefaultCategory.PHONES]: ['Смартфоны', 'Кнопочные телефоны', 'Раскладушки', 'Слайдеры', 'КПК', 'Стационарные'],
+    [DefaultCategory.PHONES]: ['Смартфоны', 'Кнопочные телефоны', 'Раскладушки', 'Слайдеры', 'КПК', 'Стационарные', 'Пейджеры'],
     [DefaultCategory.GAMES]: ['Картриджи (8-bit/16-bit)', 'Диски (CD/DVD/BD)', 'Портативные консоли', 'Стационарные консоли', 'Аксессуары', 'Аркадные автоматы'],
     [DefaultCategory.MAGAZINES]: ['Игровые', 'Компьютерные', 'Технические', 'Музыкальные', 'Комиксы', 'Каталоги', 'Постеры'],
-    [DefaultCategory.MUSIC]: ['Аудиокассеты', 'Винил (LP/EP)', 'CD', 'MiniDisc', 'Катушки', 'Плееры', 'Hi-Fi Техника'],
-    [DefaultCategory.VIDEO]: ['VHS', 'DVD', 'Blu-ray', 'LaserDisc', 'Video CD', 'Проекторы', 'Видеоплееры'],
-    [DefaultCategory.TOYS]: ['Action Figures', 'Конструкторы', 'Мягкие игрушки', 'Роботы', 'Настольные игры', 'Тамагочи/Электроника'],
-    [DefaultCategory.COMPUTERS]: ['Ретро ПК', 'Ноутбуки', 'Комплектующие', 'Периферия', 'Носители информации (Floppy/ZIP)'],
+    [DefaultCategory.MUSIC]: ['Аудиокассеты', 'Винил (LP/EP)', 'CD', 'MiniDisc', 'Плееры (Портатив)', 'Hi-Fi Компоненты', 'Катушки'],
+    [DefaultCategory.VIDEO]: ['VHS', 'DVD', 'Blu-ray', 'Видеоплееры', 'Проекторы', 'Video CD'],
+    [DefaultCategory.TOYS]: ['Action Figures', 'Конструкторы', 'Мягкие игрушки', 'Роботы', 'Настольные игры', 'Тамагочи/Электроника', 'Моделизм'],
+    [DefaultCategory.COMPUTERS]: ['Ретро ПК', 'Ноутбуки', 'Комплектующие', 'Периферия', 'Носители (Floppy/ZIP)'],
     [DefaultCategory.CAMERAS]: ['Пленочные', 'Цифровые (Early Digital)', 'Polaroid/Instax', 'Видеокамеры', 'Объективы'],
     [DefaultCategory.MISC]: ['Часы', 'Калькуляторы', 'Мерч', 'Упаковка', 'Реклама', 'Другое']
+};
+
+// 3. Detailed Specs Mapping
+// Base templates for main categories
+export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
+  [DefaultCategory.PHONES]: ['Бренд', 'Модель', 'Год выпуска', 'Стандарт связи', 'Тип корпуса'],
+  [DefaultCategory.GAMES]: ['Платформа', 'Название', 'Регион', 'Год', 'Комплектация'],
+  [DefaultCategory.MAGAZINES]: ['Название', 'Номер', 'Год', 'Издательство', 'Язык'],
+  [DefaultCategory.MUSIC]: ['Исполнитель', 'Альбом', 'Год', 'Носитель', 'Состояние'],
+  [DefaultCategory.VIDEO]: ['Название', 'Год', 'Носитель', 'Режиссер', 'Издатель'],
+  [DefaultCategory.TOYS]: ['Название', 'Серия', 'Бренд', 'Год', 'Материал'],
+  [DefaultCategory.COMPUTERS]: ['Бренд', 'Модель', 'Процессор', 'ОЗУ', 'Год'],
+  [DefaultCategory.CAMERAS]: ['Бренд', 'Модель', 'Тип', 'Матрица/Пленка', 'Год'],
+  [DefaultCategory.MISC]: ['Название', 'Производитель', 'Год', 'Описание']
+};
+
+// Override templates for specific subcategories for precision
+export const SUBCATEGORY_SPECS: Record<string, Record<string, string[]>> = {
+    [DefaultCategory.MUSIC]: {
+        'Плееры (Портатив)': ['Бренд', 'Модель', 'Тип (Кассетный/CD/MD)', 'Питание (Батарейки)', 'Особенности (Bass Boost etc)', 'Год выхода'],
+        'Hi-Fi Компоненты': ['Бренд', 'Модель', 'Тип устройства', 'Питание (V)', 'Страна производства', 'Год'],
+        'Винил (LP/EP)': ['Исполнитель', 'Альбом', 'Лейбл', 'Страна издания', 'Год издания', 'RPM (Обороты)', 'Матрица'],
+        'Аудиокассеты': ['Исполнитель', 'Альбом', 'Тип пленки (I/II/IV)', 'Лейбл', 'Год издания'],
+        'CD': ['Исполнитель', 'Альбом', 'Лейбл', 'Количество дисков', 'Год издания', 'Страна']
+    },
+    [DefaultCategory.GAMES]: {
+        'Стационарные консоли': ['Бренд', 'Модель', 'Регион (PAL/NTSC)', 'Модификации (Чип/ODE)', 'Комплект', 'Год выпуска'],
+        'Портативные консоли': ['Бренд', 'Модель', 'Экран (Mod/Orig)', 'Питание', 'Цвет корпуса', 'Год выпуска'],
+        'Картриджи (8-bit/16-bit)': ['Платформа', 'Название игры', 'Тип (Лицензия/Пиратка)', 'Регион', 'Сохранение (Батарейка)', 'Коробка/Мануал']
+    },
+    [DefaultCategory.PHONES]: {
+        'Смартфоны': ['Бренд', 'Модель', 'ОС (Symbian/WM/etc)', 'Процессор', 'Экран', 'Камера', 'Год анонса'],
+        'Пейджеры': ['Бренд', 'Модель', 'Частота', 'Оператор', 'Строк на экране']
+    },
+    [DefaultCategory.COMPUTERS]: {
+        'Комплектующие': ['Тип (GPU/CPU/Sound)', 'Бренд', 'Модель', 'Интерфейс (AGP/PCI/ISA)', 'Год'],
+        'Носители (Floppy/ZIP)': ['Формат', 'Объем', 'Производитель', 'Состояние']
+    }
 };
 
 export const BADGES = {
@@ -93,44 +131,13 @@ export const CATEGORY_CONDITIONS: Record<string, string[]> = {
   ]
 };
 
-// Standard keys for categories to help user fill specs (Expanded to ~10 items)
-export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
-  [DefaultCategory.PHONES]: [
-      'Бренд', 'Модель', 'Год выпуска', 'ОС / Платформа', 'Тип связи (GSM/CDMA)', 
-      'Тип экрана', 'Батарея', 'Камера (Мп)', 'Особенности конструкции', 'Комплектация'
-  ],
-  [DefaultCategory.GAMES]: [
-      'Платформа', 'Название игры', 'Выпуск картриджа', 'Жанр', 'Разработчик', 'Издатель', 
-      'Год релиза', 'Регион (PAL/NTSC)', 'Носитель', 'Мануал (Есть/Нет)', 'Коробка (Есть/Нет)'
-  ],
-  [DefaultCategory.MAGAZINES]: [
-      'Номер выпуска', 'Год издания', 'Месяц', 'Издательство', 
-      'Язык', 'Количество страниц', 'Тема номера', 'Постер в комплекте', 'Сохранность обложки'
-  ],
-  [DefaultCategory.MUSIC]: [
-      'Исполнитель', 'Альбом', 'Год релиза', 'Лейбл', 'Страна издания', 
-      'Формат (CD/Vinyl/Cassette)', 'Жанр', 'Скорость (RPM)', 'Тип упаковки', 'Бонус-треки'
-  ],
-  [DefaultCategory.COMPUTERS]: [
-      'Производитель', 'Модель', 'Процессор', 'Тактовая частота', 'ОЗУ (RAM)', 
-      'Видеоадаптер', 'Жесткий диск (HDD)', 'Операционная система', 'Тип корпуса', 'Год выпуска'
-  ],
-  [DefaultCategory.CAMERAS]: [
-      'Бренд', 'Модель', 'Тип камеры', 'Матрица / Пленка', 'Разрешение (Мп)', 
-      'Объектив', 'Зум (Оптический)', 'Тип носителя памяти', 'Питание', 'Год анонса'
-  ],
-  [DefaultCategory.VIDEO]: [
-      'Формат (VHS/DVD/LD)', 'Год выпуска', 'Режиссер', 'Студия', 
-      'Язык / Перевод', 'Регион', 'Хронометраж', 'Особенности издания', 'Коробка'
-  ],
-  [DefaultCategory.TOYS]: [
-      'Серия / Линейка', 'Производитель', 'Год выпуска', 'Материал', 
-      'Размер (см)', 'Артикуляция', 'Аксессуары', 'Тип упаковки', 'Редкость'
-  ],
-  [DefaultCategory.MISC]: [
-      'Назначение', 'Производитель', 'Страна происхождения', 'Год производства', 
-      'Материал', 'Размеры', 'Вес', 'Цвет', 'Редкость'
-  ]
+// Precise conditions overrides
+export const SUBCATEGORY_CONDITIONS: Record<string, string[]> = {
+    'Винил (LP/EP)': ['SEALED', 'MINT (M)', 'NEAR MINT (NM)', 'EXCELLENT (EX)', 'VERY GOOD+ (VG+)', 'VERY GOOD (VG)', 'GOOD (G)', 'POOR (P)'],
+    'Аудиокассеты': ['SEALED', 'MINT (J-Card Mint)', 'NM', 'VG+', 'VG', 'G (Tested)', 'AS-IS'],
+    'Портативные консоли': ['NEW (SEALED)', 'CIB (MINT)', 'CIB (USED)', 'LOOSE (GOOD)', 'LOOSE (SCRATCHED)', 'FOR PARTS/REPAIR'],
+    'Картриджи (8-bit/16-bit)': ['NEW', 'CIB', 'LOOSE (Label Mint)', 'LOOSE (Label Damage)', 'REPRO (Новодел)'],
+    'Диски (CD/DVD/BD)': ['SEALED', 'MINT', 'NM', 'VG+', 'VG', 'SCRATCHED (Рабочий)', 'BAD (Не рабочий)']
 };
 
 // Common values for autocomplete suggestions
@@ -143,27 +150,58 @@ export const COMMON_SPEC_VALUES: Record<string, string[]> = {
         'Другое / Hack / Homebrew'
     ],
     'Комплектация (CIB/Loose)': ['Только картридж', 'С коробкой', 'Полный комплект (CIB)', 'Запечатанный'],
-    'Производитель': ['Sony', 'Nokia', 'Samsung', 'Panasonic', 'Apple', 'Nintendo', 'Sega', 'Casio', 'Motorola', 'Siemens', 'Canon', 'Nikon', 'Kodak', 'Polaroid', 'JVC', 'Sharp', 'Philips'],
-    'Год выпуска': Array.from({length: 50}, (_, i) => (2024 - i).toString()), // 2024 down to 1974
-    'Платформа': ['NES/Dendy', 'Sega Mega Drive', 'PlayStation 1', 'PlayStation 2', 'Game Boy', 'Game Boy Color', 'Game Boy Advance', 'Xbox', 'PC', 'PSP'],
+    'Производитель': ['Sony', 'Nokia', 'Samsung', 'Panasonic', 'Apple', 'Nintendo', 'Sega', 'Casio', 'Motorola', 'Siemens', 'Canon', 'Nikon', 'Kodak', 'Polaroid', 'JVC', 'Sharp', 'Philips', 'Technics', 'Pioneer'],
+    'Год выпуска': Array.from({length: 50}, (_, i) => (2024 - i).toString()), 
+    'Год издания': Array.from({length: 60}, (_, i) => (2024 - i).toString()),
+    'Платформа': ['NES/Dendy', 'Sega Mega Drive', 'PlayStation 1', 'PlayStation 2', 'Game Boy', 'Game Boy Color', 'Game Boy Advance', 'Xbox', 'PC', 'PSP', 'Dreamcast', 'Nintendo 64'],
     'Регион': ['PAL', 'NTSC-U', 'NTSC-J', 'Region Free'],
     'Язык': ['Русский', 'English', '日本語', 'Deutsch', 'Français'],
     'Материал': ['Пластик', 'Металл', 'Дерево', 'Стекло', 'Винил'],
-    'ОС': ['Symbian', 'Windows Mobile', 'Palm OS', 'Android 1.6', 'iOS 3', 'Java MIDP 2.0'],
-    'Цвет': ['Черный', 'Белый', 'Серебристый', 'Прозрачный', 'Синий', 'Красный', 'Желтый']
+    'ОС': ['Symbian', 'Windows Mobile', 'Palm OS', 'Android 1.6', 'iOS 3', 'Java MIDP 2.0', 'MS-DOS', 'Windows 98'],
+    'Цвет': ['Черный', 'Белый', 'Серебристый', 'Прозрачный', 'Синий', 'Красный', 'Желтый', 'Золотой'],
+    'Тип пленки (I/II/IV)': ['Type I (Normal)', 'Type II (Chrome)', 'Type IV (Metal)'],
+    'RPM (Обороты)': ['33 1/3', '45', '78']
 };
 
 export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 
-export const calculateArtifactScore = (item: Exhibit): number => {
-    const likeScore = item.likes * 25;
-    const commentScore = (item.comments?.length || 0) * 10;
-    const viewScore = Math.floor(item.views * 1); 
-    return likeScore + commentScore + viewScore;
+export const calculateArtifactScore = (item: Exhibit, userPreferences?: Record<string, number>): number => {
+    // 1. Popularity Base
+    const likeScore = item.likes * 10;
+    const commentScore = (item.comments?.length || 0) * 5;
+    const viewScore = Math.floor(item.views * 0.5); 
+    
+    // 2. Freshness Boost (Time Decay)
+    // Items created in the last 48 hours get a massive boost that decays rapidly
+    const now = new Date().getTime();
+    // Parse timestamp "dd.mm.yyyy, hh:mm:ss" or ISO
+    let itemTime = now;
+    try {
+        if(item.timestamp.includes(',')) {
+            const parts = item.timestamp.split(',')[0].split('.');
+            // simple parse for RU format approx
+            itemTime = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+        } else {
+            itemTime = new Date(item.timestamp).getTime();
+        }
+    } catch(e) {}
+
+    const hoursSinceCreation = Math.max(0, (now - itemTime) / (1000 * 60 * 60));
+    // Decay factor: New items (0 hours) get +500, items 24h old get ~200, 1 week old get ~30
+    const freshnessScore = 1000 / (hoursSinceCreation + 2);
+
+    // 3. User Personalization (Smart Feed)
+    let preferenceBoost = 0;
+    if (userPreferences && userPreferences[item.category]) {
+        // Boost factor matches user preference weight (0.1 to 2.0 typically)
+        preferenceBoost = userPreferences[item.category] * 100;
+    }
+
+    return likeScore + commentScore + viewScore + freshnessScore + preferenceBoost;
 };
 
 export const getArtifactTier = (item: Exhibit): TierType => {
-    const score = calculateArtifactScore(item);
+    const score = (item.likes * 25) + ((item.comments?.length || 0) * 10) + item.views;
     const filledSpecs = Object.values(item.specs || {}).filter(v => v && v.trim().length > 0).length;
     const imageCount = item.imageUrls?.length || 0;
     const isHighQuality = filledSpecs >= 5 && imageCount >= 2;
