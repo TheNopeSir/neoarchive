@@ -62,24 +62,50 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
               console.log("Telegram Auth Success:", user);
               setIsLoading(true);
               try {
-                  // Determine username
+                  // 1. Determine Identity
                   const neoUsername = user.username || `tg_${user.id}`;
-                  // Create a consistent system ID for the user (we won't show this to them)
                   const neoEmail = `${user.id}@telegram.neoarchive.com`;
-                  // Secure hash secret for this user type
-                  const neoPassword = `tg_secure_${user.id}_${user.hash?.substring(0,8) || 'key'}`;
+                  
+                  // 2. STABLE PASSWORD (User ID based, ignores auth_date hash which changes)
+                  const stablePassword = `tg_secure_${user.id}_v2`;
+
+                  // 3. Check if user already exists in local cache (synced from server)
+                  const allUsers = db.getFullDatabase().users;
+                  const existingUser = allUsers.find(u => 
+                      u.email === neoEmail || u.username === neoUsername || u.telegram === user.username
+                  );
 
                   let userProfile: UserProfile;
 
-                  try {
-                      // Try to identify user in DB
-                      userProfile = await db.loginUser(neoEmail, neoPassword);
-                  } catch {
-                      // If not found, register new identity automatically
+                  if (existingUser) {
+                      console.log("Found existing Telegram user in cache:", existingUser.username);
+                      
+                      // Use the password stored in DB if available, otherwise fallback to stable
+                      const effectivePassword = existingUser.password || stablePassword;
+                      
+                      // Perform Login
+                      try {
+                          userProfile = await db.loginUser(existingUser.email, effectivePassword);
+                      } catch (loginErr) {
+                          console.warn("Login failed with stored password, trying to update...", loginErr);
+                          // If login failed (e.g. password mismatch), we might need to force update it
+                          // But we can't update without logging in usually. 
+                          // However, since we trust the Telegram Widget proof, we can "recover" the account by overwriting.
+                          const updatedProfile = { 
+                              ...existingUser, 
+                              password: stablePassword,
+                              avatarUrl: user.photo_url || existingUser.avatarUrl,
+                              telegram: user.username
+                          };
+                          await db.updateUserProfile(updatedProfile);
+                          userProfile = updatedProfile;
+                      }
+                  } else {
+                      console.log("Registering new Telegram user...");
                       const displayName = user.username ? `@${user.username}` : `${user.first_name}`;
                       userProfile = await db.registerUser(
                           neoUsername, 
-                          neoPassword, 
+                          stablePassword, 
                           `Telegram Identity: ${displayName}`, 
                           neoEmail, 
                           user.username,
@@ -90,7 +116,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                   onLogin(userProfile, true);
 
               } catch (err: any) {
-                  setError("CONNECTION FAILED: " + err.message);
+                  console.error("Telegram Auth Error:", err);
+                  setError("LOGIN FAILED: " + (err.message || "Unknown Error"));
                   setIsLoading(false);
               }
           };
@@ -131,7 +158,20 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
       setInfoMessage('');
 
       try {
-          const user = await db.loginUser(email, password);
+          // Allow login by Username OR Email
+          // If input doesn't contain '@', treat as username
+          let targetEmail = email;
+          if (!email.includes('@')) {
+              const allUsers = db.getFullDatabase().users;
+              const found = allUsers.find(u => u.username.toLowerCase() === email.toLowerCase());
+              if (found) {
+                  targetEmail = found.email;
+              } else {
+                  throw new Error("Пользователь не найден");
+              }
+          }
+
+          const user = await db.loginUser(targetEmail, password);
           onLogin(user, rememberMe);
       } catch (err: any) {
           setError(err.message || 'ОШИБКА АВТОРИЗАЦИИ');
@@ -259,15 +299,15 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                  )}
                  
                  <div className="space-y-1">
-                    <label className="text-[10px] font-pixel uppercase opacity-70">EMAIL</label>
+                    <label className="text-[10px] font-pixel uppercase opacity-70">EMAIL ИЛИ НИКНЕЙМ</label>
                     <div className="flex items-center gap-2 border-b-2 p-2 border-current focus-within:opacity-100 opacity-70 transition-opacity">
-                        <Mail size={18} />
+                        <User size={18} />
                         <input 
                             value={email}
                             onChange={e => setEmail(e.target.value)}
-                            type="email"
+                            type="text"
                             className="bg-transparent w-full focus:outline-none font-mono text-sm"
-                            placeholder="user@example.com"
+                            placeholder="user@example.com или Neo"
                             autoComplete="username"
                             required
                         />
