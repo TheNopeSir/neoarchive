@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Camera, Edit2, Save, Check, Send, 
   Video, Image as ImageIcon, WifiOff, Download, Box, Package, User,
   X, ArrowLeft, Upload, Home, PlusCircle, Heart, MessageSquare, MessageCircle, FolderOpen,
-  Settings, Loader
+  Settings, Loader, RefreshCw
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
@@ -142,6 +142,7 @@ export default function App() {
   const [viewedProfile, setViewedProfile] = useState<string | null>(null);
   const [activityTab, setActivityTab] = useState<'UPDATES' | 'DIALOGS'>('UPDATES');
   const [showDesktopNotifications, setShowDesktopNotifications] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Feed Pagination
   const [feedPage, setFeedPage] = useState(1);
@@ -185,6 +186,13 @@ export default function App() {
       setNotifications([...db.getNotifications()]);
       setMessages([...db.getMessages()]);
       setGuestbook([...db.getGuestbook()]);
+  };
+
+  const handleManualSync = async () => {
+      setIsSyncing(true);
+      await db.forceSync();
+      refreshData();
+      setTimeout(() => setIsSyncing(false), 500);
   };
 
   useEffect(() => {
@@ -973,7 +981,11 @@ export default function App() {
                     </div>
                  )}
 
-                 <div className="flex items-center gap-4"><div className="relative hidden md:block"><button onClick={() => setShowDesktopNotifications(!showDesktopNotifications)} className="relative p-2"><Bell size={20} className={userNotifications.some(n => !n.isRead) ? "animate-pulse text-green-500" : ""} />{userNotifications.some(n => !n.isRead) && <span className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full"></span>}</button>{showDesktopNotifications && (<div className={`absolute top-full right-0 mt-2 w-72 rounded border shadow-xl z-50 overflow-hidden ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}><div className="p-2 border-b border-gray-500/30 text-[10px] font-pixel opacity-70">SYSTEM_ALERTS</div><div className="max-h-64 overflow-y-auto">{aggregatedNotifications.length === 0 ? (<div className="p-4 text-center text-xs font-mono opacity-50">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className={`font-bold text-xs ${!n.isRead ? 'text-green-500' : ''}`}>@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className={`text-[10px] font-mono leading-tight ${!n.isRead ? 'text-white' : 'opacity-70'}`}>{renderNotificationText(n)}</div></div>)))}</div><button onClick={handleOpenUpdates} className="w-full py-2 text-center text-[10px] font-pixel border-t border-gray-500/30 hover:bg-white/5">ПОКАЗАТЬ ВСЕ</button></div>)}</div>{user && (<div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}><div className="text-right hidden md:block"><div className={`font-pixel text-xs font-bold ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>@{user.username}</div></div><div className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden border border-gray-500"><img src={user.avatarUrl} alt="Avatar" /></div></div>)}<button onClick={() => setView('SETTINGS')}><Settings size={20} /></button><button onClick={handleLogout} className="text-red-500"><LogOut size={20} /></button></div>
+                 <div className="flex items-center gap-4">
+                     <button onClick={handleManualSync} disabled={isSyncing} className={`p-2 rounded hover:bg-white/5 ${isSyncing ? 'animate-spin' : ''}`}>
+                         <RefreshCw size={18} />
+                     </button>
+                     <div className="relative hidden md:block"><button onClick={() => setShowDesktopNotifications(!showDesktopNotifications)} className="relative p-2"><Bell size={20} className={userNotifications.some(n => !n.isRead) ? "animate-pulse text-green-500" : ""} />{userNotifications.some(n => !n.isRead) && <span className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full"></span>}</button>{showDesktopNotifications && (<div className={`absolute top-full right-0 mt-2 w-72 rounded border shadow-xl z-50 overflow-hidden ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}><div className="p-2 border-b border-gray-500/30 text-[10px] font-pixel opacity-70">SYSTEM_ALERTS</div><div className="max-h-64 overflow-y-auto">{aggregatedNotifications.length === 0 ? (<div className="p-4 text-center text-xs font-mono opacity-50">Нет новых событий</div>) : (aggregatedNotifications.map(n => (<div key={n.id} onClick={() => { setShowDesktopNotifications(false); handleNotificationClick(n); }} className={`p-3 border-b border-gray-500/10 cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}><div className="flex items-center justify-between mb-1"><span className={`font-bold text-xs ${!n.isRead ? 'text-green-500' : ''}`}>@{n.actor}</span><span className="text-[9px] opacity-50">{n.timestamp}</span></div><div className={`text-[10px] font-mono leading-tight ${!n.isRead ? 'text-white' : 'opacity-70'}`}>{renderNotificationText(n)}</div></div>)))}</div><button onClick={handleOpenUpdates} className="w-full py-2 text-center text-[10px] font-pixel border-t border-gray-500/30 hover:bg-white/5">ПОКАЗАТЬ ВСЕ</button></div>)}</div>{user && (<div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('USER_PROFILE'); updateHash(`/profile/${user.username}`); }}><div className="text-right hidden md:block"><div className={`font-pixel text-xs font-bold ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>@{user.username}</div></div><div className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden border border-gray-500"><img src={user.avatarUrl} alt="Avatar" /></div></div>)}<button onClick={() => setView('SETTINGS')}><Settings size={20} /></button><button onClick={handleLogout} className="text-red-500"><LogOut size={20} /></button></div>
               </header>
           )}
           <main className="flex-1 p-4 md:p-6 overflow-x-hidden">

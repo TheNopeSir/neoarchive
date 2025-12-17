@@ -85,14 +85,17 @@ const initDB = async () => {
         await query(`CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
         
         for (const table of genericTables) {
-            await query(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
+            await query(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, data JSONB, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())`);
         }
 
-        // Migration: Ensure updated_at exists
+        // Migration: Ensure timestamps exist
         const allTables = ['users', ...genericTables];
         for (const table of allTables) {
              try {
                  await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`);
+                 if (table !== 'users') {
+                    await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`);
+                 }
              } catch (e) {}
         }
         
@@ -294,11 +297,32 @@ app.post('/api/auth/register', async (req, res) => {
 app.get('/api/sync', async (req, res) => {
     const { username } = req.query;
     try {
-        let exhibitQuery = `SELECT data FROM exhibits ORDER BY updated_at DESC LIMIT 20`;
+        // HYBRID QUERY: Get Top 50 Active OR Top 10 Newest
+        // This ensures new items (created_at) appear even if they have low activity (updated_at)
+        // AND keeps active discussions visible.
+        
+        let exhibitQuery = `
+            SELECT data FROM exhibits 
+            WHERE id IN (
+                (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 50)
+                UNION
+                (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 10)
+            )
+            ORDER BY updated_at DESC
+        `;
+        
         let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 20`;
         
         if (username) {
-            exhibitQuery = `SELECT data FROM exhibits WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 20)`;
+            exhibitQuery = `
+                SELECT data FROM exhibits 
+                WHERE data->>'owner' = '${username}' 
+                OR id IN (
+                    (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 50)
+                    UNION
+                    (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 10)
+                )
+            `;
             collectionQuery = `SELECT data FROM collections WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM collections ORDER BY updated_at DESC LIMIT 20)`;
         }
 
@@ -360,8 +384,12 @@ const createCrudRoutes = (table) => {
             const recordId = id || req.body.id;
             if (!recordId) return res.status(400).json({ error: "ID is required" });
 
+            // Handle created_at. If it's a new record (INSERT), created_at is NOW().
+            // If UPDATE, we don't touch created_at usually, but here we use simple ON CONFLICT logic.
+            // Note: Postgres sets created_at default NOW() on insert.
+            
             await query(
-                `INSERT INTO ${table} (id, data, updated_at) VALUES ($1, $2, NOW()) 
+                `INSERT INTO ${table} (id, data, updated_at, created_at) VALUES ($1, $2, NOW(), NOW()) 
                  ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()`,
                 [recordId, req.body]
             );

@@ -113,13 +113,19 @@ const prepareCacheForStorage = (currentCache: typeof cache) => {
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
     const users = currentCache.users;
     const allExhibits = currentCache.exhibits;
+    
+    // Always keep my own exhibits
     const myExhibits = activeUser ? allExhibits.filter(e => e.owner === activeUser) : [];
+    
+    // Keep top 200 feed exhibits (increased from 50 to ensure feed continuity)
     const feedExhibits = allExhibits
         .filter(e => e.owner !== activeUser)
-        .sort((a,b) => b.id.localeCompare(a.id))
-        .slice(0, 50);
+        .sort((a,b) => b.timestamp.localeCompare(a.timestamp)) // Sort by timestamp, effectively
+        .slice(0, 200);
     
     const combinedExhibits = [...myExhibits, ...feedExhibits];
+    
+    // Deduplicate
     const uniqueExhibits = Array.from(new Map(combinedExhibits.map(item => [item.id, item])).values());
 
     return {
@@ -195,10 +201,11 @@ export const loadFeedBatch = async (page: number) => {
     try {
         const newItems: Exhibit[] = await apiCall(`/feed?page=${page}`);
         if (newItems && newItems.length > 0) {
-            const existingIds = new Set(cache.exhibits.map(e => e.id));
-            const uniqueNew = newItems.filter(e => !existingIds.has(e.id));
-            cache.exhibits = [...cache.exhibits, ...uniqueNew];
-            return uniqueNew;
+            // Merge logic
+            const currentMap = new Map(cache.exhibits.map(e => [e.id, e]));
+            newItems.forEach(item => currentMap.set(item.id, item));
+            cache.exhibits = Array.from(currentMap.values()).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+            return newItems;
         }
         return [];
     } catch (e) {
@@ -213,8 +220,28 @@ const performCloudSync = async () => {
     
     const data = await apiCall(endpoint);
     
-    if (data.users) cache.users = data.users;
-    if (data.exhibits) cache.exhibits = data.exhibits; 
+    // SMART MERGING: Don't just overwrite, upsert.
+    // This prevents "flicker" where items disappear because they aren't in the top 50 returned by server
+    // but still exist in the user's previously loaded timeline.
+    
+    if (data.users) cache.users = data.users; // Users are small enough to overwrite usually
+    
+    if (data.exhibits) {
+        const serverMap = new Map((data.exhibits as Exhibit[]).map(e => [e.id, e]));
+        const localMap = new Map(cache.exhibits.map(e => [e.id, e]));
+        
+        // Update local with server (Authoritative)
+        serverMap.forEach((val, key) => localMap.set(key, val));
+        
+        // Remove deleted items if we track them
+        cache.deletedIds.forEach(id => localMap.delete(id));
+        
+        cache.exhibits = Array.from(localMap.values()).sort((a,b) => {
+            // Sort by timestamp Descending
+            return b.timestamp.localeCompare(a.timestamp);
+        });
+    }
+
     if (data.collections) cache.collections = data.collections;
     if (data.notifications) cache.notifications = data.notifications;
     if (data.messages) cache.messages = data.messages;
@@ -228,8 +255,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     await loadFromCache();
     
     // 2. Try to sync with server. 
-    // IMPORTANT: We do NOT fallback to offline mode easily anymore.
-    // If sync fails, we assume connection issues but don't disable future write attempts.
     try {
         await performCloudSync();
         isOfflineMode = false;
@@ -237,8 +262,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
         console.log("✅ [Sync] Connected to Database.");
     } catch (e: any) {
         console.warn("⚠️ [Sync] Warning: Could not sync with server.", e.message);
-        // We do NOT set isOfflineMode = true immediately to allow retry on next action
-        // Only set it if you want to completely disable writes.
     }
 
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
@@ -255,6 +278,10 @@ export const backgroundSync = async (): Promise<boolean> => {
         isOfflineMode = false;
         return true;
     } catch (e) { return false; }
+};
+
+export const forceSync = async (): Promise<void> => {
+    await performCloudSync();
 };
 
 export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
