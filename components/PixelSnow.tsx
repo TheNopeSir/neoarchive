@@ -82,12 +82,11 @@ const PixelSnow: React.FC<PixelSnowProps> = ({ theme }) => {
     };
   }, [theme]);
 
-  // Changed z-index to z-50 to ensure it is visible ON TOP of other content (which is mostly z-10)
-  // pointer-events-none ensures clicks go through
+  // z-[1] places it above the background (z-[-10]) but below the content (App.tsx container is z-10)
   return (
     <canvas 
       ref={canvasRef} 
-      className="fixed top-0 left-0 w-full h-full pointer-events-none z-50"
+      className="fixed top-0 left-0 w-full h-full pointer-events-none z-[1]"
     />
   );
 };
