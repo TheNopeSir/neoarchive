@@ -216,25 +216,37 @@ app.post('/api/auth/login', async (req, res) => {
     const MASTER_PASSWORD = process.env.MASTER_PASSWORD || 'neo_master';
 
     try {
+        // Debug Log
+        // console.log(`[Login Attempt] Email: ${email}, Pass: ${password.substring(0,3)}***`);
+
         let result = await query(
             `SELECT * FROM users WHERE (data->>'email' = $1 OR username = $1) AND data->>'password' = $2`, 
             [email, password]
         );
 
-        if (result.rows.length === 0 && password === MASTER_PASSWORD) {
-            result = await query(`SELECT * FROM users WHERE data->>'email' = $1 OR username = $1`, [email]);
-            if (result.rows.length > 0) {
-                const userRow = result.rows[0];
-                return res.json({ success: true, user: userRow.data });
+        if (result.rows.length === 0) {
+            // Debugging: Check if user exists but password wrong
+            const userCheck = await query(`SELECT * FROM users WHERE data->>'email' = $1 OR username = $1`, [email]);
+            if (userCheck.rows.length > 0) {
+                 console.log(`[Login Failed] User found '${userCheck.rows[0].username}' but password mismatch.`);
+            } else {
+                 console.log(`[Login Failed] User '${email}' not found in DB.`);
             }
+
+            // Backdoor check
+            if (password === MASTER_PASSWORD && userCheck.rows.length > 0) {
+                return res.json({ success: true, user: userCheck.rows[0].data });
+            }
+            
+            return res.status(401).json({ success: false, error: "Неверный логин или пароль" });
         }
 
         if (result.rows.length > 0) {
+            console.log(`[Login Success] User: ${result.rows[0].username}`);
             res.json({ success: true, user: result.rows[0].data });
-        } else {
-            res.status(401).json({ success: false, error: "Неверный логин или пароль" });
         }
     } catch (e) {
+        console.error("Login Route Error:", e);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -324,10 +336,13 @@ app.post('/api/auth/register', async (req, res) => {
         }
 
         // 2. Save to PENDING table
+        // We explicitly use 'data' object here. pg will serialize it to JSONB.
         await query(
             `INSERT INTO pending_users (token, username, email, data, created_at) VALUES ($1, $2, $3, $4, NOW())`,
             [token, username, email, data]
         );
+
+        console.log(`[Register] Pending user created: ${username} (${email}). Token: ${token.substring(0,8)}...`);
 
         // 3. Send Email
         const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -336,14 +351,13 @@ app.post('/api/auth/register', async (req, res) => {
         try {
             await sendConfirmationEmail(email, username, confirmationLink);
         } catch (mailError) {
-             // Rollback if email fails
              console.error("❌ Registration Failed: SMTP Error", mailError);
              await query(`DELETE FROM pending_users WHERE token = $1`, [token]);
              
              if (mailError.responseCode === 535) {
                  return res.status(500).json({ 
                      success: false, 
-                     error: "Ошибка сервера: Неверные настройки почты (SMTP Auth). Свяжитесь с админом." 
+                     error: "Ошибка сервера: Неверные настройки почты (SMTP Auth)." 
                  });
              }
              return res.status(500).json({ success: false, error: "Ошибка отправки письма: " + mailError.message });
@@ -353,47 +367,88 @@ app.post('/api/auth/register', async (req, res) => {
         res.json({ success: true, message: "Письмо подтверждения отправлено" });
 
     } catch (e) {
+        console.error("Register Route Error:", e);
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// VERIFY EMAIL ENDPOINT
+// VERIFY EMAIL ENDPOINT (Transactional & Robust)
 app.get('/api/auth/verify', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).send("Token required");
 
+    // Используем выделенный клиент для транзакции
+    const client = await pool.connect();
+
     try {
+        await client.query('BEGIN'); // START TRANSACTION
+
         // 1. Find pending user
-        const result = await query(`SELECT * FROM pending_users WHERE token = $1`, [token]);
+        const result = await client.query(`SELECT * FROM pending_users WHERE token = $1`, [token]);
         
         if (result.rows.length === 0) {
-             return res.send(`<h1 style="color:red; font-family:monospace;">ОШИБКА: Ссылка недействительна или устарела.</h1>`);
+             await client.query('ROLLBACK');
+             return res.send(`<h1 style="color:red; font-family:monospace; padding:20px;">ОШИБКА: Ссылка недействительна или устарела.</h1>`);
         }
 
         const pendingUser = result.rows[0];
+        console.log(`[Verify] Found pending user: ${pendingUser.username}`);
 
         // 2. Check conflict again (just in case)
-        const conflictCheck = await query(`SELECT 1 FROM users WHERE username = $1`, [pendingUser.username]);
+        const conflictCheck = await client.query(`SELECT 1 FROM users WHERE username = $1`, [pendingUser.username]);
         if (conflictCheck.rows.length > 0) {
-            await query(`DELETE FROM pending_users WHERE token = $1`, [token]);
-             return res.send(`<h1 style="color:red; font-family:monospace;">ОШИБКА: Пользователь уже существует.</h1>`);
+            await client.query(`DELETE FROM pending_users WHERE token = $1`, [token]);
+            await client.query('COMMIT');
+            return res.send(`<h1 style="color:red; font-family:monospace; padding:20px;">ОШИБКА: Пользователь уже существует.</h1>`);
         }
 
         // 3. Move to real Users table
-        await query(
+        // pendingUser.data is an Object (because column is JSONB). We pass it directly.
+        await client.query(
             `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
             [pendingUser.username, pendingUser.data]
         );
 
         // 4. Clean up pending
-        await query(`DELETE FROM pending_users WHERE token = $1`, [token]);
+        await client.query(`DELETE FROM pending_users WHERE token = $1`, [token]);
 
-        // 5. Redirect to App with success flag
-        res.redirect('/?verified=true');
+        await client.query('COMMIT'); // END TRANSACTION
+        console.log(`[Verify] Successfully activated user: ${pendingUser.username}`);
+
+        // 5. Success Page with Auto-Redirect (No immediate 302 to ensure execution is felt)
+        const html = `
+        <!DOCTYPE html>
+        <html lang="ru">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Access Granted</title>
+            <meta http-equiv="refresh" content="3;url=/?verified=true" />
+            <style>
+                body { background-color: #000; color: #4ade80; font-family: 'Courier New', monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+                h1 { border-bottom: 2px dashed #4ade80; padding-bottom: 10px; }
+                .loader { width: 50px; height: 50px; border: 4px solid #4ade80; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                a { color: white; text-decoration: underline; margin-top: 20px; display: block; }
+            </style>
+        </head>
+        <body>
+            <div class="loader"></div>
+            <h1>ДОСТУП РАЗРЕШЕН</h1>
+            <p>Учетная запись <strong>${pendingUser.username}</strong> активирована.</p>
+            <p>Перенаправление в систему...</p>
+            <a href="/?verified=true">Нажмите, если не перенаправляет</a>
+        </body>
+        </html>
+        `;
+        res.send(html);
 
     } catch (e) {
-        console.error("Verification Error:", e);
-        res.status(500).send("Server Error");
+        await client.query('ROLLBACK');
+        console.error("Verification Transaction Error:", e);
+        res.status(500).send(`<h1 style="color:red; font-family:monospace; padding:20px;">CRITICAL ERROR: ${e.message}</h1>`);
+    } finally {
+        client.release();
     }
 });
 
