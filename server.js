@@ -39,8 +39,9 @@ const pool = new Pool({
 // 📧 НАСТРОЙКА ПОЧТЫ (TIMEWEB SMTP)
 // ==========================================
 
-const SMTP_EMAIL = process.env.SMTP_EMAIL || 'support@neoarchive.ru'; 
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'your_timeweb_password'; 
+// ⚠️ ВАЖНО: УКАЖИТЕ ЗДЕСЬ РЕАЛЬНЫЕ ДАННЫЕ ОТ ПОЧТЫ TIMEWEB
+const SMTP_EMAIL = process.env.SMTP_EMAIL || 'morpheus@neoarch.ru'; 
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'TZ0JwbaRDXdD='; 
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.timeweb.ru',
@@ -59,9 +60,12 @@ const transporter = nodemailer.createTransport({
 
 transporter.verify(function (error, success) {
     if (error) {
-        console.error("⚠️ [Mail] SMTP Error (Timeweb):", error.message);
+        console.error("⚠️ [Mail] SMTP Config Error:", error.message);
+        if (error.code === 'EAUTH') {
+            console.error("👉 Проверьте логин и пароль в server.js (переменные SMTP_EMAIL и SMTP_PASSWORD)");
+        }
     } else {
-        console.log(`✅ [Mail] SMTP Server (Timeweb) is ready. User: ${SMTP_EMAIL}`);
+        console.log(`✅ [Mail] SMTP Server is ready. User: ${SMTP_EMAIL}`);
     }
 });
 
@@ -199,7 +203,7 @@ const sendConfirmationEmail = async (email, username, confirmationLink) => {
         await transporter.sendMail(mailOptions);
     } catch (error) {
         console.error("SendMail Confirmation Error:", error);
-        throw error; // Блокируем регистрацию если письмо не ушло
+        throw error; 
     }
 };
 
@@ -307,6 +311,8 @@ app.post('/api/auth/recover', async (req, res) => {
 // REGISTER - Now creates pending request
 app.post('/api/auth/register', async (req, res) => {
     const { username, email, password, data } = req.body;
+    const token = crypto.randomBytes(32).toString('hex');
+
     try {
         // 1. Check existing USERS
         const check = await query(
@@ -317,25 +323,33 @@ app.post('/api/auth/register', async (req, res) => {
             return res.status(400).json({ success: false, error: "Пользователь или Email уже заняты" });
         }
 
-        // 2. Check pending registrations (optional cleanup)
-        // await query(`DELETE FROM pending_users WHERE created_at < NOW() - INTERVAL '1 day'`);
-
-        // 3. Create Verification Token
-        const token = crypto.randomBytes(32).toString('hex');
-        
-        // 4. Save to PENDING table
+        // 2. Save to PENDING table
         await query(
             `INSERT INTO pending_users (token, username, email, data, created_at) VALUES ($1, $2, $3, $4, NOW())`,
             [token, username, email, data]
         );
 
-        // 5. Send Email
+        // 3. Send Email
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const confirmationLink = `${baseUrl}/api/auth/verify?token=${token}`;
         
-        await sendConfirmationEmail(email, username, confirmationLink);
+        try {
+            await sendConfirmationEmail(email, username, confirmationLink);
+        } catch (mailError) {
+             // Rollback if email fails
+             console.error("❌ Registration Failed: SMTP Error", mailError);
+             await query(`DELETE FROM pending_users WHERE token = $1`, [token]);
+             
+             if (mailError.responseCode === 535) {
+                 return res.status(500).json({ 
+                     success: false, 
+                     error: "Ошибка сервера: Неверные настройки почты (SMTP Auth). Свяжитесь с админом." 
+                 });
+             }
+             return res.status(500).json({ success: false, error: "Ошибка отправки письма: " + mailError.message });
+        }
 
-        // 6. Respond Success (User NOT created yet)
+        // 4. Respond Success
         res.json({ success: true, message: "Письмо подтверждения отправлено" });
 
     } catch (e) {
