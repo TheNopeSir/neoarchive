@@ -1,6 +1,6 @@
 
 import { Exhibit, UserProfile, Collection, Notification, Message } from './types';
-import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle } from 'lucide-react';
+import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle, Ghost } from 'lucide-react';
 import React from 'react';
 
 // Moved from types.ts to ensure runtime availability
@@ -163,7 +163,7 @@ export const COMMON_SPEC_VALUES: Record<string, string[]> = {
     'RPM (Обороты)': ['33 1/3', '45', '78']
 };
 
-export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'CURSED';
 
 export const calculateArtifactScore = (item: Exhibit, userPreferences?: Record<string, number>): number => {
     // 1. Popularity Base
@@ -172,14 +172,11 @@ export const calculateArtifactScore = (item: Exhibit, userPreferences?: Record<s
     const viewScore = Math.floor(item.views * 0.5); 
     
     // 2. Freshness Boost (Time Decay)
-    // Items created in the last 48 hours get a massive boost that decays rapidly
     const now = new Date().getTime();
-    // Parse timestamp "dd.mm.yyyy, hh:mm:ss" or ISO
     let itemTime = now;
     try {
         if(item.timestamp.includes(',')) {
             const parts = item.timestamp.split(',')[0].split('.');
-            // simple parse for RU format approx
             itemTime = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
         } else {
             itemTime = new Date(item.timestamp).getTime();
@@ -187,13 +184,11 @@ export const calculateArtifactScore = (item: Exhibit, userPreferences?: Record<s
     } catch(e) {}
 
     const hoursSinceCreation = Math.max(0, (now - itemTime) / (1000 * 60 * 60));
-    // Decay factor: New items (0 hours) get +500, items 24h old get ~200, 1 week old get ~30
     const freshnessScore = 1000 / (hoursSinceCreation + 2);
 
     // 3. User Personalization (Smart Feed)
     let preferenceBoost = 0;
     if (userPreferences && userPreferences[item.category]) {
-        // Boost factor matches user preference weight (0.1 to 2.0 typically)
         preferenceBoost = userPreferences[item.category] * 100;
     }
 
@@ -201,6 +196,11 @@ export const calculateArtifactScore = (item: Exhibit, userPreferences?: Record<s
 };
 
 export const getArtifactTier = (item: Exhibit): TierType => {
+    // MEME CHECK: Specifically identify the cursed card
+    if (item.title === 'вфуфвф' && (item.owner === 'Truester' || item.owner === '@Truester')) {
+      return 'CURSED';
+    }
+
     const score = (item.likes * 25) + ((item.comments?.length || 0) * 10) + item.views;
     const filledSpecs = Object.values(item.specs || {}).filter(v => v && v.trim().length > 0).length;
     const imageCount = item.imageUrls?.length || 0;
@@ -261,5 +261,15 @@ export const TIER_CONFIG: Record<TierType, {
         badge: 'bg-gradient-to-r from-yellow-600 to-red-600 text-white',
         shadow: 'shadow-yellow-500/40',
         icon: Zap
+    },
+    CURSED: {
+        name: 'CURSED',
+        color: 'text-red-500',
+        bgColor: 'bg-red-500/20',
+        borderDark: 'border-red-600 shadow-[0_0_30px_rgba(239,68,68,0.7)] animate-pulse-slow',
+        borderLight: 'border-red-700 shadow-[0_0_20px_rgba(239,68,68,0.4)]',
+        badge: 'bg-red-600 text-white font-black italic shadow-[0_0_10px_red]',
+        shadow: 'shadow-red-500/50',
+        icon: Ghost
     }
 };

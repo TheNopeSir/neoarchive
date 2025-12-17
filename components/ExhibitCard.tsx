@@ -73,6 +73,8 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
 
   const safeImageSrc = images.length > 0 ? images[currentImageIndex] : 'https://placehold.co/400x300?text=No+Image';
 
+  const isCursed = tier === 'CURSED';
+
   return (
     <article 
       onClick={() => onClick(item)}
@@ -80,7 +82,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
         theme === 'dark' 
         ? `bg-dark-surface ${tierStyle.borderDark} hover:border-white/50` 
         : `bg-white ${tierStyle.borderLight} hover:border-black/50`
-      }`}
+      } ${isCursed ? 'animate-pulse' : ''}`}
     >
       <div 
         className="relative aspect-square w-full bg-black/5 group/image overflow-hidden"
@@ -89,7 +91,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
          <img 
            src={safeImageSrc} 
            alt={item.title} 
-           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+           className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${isCursed ? 'contrast-125 saturate-150' : ''}`} 
          />
          
          <div className={`absolute top-2 left-2 px-2 py-1 text-[8px] md:text-[10px] font-bold rounded backdrop-blur-md border ${
@@ -127,17 +129,16 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({
 
       <div className="p-2 md:p-3 flex flex-col flex-1 relative">
          <div className="flex justify-between items-start gap-3 mb-1">
-             <h3 className={`text-[10px] md:text-sm font-bold leading-tight line-clamp-2 ${theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}`}>
+             <h3 className={`text-[10px] md:text-sm font-bold leading-tight line-clamp-2 ${theme === 'dark' ? 'text-gray-100' : 'text-gray-800'} ${isCursed ? 'text-red-400 font-black' : ''}`}>
                 {item.title}
              </h3>
          </div>
 
-         <div className={`mt-1 font-mono text-[9px] md:text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>
+         <div className={`mt-1 font-mono text-[9px] md:text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${isCursed ? 'text-red-600' : (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent')}`}>
              <span className="truncate">{displayValue}</span>
          </div>
 
          <div className="mt-auto pt-3 flex justify-between items-center border-t border-dashed border-opacity-20 border-gray-500">
-             {/* VISIBLE ON ALL DEVICES */}
              <div 
                onClick={handleAuthorClickInternal}
                className={`flex text-[10px] truncate max-w-[60%] opacity-60 items-center gap-1 cursor-pointer hover:underline hover:opacity-100 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
