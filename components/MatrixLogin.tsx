@@ -46,6 +46,17 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [glitchIntensity, setGlitchIntensity] = useState(0);
 
+  // Check for Email Verification Success
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('verified') === 'true') {
+        setInfoMessage("ПОЧТА ПОДТВЕРЖДЕНА. ВЫПОЛНИТЕ ВХОД.");
+        setStep('LOGIN');
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    }
+  }, []);
+
   // Glitch effect on entry
   useEffect(() => {
     const interval = setInterval(() => {
@@ -106,12 +117,6 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
       try {
           let targetEmail = email;
-          // Basic check if input is likely a username
-          if (!email.includes('@')) {
-              // Note: This relies on local cache if we want to resolve username->email client side, 
-              // but db.loginUser sends raw input. Let the backend handle the OR logic.
-              // Assuming backend route handles `email OR username`.
-          }
           const user = await db.loginUser(targetEmail, password);
           onLogin(user, rememberMe);
       } catch (err: any) {
@@ -138,12 +143,12 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     setShowRecoverOption(false);
     
     try {
+        // Register now returns success but NOT the user object immediately (waiting for email)
         await db.registerUser(username, password, tagline || 'Новый пользователь', email);
-        setInfoMessage('РЕГИСТРАЦИЯ УСПЕШНА. ВЫПОЛНИТЕ ВХОД.');
-        setTimeout(() => {
-            setStep('LOGIN');
-            setPassword('');
-        }, 3000);
+        
+        setInfoMessage('ПИСЬМО ОТПРАВЛЕНО. ПОДТВЕРДИТЕ EMAIL.');
+        setStep('LOGIN');
+        setPassword('');
 
     } catch (err: any) {
         setError(err.message || "ОШИБКА РЕГИСТРАЦИИ");
@@ -281,7 +286,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
                 {error && <div className="text-red-500 font-bold text-xs font-mono text-center border border-red-500 p-2">{error}</div>}
 
-                <button type="submit" disabled={isLoading} className={`mt-4 py-3 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'СОЗДАНИЕ...' : 'ЗАРЕГИСТРИРОВАТЬСЯ'}</button>
+                <button type="submit" disabled={isLoading} className={`mt-4 py-3 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ОТПРАВКА...' : 'ЗАРЕГИСТРИРОВАТЬСЯ'}</button>
                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline">НАЗАД</button>
             </form>
         )

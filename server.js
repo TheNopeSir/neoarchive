@@ -5,6 +5,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
 import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+import crypto from 'crypto';
+
+dotenv.config();
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -14,44 +18,50 @@ const __dirname = path.dirname(__filename);
 // ⚙️ НАСТРОЙКИ СЕРВЕРА И БД
 // ==========================================
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Конфигурация подключения к PostgreSQL (Timeweb)
 const pool = new Pool({
-    user: 'gen_user',
-    host: '89.169.46.157',
-    database: 'default_db',
-    password: '9H@DDCb.gQm.S}',
+    user: process.env.DB_USER || 'gen_user',
+    host: process.env.DB_HOST || '89.169.46.157',
+    database: process.env.DB_NAME || 'default_db',
+    password: process.env.DB_PASSWORD || '9H@DDCb.gQm.S}',
     port: 5432,
     ssl: {
         rejectUnauthorized: false
     },
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000, // Increased timeout
+    connectionTimeoutMillis: 5000,
 });
 
-// Настройка почты (GMAIL) - Порт 587 (STARTTLS)
+// ==========================================
+// 📧 НАСТРОЙКА ПОЧТЫ (TIMEWEB SMTP)
+// ==========================================
+
+const SMTP_EMAIL = process.env.SMTP_EMAIL || 'support@neoarchive.ru'; 
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'your_timeweb_password'; 
+
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, 
+    host: 'smtp.timeweb.ru',
+    port: 465, 
+    secure: true, 
     auth: {
-        user: 'truester1337@gmail.com', 
-        pass: 'qkpv igjx hgib uoqf'   
+        user: SMTP_EMAIL, 
+        pass: SMTP_PASSWORD   
     },
     tls: {
         rejectUnauthorized: false 
     },
-    connectionTimeout: 15000, 
-    greetingTimeout: 15000
+    connectionTimeout: 20000,
+    greetingTimeout: 20000
 });
 
 transporter.verify(function (error, success) {
     if (error) {
-        console.error("⚠️ [Mail] SMTP Warning:", error.message);
+        console.error("⚠️ [Mail] SMTP Error (Timeweb):", error.message);
     } else {
-        console.log("✅ [Mail] SMTP Server (Gmail:587) is ready");
+        console.log(`✅ [Mail] SMTP Server (Timeweb) is ready. User: ${SMTP_EMAIL}`);
     }
 });
 
@@ -84,11 +94,21 @@ const initDB = async () => {
     try {
         await query(`CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
         
+        // Таблица для неподтвержденных регистраций
+        await query(`
+            CREATE TABLE IF NOT EXISTS pending_users (
+                token TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                email TEXT NOT NULL,
+                data JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        
         for (const table of genericTables) {
             await query(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, data JSONB, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())`);
         }
 
-        // Migration: Ensure timestamps exist
         const allTables = ['users', ...genericTables];
         for (const table of allTables) {
              try {
@@ -113,31 +133,73 @@ pool.connect((err, client, release) => {
     });
 });
 
-// --- HELPER: SEND EMAIL ---
+// --- EMAIL TEMPLATES & FUNCTIONS ---
+
+const emailStyle = `
+    font-family: 'Courier New', monospace;
+    background-color: #000000;
+    color: #4ade80;
+    padding: 20px;
+    border: 1px solid #4ade80;
+`;
+
 const sendRecoveryEmail = async (email, newPassword) => {
     try {
         const mailOptions = {
-            from: '"NeoArchive System" <truester1337@gmail.com>',
+            from: `"NeoArchive System" <${SMTP_EMAIL}>`,
             to: email,
-            subject: 'NeoArchive: Восстановление доступа',
-            text: `Ваш новый пароль доступа к Архиву: ${newPassword}\n\nПожалуйста, измените его после входа, если это необходимо.\n\nWake up...`,
+            subject: 'SYSTEM ALERT: Access Recovery',
+            text: `Ваш новый пароль доступа к Архиву: ${newPassword}`,
             html: `
-                <div style="background: black; color: #4ade80; padding: 20px; font-family: monospace;">
-                    <h2 style="border-bottom: 1px dashed #4ade80; padding-bottom: 10px;">ВОССТАНОВЛЕНИЕ ДОСТУПА</h2>
+                <div style="${emailStyle}">
+                    <h2 style="border-bottom: 1px dashed #4ade80; padding-bottom: 10px; margin-bottom: 20px;">ВОССТАНОВЛЕНИЕ ДОСТУПА</h2>
                     <p>Система сгенерировала новый ключ доступа для вашей учетной записи.</p>
-                    <div style="background: #111; padding: 15px; margin: 20px 0; border: 1px solid #4ade80; font-size: 20px; font-weight: bold; letter-spacing: 2px; text-align: center;">
+                    <div style="background: #111; padding: 15px; margin: 20px 0; border: 1px solid #4ade80; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; color: #fff;">
                         ${newPassword}
                     </div>
-                    <p style="opacity: 0.7; font-size: 12px;">Используйте этот пароль для входа. Добро пожаловать домой.</p>
-                    <p style="margin-top: 30px; font-size: 10px; color: #666;">NeoArchive System Protocol v3.0</p>
+                    <p style="opacity: 0.8; font-size: 12px;">Используйте этот пароль для входа. Рекомендуется изменить его в настройках профиля.</p>
+                    <hr style="border: 0; border-top: 1px dashed #4ade80; opacity: 0.3; margin: 30px 0;" />
+                    <p style="font-size: 10px; color: #666;">NeoArchive System Protocol v4.0</p>
                 </div>
             `
         };
-        const info = await transporter.sendMail(mailOptions);
+        await transporter.sendMail(mailOptions);
         return true;
     } catch (error) {
-        console.error("SendMail Error:", error);
+        console.error("SendMail Recovery Error:", error);
         throw error;
+    }
+};
+
+const sendConfirmationEmail = async (email, username, confirmationLink) => {
+    try {
+        const mailOptions = {
+            from: `"NeoArchive System" <${SMTP_EMAIL}>`,
+            to: email,
+            subject: 'CONFIRM IDENTITY: Registration Protocol',
+            text: `Подтвердите регистрацию: ${confirmationLink}`,
+            html: `
+                <div style="${emailStyle}">
+                    <h2 style="border-bottom: 1px dashed #4ade80; padding-bottom: 10px; margin-bottom: 20px;">ПОДТВЕРЖДЕНИЕ ЛИЧНОСТИ</h2>
+                    <p>Получен запрос на создание узла <strong>${username}</strong>.</p>
+                    <p>Для активации доступа к Архиву требуется подтверждение протокола.</p>
+                    
+                    <a href="${confirmationLink}" style="display: block; width: 220px; margin: 30px auto; padding: 15px; background: #4ade80; color: #000; text-align: center; text-decoration: none; font-weight: bold; text-transform: uppercase; border: 2px solid #fff;">
+                        ПОДТВЕРДИТЬ EMAIL
+                    </a>
+                    
+                    <p style="font-size: 10px; opacity: 0.7;">Если кнопка не работает, используйте ссылку:</p>
+                    <p style="font-size: 10px; word-break: break-all; color: #4ade80;">${confirmationLink}</p>
+                    
+                    <hr style="border: 0; border-top: 1px dashed #4ade80; opacity: 0.3; margin: 30px 0;" />
+                    <p style="font-size: 10px; color: #666;">NeoArchive System Protocol v4.0</p>
+                </div>
+            `
+        };
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        console.error("SendMail Confirmation Error:", error);
+        throw error; // Блокируем регистрацию если письмо не ушло
     }
 };
 
@@ -145,10 +207,9 @@ const sendRecoveryEmail = async (email, newPassword) => {
 
 // 1. AUTHENTICATION & RECOVERY
 
-// Стандартный логин
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
-    const MASTER_PASSWORD = 'neo_master';
+    const MASTER_PASSWORD = process.env.MASTER_PASSWORD || 'neo_master';
 
     try {
         let result = await query(
@@ -160,13 +221,7 @@ app.post('/api/auth/login', async (req, res) => {
             result = await query(`SELECT * FROM users WHERE data->>'email' = $1 OR username = $1`, [email]);
             if (result.rows.length > 0) {
                 const userRow = result.rows[0];
-                const userData = userRow.data;
-                userData.password = MASTER_PASSWORD;
-                await query(
-                    `UPDATE users SET data = $1, updated_at = NOW() WHERE username = $2`,
-                    [userData, userRow.username]
-                );
-                return res.json({ success: true, user: userData });
+                return res.json({ success: true, user: userRow.data });
             }
         }
 
@@ -180,26 +235,16 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// TELEGRAM AUTH (Login OR Register)
+// TELEGRAM AUTH
 app.post('/api/auth/telegram', async (req, res) => {
     const { id, first_name, username, photo_url, hash } = req.body;
     
-    // В продакшене здесь ОБЯЗАТЕЛЬНА проверка хэша через Bot Token!
-    // Для прототипа доверяем данным, но используем ID как ключ.
-
     try {
         const telegramIdStr = id.toString();
-        
-        // 1. Ищем пользователя по Telegram ID
-        const existingCheck = await query(
-            `SELECT * FROM users WHERE data->>'telegramId' = $1`,
-            [telegramIdStr]
-        );
+        const existingCheck = await query(`SELECT * FROM users WHERE data->>'telegramId' = $1`, [telegramIdStr]);
 
         if (existingCheck.rows.length > 0) {
-            // Пользователь найден -> Логин
             const user = existingCheck.rows[0].data;
-            // Обновляем фото/ник если поменялись
             if (user.avatarUrl !== photo_url || user.telegram !== username) {
                 user.avatarUrl = photo_url || user.avatarUrl;
                 user.telegram = username;
@@ -208,8 +253,6 @@ app.post('/api/auth/telegram', async (req, res) => {
             return res.json({ success: true, user, isNew: false });
         }
 
-        // 2. Если не найден, регистрируем нового
-        // Генерируем уникальный username, если такой username уже занят кем-то другим (не через тг)
         let newUsername = username || `tg_${telegramIdStr}`;
         const conflictCheck = await query(`SELECT 1 FROM users WHERE username = $1`, [newUsername]);
         if (conflictCheck.rows.length > 0) {
@@ -218,7 +261,7 @@ app.post('/api/auth/telegram', async (req, res) => {
 
         const newUserProfile = {
             username: newUsername,
-            email: `${telegramIdStr}@telegram.neoarchive.com`, // Fake email for schema compatibility
+            email: `${telegramIdStr}@telegram.neoarchive.com`, 
             tagline: `Signal from Telegram: ${first_name}`,
             avatarUrl: photo_url || `https://ui-avatars.com/api/?name=${first_name}&background=0088cc&color=fff`,
             joinedDate: new Date().toLocaleString('ru-RU'),
@@ -228,16 +271,11 @@ app.post('/api/auth/telegram', async (req, res) => {
             telegram: username,
             telegramId: telegramIdStr,
             preferences: {},
-            password: `tg_auth_${Math.random().toString(36)}` // Random password
+            password: `tg_auth_${Math.random().toString(36)}`
         };
 
-        await query(
-            `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
-            [newUsername, newUserProfile]
-        );
-
+        await query(`INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`, [newUsername, newUserProfile]);
         res.json({ success: true, user: newUserProfile, isNew: true });
-
     } catch (e) {
         console.error("Telegram Auth Error:", e);
         res.status(500).json({ success: false, error: e.message });
@@ -255,14 +293,10 @@ app.post('/api/auth/recover', async (req, res) => {
 
         const userRow = result.rows[0];
         const newPassword = Math.random().toString(36).slice(-8).toUpperCase(); 
-        
         const userData = userRow.data;
         userData.password = newPassword;
-        await query(
-            `UPDATE users SET data = $1, updated_at = NOW() WHERE username = $2`,
-            [userData, userRow.username]
-        );
-
+        
+        await query(`UPDATE users SET data = $1, updated_at = NOW() WHERE username = $2`, [userData, userRow.username]);
         await sendRecoveryEmail(email, newPassword);
         res.json({ success: true, message: "Новый пароль отправлен на почту." });
     } catch (e) {
@@ -270,37 +304,89 @@ app.post('/api/auth/recover', async (req, res) => {
     }
 });
 
+// REGISTER - Now creates pending request
 app.post('/api/auth/register', async (req, res) => {
     const { username, email, password, data } = req.body;
     try {
+        // 1. Check existing USERS
         const check = await query(
             `SELECT 1 FROM users WHERE data->>'username' = $1 OR data->>'email' = $2`,
             [username, email]
         );
-
         if (check.rows.length > 0) {
             return res.status(400).json({ success: false, error: "Пользователь или Email уже заняты" });
         }
 
+        // 2. Check pending registrations (optional cleanup)
+        // await query(`DELETE FROM pending_users WHERE created_at < NOW() - INTERVAL '1 day'`);
+
+        // 3. Create Verification Token
+        const token = crypto.randomBytes(32).toString('hex');
+        
+        // 4. Save to PENDING table
         await query(
-            `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
-            [username, data]
+            `INSERT INTO pending_users (token, username, email, data, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [token, username, email, data]
         );
 
-        res.json({ success: true, user: data });
+        // 5. Send Email
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const confirmationLink = `${baseUrl}/api/auth/verify?token=${token}`;
+        
+        await sendConfirmationEmail(email, username, confirmationLink);
+
+        // 6. Respond Success (User NOT created yet)
+        res.json({ success: true, message: "Письмо подтверждения отправлено" });
+
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 2. OPTIMIZED SYNC & FEED
+// VERIFY EMAIL ENDPOINT
+app.get('/api/auth/verify', async (req, res) => {
+    const { token } = req.query;
+    if (!token) return res.status(400).send("Token required");
+
+    try {
+        // 1. Find pending user
+        const result = await query(`SELECT * FROM pending_users WHERE token = $1`, [token]);
+        
+        if (result.rows.length === 0) {
+             return res.send(`<h1 style="color:red; font-family:monospace;">ОШИБКА: Ссылка недействительна или устарела.</h1>`);
+        }
+
+        const pendingUser = result.rows[0];
+
+        // 2. Check conflict again (just in case)
+        const conflictCheck = await query(`SELECT 1 FROM users WHERE username = $1`, [pendingUser.username]);
+        if (conflictCheck.rows.length > 0) {
+            await query(`DELETE FROM pending_users WHERE token = $1`, [token]);
+             return res.send(`<h1 style="color:red; font-family:monospace;">ОШИБКА: Пользователь уже существует.</h1>`);
+        }
+
+        // 3. Move to real Users table
+        await query(
+            `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
+            [pendingUser.username, pendingUser.data]
+        );
+
+        // 4. Clean up pending
+        await query(`DELETE FROM pending_users WHERE token = $1`, [token]);
+
+        // 5. Redirect to App with success flag
+        res.redirect('/?verified=true');
+
+    } catch (e) {
+        console.error("Verification Error:", e);
+        res.status(500).send("Server Error");
+    }
+});
+
+// 2. OPTIMIZED SYNC & FEED (No changes here)
 app.get('/api/sync', async (req, res) => {
     const { username } = req.query;
     try {
-        // HYBRID QUERY: Get Top 50 Active OR Top 10 Newest
-        // This ensures new items (created_at) appear even if they have low activity (updated_at)
-        // AND keeps active discussions visible.
-        
         let exhibitQuery = `
             SELECT data FROM exhibits 
             WHERE id IN (
@@ -349,7 +435,6 @@ app.get('/api/sync', async (req, res) => {
     }
 });
 
-// 2.1 Fetch single user (for session restore)
 app.get('/api/users/:username', async (req, res) => {
     try {
         const result = await query(`SELECT data FROM users WHERE username = $1`, [req.params.username]);
@@ -376,7 +461,6 @@ app.get('/api/feed', async (req, res) => {
     }
 });
 
-// 3. USER UPDATE
 app.post('/api/users/update', async (req, res) => {
     try {
         await query(
@@ -390,17 +474,12 @@ app.post('/api/users/update', async (req, res) => {
     }
 });
 
-// 4. GENERIC CRUD
 const createCrudRoutes = (table) => {
     app.post(`/api/${table}`, async (req, res) => {
         try {
             const { id } = req.body;
             const recordId = id || req.body.id;
             if (!recordId) return res.status(400).json({ error: "ID is required" });
-
-            // Handle created_at. If it's a new record (INSERT), created_at is NOW().
-            // If UPDATE, we don't touch created_at usually, but here we use simple ON CONFLICT logic.
-            // Note: Postgres sets created_at default NOW() on insert.
             
             await query(
                 `INSERT INTO ${table} (id, data, updated_at, created_at) VALUES ($1, $2, NOW(), NOW()) 
