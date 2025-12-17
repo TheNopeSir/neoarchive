@@ -55,51 +55,17 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Telegram Setup (Keeping existing logic)
+  // Telegram Setup
   useEffect(() => {
       if (step === 'TELEGRAM' && telegramWrapperRef.current) {
           window.onTelegramAuth = async (user: TelegramUser) => {
               setIsLoading(true);
               try {
-                  const neoUsername = user.username || `tg_${user.id}`;
-                  const neoEmail = `${user.id}@telegram.neoarchive.com`;
-                  const stablePassword = `tg_secure_${user.id}_v2`;
-
-                  const allUsers = db.getFullDatabase().users;
-                  const existingUser = allUsers.find(u => 
-                      u.email === neoEmail || u.username === neoUsername || u.telegram === user.username
-                  );
-
-                  let userProfile: UserProfile;
-
-                  if (existingUser) {
-                      const effectivePassword = existingUser.password || stablePassword;
-                      try {
-                          userProfile = await db.loginUser(existingUser.email, effectivePassword);
-                      } catch (loginErr) {
-                          const updatedProfile = { 
-                              ...existingUser, 
-                              password: stablePassword,
-                              avatarUrl: user.photo_url || existingUser.avatarUrl,
-                              telegram: user.username
-                          };
-                          await db.updateUserProfile(updatedProfile);
-                          userProfile = updatedProfile;
-                      }
-                  } else {
-                      const displayName = user.username ? `@${user.username}` : `${user.first_name}`;
-                      userProfile = await db.registerUser(
-                          neoUsername, 
-                          stablePassword, 
-                          `Telegram Identity: ${displayName}`, 
-                          neoEmail, 
-                          user.username,
-                          user.photo_url
-                      );
-                  }
+                  // Use the new unified endpoint that handles "Find or Create" logic
+                  const userProfile = await db.loginViaTelegram(user);
                   onLogin(userProfile, true);
               } catch (err: any) {
-                  setError("LOGIN FAILED: " + (err.message || "Unknown Error"));
+                  setError("LOGIN FAILED: " + (err.message || "Server Error"));
                   setIsLoading(false);
               }
           };
@@ -140,14 +106,11 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
       try {
           let targetEmail = email;
+          // Basic check if input is likely a username
           if (!email.includes('@')) {
-              const allUsers = db.getFullDatabase().users;
-              const found = allUsers.find(u => u.username.toLowerCase() === email.toLowerCase());
-              if (found) {
-                  targetEmail = found.email;
-              } else {
-                  throw new Error("Пользователь не найден");
-              }
+              // Note: This relies on local cache if we want to resolve username->email client side, 
+              // but db.loginUser sends raw input. Let the backend handle the OR logic.
+              // Assuming backend route handles `email OR username`.
           }
           const user = await db.loginUser(targetEmail, password);
           onLogin(user, rememberMe);
@@ -185,7 +148,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     } catch (err: any) {
         setError(err.message || "ОШИБКА РЕГИСТРАЦИИ");
         // Suggest recovery if duplicate
-        if (err.message.includes('уже существует') || err.message.includes('заняты')) {
+        if (err.message && (err.message.includes('уже существует') || err.message.includes('заняты'))) {
             setShowRecoverOption(true);
             setInfoMessage("Email занят. Попробуйте восстановить пароль.");
         }
@@ -240,7 +203,11 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
         return (
             <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
                  <div className="text-center font-mono text-xs opacity-70 mb-2 border-b border-dashed border-gray-500 pb-2">МОДУЛЬ АВТОРИЗАЦИИ TELEGRAM</div>
-                 <div className="flex justify-center my-4 min-h-[80px]" ref={telegramWrapperRef}><RetroLoader text="INIT_WIDGET" /></div>
+                 {isLoading ? (
+                     <div className="flex justify-center my-4 min-h-[80px]"><RetroLoader text="CONNECTING..." /></div>
+                 ) : (
+                     <div className="flex justify-center my-4 min-h-[80px]" ref={telegramWrapperRef}><RetroLoader text="INIT_WIDGET" /></div>
+                 )}
                  {error && <div className="text-red-500 font-bold text-xs font-mono border border-red-500 p-2 mt-4">{error}</div>}
                  <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="mt-4 text-xs font-mono opacity-50 hover:underline text-center">ОТМЕНА</button>
             </div>

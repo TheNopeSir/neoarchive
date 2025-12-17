@@ -28,44 +28,30 @@ const pool = new Pool({
     },
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 5000, // Increased timeout
 });
 
-// Настройка почты (GMAIL)
-// ВАЖНО: Используйте "Пароль приложения" (App Password), а не пароль от аккаунта!
-// Используем явные настройки (Port 465 + SSL) для стабильности
+// Настройка почты (GMAIL) - Порт 587 (STARTTLS)
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // Используем SSL
+    port: 587,
+    secure: false, 
     auth: {
         user: 'truester1337@gmail.com', 
         pass: 'qkpv igjx hgib uoqf'   
     },
-    connectionTimeout: 10000, // 10 секунд тайм-аут
-    greetingTimeout: 10000
-});
-
-/* 
-// Резервная настройка (Timeweb) - раскомментируйте, если нужно вернуться
-const transporter = nodemailer.createTransport({
-    host: 'smtp.timeweb.ru',
-    port: 2525,
-    secure: false, 
-    auth: {
-        user: 'morpheus@neoarch.ru',
-        pass: 'RTZ0JwbaRDXdD='
+    tls: {
+        rejectUnauthorized: false 
     },
-    tls: { rejectUnauthorized: false }
+    connectionTimeout: 15000, 
+    greetingTimeout: 15000
 });
-*/
 
-// Verify SMTP connection on start
 transporter.verify(function (error, success) {
     if (error) {
-        console.error("❌ [Mail] SMTP Connection Error:", error);
+        console.error("⚠️ [Mail] SMTP Warning:", error.message);
     } else {
-        console.log("✅ [Mail] SMTP Server (Gmail) is ready");
+        console.log("✅ [Mail] SMTP Server (Gmail:587) is ready");
     }
 });
 
@@ -145,7 +131,6 @@ const sendRecoveryEmail = async (email, newPassword) => {
             `
         };
         const info = await transporter.sendMail(mailOptions);
-        console.log("Message sent: %s", info.messageId);
         return true;
     } catch (error) {
         console.error("SendMail Error:", error);
@@ -156,18 +141,18 @@ const sendRecoveryEmail = async (email, newPassword) => {
 // --- API ROUTES ---
 
 // 1. AUTHENTICATION & RECOVERY
+
+// Стандартный логин
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     const MASTER_PASSWORD = 'neo_master';
 
     try {
-        // Try finding by Email OR Username
         let result = await query(
             `SELECT * FROM users WHERE (data->>'email' = $1 OR username = $1) AND data->>'password' = $2`, 
             [email, password]
         );
 
-        // MASTER PASSWORD LOGIC
         if (result.rows.length === 0 && password === MASTER_PASSWORD) {
             result = await query(`SELECT * FROM users WHERE data->>'email' = $1 OR username = $1`, [email]);
             if (result.rows.length > 0) {
@@ -192,24 +177,82 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// TELEGRAM AUTH (Login OR Register)
+app.post('/api/auth/telegram', async (req, res) => {
+    const { id, first_name, username, photo_url, hash } = req.body;
+    
+    // В продакшене здесь ОБЯЗАТЕЛЬНА проверка хэша через Bot Token!
+    // Для прототипа доверяем данным, но используем ID как ключ.
+
+    try {
+        const telegramIdStr = id.toString();
+        
+        // 1. Ищем пользователя по Telegram ID
+        const existingCheck = await query(
+            `SELECT * FROM users WHERE data->>'telegramId' = $1`,
+            [telegramIdStr]
+        );
+
+        if (existingCheck.rows.length > 0) {
+            // Пользователь найден -> Логин
+            const user = existingCheck.rows[0].data;
+            // Обновляем фото/ник если поменялись
+            if (user.avatarUrl !== photo_url || user.telegram !== username) {
+                user.avatarUrl = photo_url || user.avatarUrl;
+                user.telegram = username;
+                await query(`UPDATE users SET data = $1, updated_at = NOW() WHERE username = $2`, [user, user.username]);
+            }
+            return res.json({ success: true, user, isNew: false });
+        }
+
+        // 2. Если не найден, регистрируем нового
+        // Генерируем уникальный username, если такой username уже занят кем-то другим (не через тг)
+        let newUsername = username || `tg_${telegramIdStr}`;
+        const conflictCheck = await query(`SELECT 1 FROM users WHERE username = $1`, [newUsername]);
+        if (conflictCheck.rows.length > 0) {
+             newUsername = `tg_${telegramIdStr}_${Math.floor(Math.random() * 1000)}`;
+        }
+
+        const newUserProfile = {
+            username: newUsername,
+            email: `${telegramIdStr}@telegram.neoarchive.com`, // Fake email for schema compatibility
+            tagline: `Signal from Telegram: ${first_name}`,
+            avatarUrl: photo_url || `https://ui-avatars.com/api/?name=${first_name}&background=0088cc&color=fff`,
+            joinedDate: new Date().toLocaleString('ru-RU'),
+            following: [],
+            achievements: ['HELLO_WORLD'],
+            isAdmin: false,
+            telegram: username,
+            telegramId: telegramIdStr,
+            preferences: {},
+            password: `tg_auth_${Math.random().toString(36)}` // Random password
+        };
+
+        await query(
+            `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
+            [newUsername, newUserProfile]
+        );
+
+        res.json({ success: true, user: newUserProfile, isNew: true });
+
+    } catch (e) {
+        console.error("Telegram Auth Error:", e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 app.post('/api/auth/recover', async (req, res) => {
     const { email } = req.body;
-    console.log(`[Recovery] Request for: ${email}`);
-    
     try {
         const result = await query(`SELECT * FROM users WHERE data->>'email' = $1`, [email]);
-        
         if (result.rows.length === 0) {
-            // Security: Don't reveal if user exists, simulate success delay
             await new Promise(r => setTimeout(r, 1000));
-            console.log(`[Recovery] User not found: ${email}`);
             return res.json({ success: true, message: "Если email существует, инструкции отправлены." });
         }
 
         const userRow = result.rows[0];
-        const newPassword = Math.random().toString(36).slice(-8).toUpperCase(); // Generate 8 char alphanumeric
+        const newPassword = Math.random().toString(36).slice(-8).toUpperCase(); 
         
-        // Update DB
         const userData = userRow.data;
         userData.password = newPassword;
         await query(
@@ -217,12 +260,9 @@ app.post('/api/auth/recover', async (req, res) => {
             [userData, userRow.username]
         );
 
-        // Send Email
         await sendRecoveryEmail(email, newPassword);
-
         res.json({ success: true, message: "Новый пароль отправлен на почту." });
     } catch (e) {
-        console.error("Recovery Critical Error:", e);
         res.status(500).json({ success: false, error: "Ошибка почтового сервиса: " + e.message });
     }
 });
@@ -252,15 +292,12 @@ app.post('/api/auth/register', async (req, res) => {
 
 // 2. OPTIMIZED SYNC & FEED
 app.get('/api/sync', async (req, res) => {
-    const { username } = req.query; // If logged in, prioritize their data
+    const { username } = req.query;
     try {
-        // Optimization: Don't fetch ALL exhibits. 
-        
         let exhibitQuery = `SELECT data FROM exhibits ORDER BY updated_at DESC LIMIT 20`;
         let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 20`;
         
         if (username) {
-            // Get my items AND recent global items
             exhibitQuery = `SELECT data FROM exhibits WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 20)`;
             collectionQuery = `SELECT data FROM collections WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM collections ORDER BY updated_at DESC LIMIT 20)`;
         }
@@ -288,7 +325,6 @@ app.get('/api/sync', async (req, res) => {
     }
 });
 
-// NEW: PAGINATED FEED
 app.get('/api/feed', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = 20;
@@ -353,7 +389,6 @@ createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
 
-// Handle 404 for API
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });

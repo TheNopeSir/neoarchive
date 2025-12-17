@@ -19,6 +19,7 @@ const CACHE_KEY = 'neo_archive_v1';
 const SESSION_USER_KEY = 'neo_active_user';
 const CACHE_VERSION = '4.0.0-Optimized'; 
 
+// Changed: We assume online by default to force connection attempts
 let isOfflineMode = false;
 
 // Base API URL
@@ -108,31 +109,22 @@ const slugify = (text: string): string => {
     return text.toString().toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').replace(/-+$/, '');
 };
 
-// CACHE PRUNING LOGIC
-// We only want to save relevant data to disk to avoid clogging
 const prepareCacheForStorage = (currentCache: typeof cache) => {
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
-    
-    // 1. Always keep users (small dataset usually, needed for avatars)
     const users = currentCache.users;
-
-    // 2. Filter Exhibits: Keep MY items and last 50 feed items
     const allExhibits = currentCache.exhibits;
     const myExhibits = activeUser ? allExhibits.filter(e => e.owner === activeUser) : [];
-    // Sort rest by date and take 50
     const feedExhibits = allExhibits
         .filter(e => e.owner !== activeUser)
-        .sort((a,b) => b.id.localeCompare(a.id)) // Assuming ID roughly correlates to time or use timestamp
+        .sort((a,b) => b.id.localeCompare(a.id))
         .slice(0, 50);
     
-    // Combine and deduplicate
     const combinedExhibits = [...myExhibits, ...feedExhibits];
     const uniqueExhibits = Array.from(new Map(combinedExhibits.map(item => [item.id, item])).values());
 
     return {
         ...currentCache,
         exhibits: uniqueExhibits,
-        // Optional: Prune other large collections if needed
     };
 };
 
@@ -198,17 +190,14 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
     }
 };
 
-// --- NEW: FEED PAGINATION ---
 export const loadFeedBatch = async (page: number) => {
     if (isOfflineMode) return [];
     try {
         const newItems: Exhibit[] = await apiCall(`/feed?page=${page}`);
         if (newItems && newItems.length > 0) {
-            // Merge with cache, avoiding duplicates
             const existingIds = new Set(cache.exhibits.map(e => e.id));
             const uniqueNew = newItems.filter(e => !existingIds.has(e.id));
             cache.exhibits = [...cache.exhibits, ...uniqueNew];
-            // We don't save full history to disk here, only in saveToLocalCache (which prunes)
             return uniqueNew;
         }
         return [];
@@ -218,21 +207,14 @@ export const loadFeedBatch = async (page: number) => {
     }
 };
 
-// --- CLOUD SYNC LOGIC ---
 const performCloudSync = async () => {
-    // Only fetch minimal dataset initially to save bandwidth/storage
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
     const endpoint = activeUser ? `/sync?username=${activeUser}` : '/sync';
     
     const data = await apiCall(endpoint);
     
     if (data.users) cache.users = data.users;
-    
-    // Merge exhibits cleverly
-    if (data.exhibits) {
-        cache.exhibits = data.exhibits; 
-    }
-    
+    if (data.exhibits) cache.exhibits = data.exhibits; 
     if (data.collections) cache.collections = data.collections;
     if (data.notifications) cache.notifications = data.notifications;
     if (data.messages) cache.messages = data.messages;
@@ -242,19 +224,21 @@ const performCloudSync = async () => {
 };
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
+    // 1. Load what we have locally instantly
     await loadFromCache();
+    
+    // 2. Try to sync with server. 
+    // IMPORTANT: We do NOT fallback to offline mode easily anymore.
+    // If sync fails, we assume connection issues but don't disable future write attempts.
     try {
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Connection timed out')), 5000)
-        );
-        await Promise.race([performCloudSync(), timeoutPromise]);
-        
-        cache.isLoaded = true;
+        await performCloudSync();
         isOfflineMode = false;
-        console.log("✅ [Sync] Synchronization complete.");
+        cache.isLoaded = true;
+        console.log("✅ [Sync] Connected to Database.");
     } catch (e: any) {
-        console.warn("⚠️ [Sync] Server unavailable, offline mode.", e.message);
-        isOfflineMode = true;
+        console.warn("⚠️ [Sync] Warning: Could not sync with server.", e.message);
+        // We do NOT set isOfflineMode = true immediately to allow retry on next action
+        // Only set it if you want to completely disable writes.
     }
 
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
@@ -266,9 +250,9 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
 };
 
 export const backgroundSync = async (): Promise<boolean> => {
-    if (isOfflineMode) return false;
     try {
         await performCloudSync();
+        isOfflineMode = false;
         return true;
     } catch (e) { return false; }
 };
@@ -312,6 +296,24 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
     throw new Error(res.error || "Login failed");
 };
 
+// NEW: Unified Telegram Auth
+export const loginViaTelegram = async (telegramUser: any): Promise<UserProfile> => {
+    // Send raw telegram data to backend, let backend decide if it's login or register
+    const res = await apiCall('/auth/telegram', 'POST', telegramUser);
+    
+    if (res.success && res.user) {
+        const userProfile = res.user;
+        // Update local cache
+        const idx = cache.users.findIndex(u => u.username === userProfile.username);
+        if (idx !== -1) cache.users[idx] = userProfile;
+        else cache.users.push(userProfile);
+        
+        await saveToLocalCache();
+        return userProfile;
+    }
+    throw new Error(res.error || "Telegram Auth Failed");
+};
+
 export const recoverPassword = async (email: string) => {
     return await apiCall('/auth/recover', 'POST', { email });
 };
@@ -321,20 +323,26 @@ export const logoutUser = async () => {
 };
 
 export const updateUserProfile = async (user: UserProfile) => {
+    // Optimistic update
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
     else cache.users.push(user);
     await saveToLocalCache();
+    // Fire and forget (or await if critical)
     await apiCall('/users/update', 'POST', user);
 };
 
 // Generic Helpers
+// CHANGED: syncItem now THROWS error if it fails. It does not fail silently.
 const syncItem = async (endpoint: string, item: any) => {
-    if (isOfflineMode) return;
-    try { await apiCall(endpoint, 'POST', item); } catch(e) { console.error("Sync Item failed", e); }
+    try { 
+        await apiCall(endpoint, 'POST', item); 
+    } catch(e) { 
+        console.error(`Sync Item failed (${endpoint})`, e); 
+        throw new Error("Не удалось сохранить данные на сервере. Проверьте соединение.");
+    }
 };
 const deleteItem = async (endpoint: string, id: string) => {
-    if (isOfflineMode) return;
     try { await apiCall(`${endpoint}/${id}`, 'DELETE'); } catch(e) { console.error("Delete Item failed", e); }
 };
 
@@ -347,6 +355,7 @@ export const updateUserPreference = async (username: string, category: string, w
     const updatedUser = { ...user, preferences: { ...currentPrefs, [category]: newWeight } };
     cache.users[userIndex] = updatedUser;
     await saveToLocalCache();
+    // Preferences are low priority, don't block
     apiCall('/users/update', 'POST', updatedUser).catch(console.warn);
 };
 
@@ -354,57 +363,68 @@ export const updateUserPreference = async (username: string, category: string, w
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 export const saveExhibit = async (exhibit: Exhibit) => {
   exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
+  
+  // WRITE-THROUGH: Server FIRST
+  await syncItem('/exhibits', exhibit);
+  
+  // If server success, update cache
   const existingIdx = cache.exhibits.findIndex(e => e.id === exhibit.id);
   if (existingIdx !== -1) cache.exhibits[existingIdx] = exhibit;
   else cache.exhibits.unshift(exhibit);
   await saveToLocalCache();
-  await syncItem('/exhibits', exhibit);
 };
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
+  await syncItem('/exhibits', updatedExhibit);
+  
   const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
     await saveToLocalCache();
-    await syncItem('/exhibits', updatedExhibit);
   }
 };
 export const deleteExhibit = async (id: string) => {
+  await deleteItem('/exhibits', id);
+  
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
   cache.notifications = cache.notifications.filter(n => n.targetId !== id);
   cache.deletedIds.push(id); 
   await saveToLocalCache();
-  await deleteItem('/exhibits', id);
 };
 
 // Collections
 export const getCollections = (): Collection[] => cache.collections;
 export const saveCollection = async (collection: Collection) => {
     collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
+    
+    await syncItem('/collections', collection);
+    
     cache.collections.unshift(collection);
     await saveToLocalCache();
-    await syncItem('/collections', collection);
 };
 export const updateCollection = async (updatedCollection: Collection) => {
+    await syncItem('/collections', updatedCollection);
+    
     const index = cache.collections.findIndex(c => c.id === updatedCollection.id);
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
         await saveToLocalCache();
-        await syncItem('/collections', updatedCollection);
     }
 };
 export const deleteCollection = async (id: string) => {
+    await deleteItem('/collections', id);
+    
     cache.collections = cache.collections.filter(c => c.id !== id);
     cache.deletedIds.push(id);
     await saveToLocalCache();
-    await deleteItem('/collections', id);
 };
 
 // Notifications/Messages/Guestbook
 export const getNotifications = (): Notification[] => cache.notifications;
 export const saveNotification = async (notif: Notification) => {
+    // Fire and forget notifications usually
+    apiCall('/notifications', 'POST', notif).catch(e => console.warn("Notif sync fail"));
     cache.notifications.unshift(notif);
     await saveToLocalCache();
-    await syncItem('/notifications', notif);
 };
 export const markNotificationsRead = async (recipient: string) => {
     let hasUpdates = false;
@@ -418,33 +438,33 @@ export const markNotificationsRead = async (recipient: string) => {
     });
     if (hasUpdates) {
         await saveToLocalCache();
-        toUpdate.forEach(n => syncItem('/notifications', n));
+        toUpdate.forEach(n => apiCall('/notifications', 'POST', n).catch(() => {}));
     }
 };
 export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
 export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
+    await syncItem('/guestbook', entry);
     cache.guestbook.push(entry);
     await saveToLocalCache();
-    await syncItem('/guestbook', entry);
 };
 export const updateGuestbookEntry = async (entry: GuestbookEntry) => {
+    await syncItem('/guestbook', entry);
     const idx = cache.guestbook.findIndex(g => g.id === entry.id);
     if (idx !== -1) {
         cache.guestbook[idx] = entry;
         await saveToLocalCache();
-        await syncItem('/guestbook', entry);
     }
 };
 export const deleteGuestbookEntry = async (id: string) => {
+    await deleteItem('/guestbook', id);
     cache.guestbook = cache.guestbook.filter(g => g.id !== id);
     await saveToLocalCache();
-    await deleteItem('/guestbook', id);
 };
 export const getMessages = (): Message[] => cache.messages;
 export const saveMessage = async (msg: Message) => {
+    await syncItem('/messages', msg);
     cache.messages.push(msg);
     await saveToLocalCache();
-    await syncItem('/messages', msg);
 };
 export const markMessagesRead = async (sender: string, receiver: string) => {
     const toUpdate: Message[] = [];
@@ -455,7 +475,7 @@ export const markMessagesRead = async (sender: string, receiver: string) => {
         }
     });
     await saveToLocalCache();
-    toUpdate.forEach(m => syncItem('/messages', m));
+    toUpdate.forEach(m => apiCall('/messages', 'POST', m).catch(() => {}));
 };
 
 // Cache Maintenance
