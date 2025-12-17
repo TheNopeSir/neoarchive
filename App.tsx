@@ -5,7 +5,7 @@ import {
   LogOut, FolderPlus, ArrowLeft, ImageIcon, X, FolderOpen,
   Plus, Terminal, ChevronDown, Trash2, Camera, Video,
   MessageCircle, Send, Package, Grid, Settings, RefreshCw,
-  Sun, Moon, Check, Edit2
+  Sun, Moon, Check, Edit2, Zap
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -20,6 +20,7 @@ import StorageMonitor from './components/StorageMonitor';
 import RetroLoader from './components/RetroLoader';
 import CollectionCard from './components/CollectionCard';
 import PixelSnow from './components/PixelSnow';
+import ActivityView from './components/ActivityView';
 
 import * as db from './services/storageService';
 import { 
@@ -97,6 +98,7 @@ export default function App() {
   // Collection Management State
   const [newCollection, setNewCollection] = useState<Partial<Collection>>(EMPTY_COLLECTION);
   const [collectionToEdit, setCollectionToEdit] = useState<Collection | null>(null);
+  const [isAddingToCollection, setIsAddingToCollection] = useState(false); // Modal state
 
   // Exhibit Management State
   const [newExhibit, setNewExhibit] = useState<Partial<Exhibit>>(EMPTY_EXHIBIT);
@@ -188,6 +190,7 @@ export default function App() {
         setView('FEED');
     } else if (view === 'COLLECTION_DETAIL') {
         setSelectedCollection(null);
+        setIsAddingToCollection(false); // Close modal if open
         setView('FEED');
     } else if (view === 'DIRECT_CHAT') {
         setChatPartner(null);
@@ -224,6 +227,11 @@ export default function App() {
     const ex = exhibits.find(e => e.id === id);
     if (!ex || !user) return;
     
+    // Weight update for interest
+    if (!ex.likedBy?.includes(user.username)) {
+         db.updateUserPreference(user.username, ex.category, 0.5); // Strong signal
+    }
+
     const isLiked = ex.likedBy?.includes(user.username);
     const updated = {
         ...ex,
@@ -252,94 +260,19 @@ export default function App() {
     }
   };
 
-  // --- ARTIFACT MANAGEMENT ---
-
-  const handleStartCreateArtifact = () => {
-      setNewExhibit({
-          category: DefaultCategory.PHONES,
-          subcategory: '',
-          specs: generateSpecsForCategory(DefaultCategory.PHONES),
-          condition: getDefaultCondition(DefaultCategory.PHONES),
-          imageUrls: []
-      });
-      setEditingExhibitId(null);
-      setView('CREATE_ARTIFACT');
-  };
-
-  const handleEditExhibit = (item: Exhibit) => {
-      setEditingExhibitId(item.id);
-      setNewExhibit({ ...item });
-      setView('CREATE_ARTIFACT');
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
-          try {
-              const b64 = await db.fileToBase64(e.target.files[0]);
-              setNewExhibit(prev => ({ ...prev, imageUrls: [...(prev.imageUrls || []), b64] }));
-          } catch(err) { alert("Error uploading image"); }
-      }
-  };
-
-  const removeImage = (index: number) => {
-      setNewExhibit(prev => ({ ...prev, imageUrls: prev.imageUrls?.filter((_, i) => i !== index) }));
-  };
-
-  const handleSaveExhibit = async (isDraft = false) => {
-      if (!user) return;
-      if (!newExhibit.title) { alert("Title required"); return; }
-      if (!isDraft && (!newExhibit.imageUrls || newExhibit.imageUrls.length === 0)) { alert("Image required for publication"); return; }
-
-      setIsLoading(true);
-
-      // Content Moderation
-      if (!isDraft) {
-          const modCheck = await moderateContent(`${newExhibit.title} ${newExhibit.description || ''}`);
-          if (!modCheck.allowed) {
-              alert(`Content Warning: ${modCheck.reason}`);
-              setIsLoading(false);
-              return;
-          }
-      }
-
-      const ex: Exhibit = {
-          id: editingExhibitId || crypto.randomUUID(),
-          title: newExhibit.title,
-          description: newExhibit.description || '',
-          imageUrls: newExhibit.imageUrls || [],
-          videoUrl: newExhibit.videoUrl,
-          category: newExhibit.category || DefaultCategory.MISC,
-          subcategory: newExhibit.subcategory,
-          condition: newExhibit.condition,
-          specs: newExhibit.specs || {},
-          owner: user.username,
-          timestamp: new Date().toLocaleString(),
-          likes: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likes || 0 : 0,
-          likedBy: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likedBy || [] : [],
-          views: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.views || 0 : 0,
-          comments: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.comments || [] : [],
-          quality: newExhibit.quality || 'Standard',
-          isDraft: isDraft
-      };
-
-      if (editingExhibitId) await db.updateExhibit(ex);
-      else await db.saveExhibit(ex);
-
-      refreshData();
-      setIsLoading(false);
-      setView('MY_COLLECTION');
-  };
-
-  const handleDeleteExhibit = async (id: string) => {
-      if(confirm("Delete artifact?")) {
-          await db.deleteExhibit(id);
-          refreshData();
-          handleBack();
-      }
-  };
-
   // --- COLLECTION MANAGEMENT ---
   
+  const handleAddArtifactToCollection = async (exhibitId: string) => {
+      if (!selectedCollection) return;
+      const updatedCollection = {
+          ...selectedCollection,
+          exhibitIds: [...selectedCollection.exhibitIds, exhibitId]
+      };
+      await db.updateCollection(updatedCollection);
+      setSelectedCollection(updatedCollection);
+      refreshData();
+  };
+
   const handleCollectionCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
         const b64 = await db.fileToBase64(e.target.files[0]);
@@ -388,6 +321,81 @@ export default function App() {
       }
   };
 
+  // --- ARTIFACT MANAGEMENT (CREATE/EDIT) ---
+  // ... (Code reused from previous versions for image upload, save, etc.)
+  const handleStartCreateArtifact = () => {
+      setNewExhibit({
+          category: DefaultCategory.PHONES,
+          subcategory: '',
+          specs: generateSpecsForCategory(DefaultCategory.PHONES),
+          condition: getDefaultCondition(DefaultCategory.PHONES),
+          imageUrls: []
+      });
+      setEditingExhibitId(null);
+      setView('CREATE_ARTIFACT');
+  };
+  const handleEditExhibit = (item: Exhibit) => {
+      setEditingExhibitId(item.id);
+      setNewExhibit({ ...item });
+      setView('CREATE_ARTIFACT');
+  };
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          try {
+              const b64 = await db.fileToBase64(e.target.files[0]);
+              setNewExhibit(prev => ({ ...prev, imageUrls: [...(prev.imageUrls || []), b64] }));
+          } catch(err) { alert("Error uploading image"); }
+      }
+  };
+  const removeImage = (index: number) => {
+      setNewExhibit(prev => ({ ...prev, imageUrls: prev.imageUrls?.filter((_, i) => i !== index) }));
+  };
+  const handleSaveExhibit = async (isDraft = false) => {
+      if (!user) return;
+      if (!newExhibit.title) { alert("Title required"); return; }
+      if (!isDraft && (!newExhibit.imageUrls || newExhibit.imageUrls.length === 0)) { alert("Image required for publication"); return; }
+      setIsLoading(true);
+      if (!isDraft) {
+          const modCheck = await moderateContent(`${newExhibit.title} ${newExhibit.description || ''}`);
+          if (!modCheck.allowed) {
+              alert(`Content Warning: ${modCheck.reason}`);
+              setIsLoading(false);
+              return;
+          }
+      }
+      const ex: Exhibit = {
+          id: editingExhibitId || crypto.randomUUID(),
+          title: newExhibit.title,
+          description: newExhibit.description || '',
+          imageUrls: newExhibit.imageUrls || [],
+          videoUrl: newExhibit.videoUrl,
+          category: newExhibit.category || DefaultCategory.MISC,
+          subcategory: newExhibit.subcategory,
+          condition: newExhibit.condition,
+          specs: newExhibit.specs || {},
+          owner: user.username,
+          timestamp: new Date().toLocaleString(),
+          likes: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likes || 0 : 0,
+          likedBy: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likedBy || [] : [],
+          views: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.views || 0 : 0,
+          comments: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.comments || [] : [],
+          quality: newExhibit.quality || 'Standard',
+          isDraft: isDraft
+      };
+      if (editingExhibitId) await db.updateExhibit(ex);
+      else await db.saveExhibit(ex);
+      refreshData();
+      setIsLoading(false);
+      setView('MY_COLLECTION');
+  };
+  const handleDeleteExhibit = async (id: string) => {
+      if(confirm("Delete artifact?")) {
+          await db.deleteExhibit(id);
+          refreshData();
+          handleBack();
+      }
+  };
+
   // --- CHAT SYSTEM ---
   
   const handleOpenChat = (partner: string) => {
@@ -409,18 +417,37 @@ export default function App() {
           isRead: false
       };
       await db.saveMessage(msg);
-      setMessages([...db.getMessages(), msg]); // optimistic
+      setMessages([...db.getMessages(), msg]); 
       setChatInput('');
   };
 
-  // --- FEED & SEARCH ---
+  // --- FEED & SEARCH ALGORITHM ---
   
-  const filteredExhibits = exhibits.filter(e => {
+  // 1. Filter by Search & Category
+  let displayExhibits = exhibits.filter(e => {
       if (e.isDraft) return false;
       if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
       if (searchQuery && !e.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
-  }).sort((a,b) => calculateArtifactScore(b, user?.preferences) - calculateArtifactScore(a, user?.preferences));
+  });
+
+  // 2. Split into "Following" and "Recommendations" if in default feed
+  let followingExhibits: Exhibit[] = [];
+  let recommendedExhibits: Exhibit[] = [];
+
+  if (user && !searchQuery && selectedCategory === 'ВСЕ') {
+      followingExhibits = displayExhibits.filter(e => user.following.includes(e.owner));
+      recommendedExhibits = displayExhibits.filter(e => !user.following.includes(e.owner));
+      
+      // Sort Recommendations by Score (Interest)
+      recommendedExhibits.sort((a,b) => calculateArtifactScore(b, user.preferences) - calculateArtifactScore(a, user.preferences));
+      
+      // Sort Following by Newest
+      followingExhibits.sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+  } else {
+      // Just fallback to score sort if filtering
+      recommendedExhibits = displayExhibits.sort((a,b) => calculateArtifactScore(b, user?.preferences) - calculateArtifactScore(a, user?.preferences));
+  }
 
   // --- RENDER ---
   
@@ -516,21 +543,60 @@ export default function App() {
                     </div>
                     
                     {feedMode === 'ARTIFACTS' ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-                            {filteredExhibits.map(item => (
-                                 <ExhibitCard 
-                                    key={item.id} 
-                                    item={item} 
-                                    theme={theme}
-                                    similarExhibits={[]}
-                                    onClick={handleExhibitClick}
-                                    isLiked={item.likedBy?.includes(user?.username || '') || false}
-                                    isFavorited={false}
-                                    onLike={(e) => handleLike(item.id, e)}
-                                    onFavorite={() => {}}
-                                    onAuthorClick={handleAuthorClick}
-                                 />
-                            ))}
+                        <div className="space-y-8">
+                            {/* FOLLOWING SECTION */}
+                            {followingExhibits.length > 0 && (
+                                <div>
+                                    <div className="font-pixel text-xs opacity-50 mb-4 flex items-center gap-2">
+                                        <Zap size={12} className="text-yellow-500"/> ПОДПИСКИ
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+                                        {followingExhibits.map(item => (
+                                             <ExhibitCard 
+                                                key={item.id} 
+                                                item={item} 
+                                                theme={theme}
+                                                similarExhibits={[]}
+                                                onClick={handleExhibitClick}
+                                                isLiked={item.likedBy?.includes(user?.username || '') || false}
+                                                isFavorited={false}
+                                                onLike={(e) => handleLike(item.id, e)}
+                                                onFavorite={() => {}}
+                                                onAuthorClick={handleAuthorClick}
+                                             />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* RECOMMENDED SECTION */}
+                            {recommendedExhibits.length > 0 && (
+                                <div>
+                                    <div className="font-pixel text-xs opacity-50 mb-4 flex items-center gap-2">
+                                        <Grid size={12} className="text-blue-500"/> ВАМ МОЖЕТ ПОНРАВИТЬСЯ
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+                                        {recommendedExhibits.map(item => (
+                                             <ExhibitCard 
+                                                key={item.id} 
+                                                item={item} 
+                                                theme={theme}
+                                                similarExhibits={[]}
+                                                onClick={handleExhibitClick}
+                                                isLiked={item.likedBy?.includes(user?.username || '') || false}
+                                                isFavorited={false}
+                                                onLike={(e) => handleLike(item.id, e)}
+                                                onFavorite={() => {}}
+                                                onAuthorClick={handleAuthorClick}
+                                             />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {followingExhibits.length === 0 && recommendedExhibits.length === 0 && (
+                                <div className="text-center opacity-50 font-mono py-10">НИЧЕГО НЕ НАЙДЕНО</div>
+                            )}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -558,115 +624,46 @@ export default function App() {
                 </div>
             )}
 
+            {/* EXHIBIT CREATION/EDITING LOGIC REMAINS SAME */}
             {view === 'CREATE_ARTIFACT' && (
-                <div className="max-w-2xl mx-auto animate-in fade-in pb-20">
+                 <div className="max-w-2xl mx-auto animate-in fade-in pb-20">
                      <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs mb-6"><ArrowLeft size={16} /> НАЗАД</button>
                      <h2 className="font-pixel text-xl mb-6 flex items-center gap-2"><PlusCircle /> {editingExhibitId ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ АРТЕФАКТ'}</h2>
-                     
                      <div className={`p-6 rounded-xl border-2 space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                         <div>
-                             <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">НАЗВАНИЕ *</label>
-                             <input value={newExhibit.title || ''} onChange={e => setNewExhibit({...newExhibit, title: e.target.value})} className="w-full bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none" placeholder="Например: Nokia 3310" />
-                         </div>
+                         <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">НАЗВАНИЕ *</label><input value={newExhibit.title || ''} onChange={e => setNewExhibit({...newExhibit, title: e.target.value})} className="w-full bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none" placeholder="Например: Nokia 3310" /></div>
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                              <div>
                                  <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">КАТЕГОРИЯ</label>
                                  <div className="relative">
-                                     <select 
-                                        value={newExhibit.category} 
-                                        onChange={e => { 
-                                            const cat = e.target.value; 
-                                            setNewExhibit({ ...newExhibit, category: cat, subcategory: '', specs: generateSpecsForCategory(cat), condition: getDefaultCondition(cat) }); 
-                                        }} 
-                                        className={`w-full appearance-none bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
-                                     >
-                                        {Object.values(DefaultCategory).map(c => <option key={c} value={c}>{c}</option>)}
-                                     </select>
+                                     <select value={newExhibit.category} onChange={e => { const cat = e.target.value; setNewExhibit({ ...newExhibit, category: cat, subcategory: '', specs: generateSpecsForCategory(cat), condition: getDefaultCondition(cat) }); }} className={`w-full appearance-none bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}>{Object.values(DefaultCategory).map(c => <option key={c} value={c}>{c}</option>)}</select>
                                      <ChevronDown className="absolute right-2 top-3 opacity-50 pointer-events-none" size={14} />
                                  </div>
                              </div>
                              <div>
                                  <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ПОДКАТЕГОРИЯ</label>
                                  <div className="relative">
-                                     <select 
-                                        value={newExhibit.subcategory || ''} 
-                                        onChange={e => { 
-                                            const sub = e.target.value; 
-                                            setNewExhibit({ ...newExhibit, subcategory: sub, specs: generateSpecsForCategory(newExhibit.category || DefaultCategory.MISC, sub), condition: getDefaultCondition(newExhibit.category || DefaultCategory.MISC, sub) }); 
-                                        }} 
-                                        className={`w-full appearance-none bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
-                                     >
-                                        <option value="">- Выберите -</option>
-                                        {CATEGORY_SUBCATEGORIES[newExhibit.category || DefaultCategory.MISC]?.map(s => <option key={s} value={s}>{s}</option>)}
-                                     </select>
+                                     <select value={newExhibit.subcategory || ''} onChange={e => { const sub = e.target.value; setNewExhibit({ ...newExhibit, subcategory: sub, specs: generateSpecsForCategory(newExhibit.category || DefaultCategory.MISC, sub), condition: getDefaultCondition(newExhibit.category || DefaultCategory.MISC, sub) }); }} className={`w-full appearance-none bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}><option value="">- Выберите -</option>{CATEGORY_SUBCATEGORIES[newExhibit.category || DefaultCategory.MISC]?.map(s => <option key={s} value={s}>{s}</option>)}</select>
                                      <ChevronDown className="absolute right-2 top-3 opacity-50 pointer-events-none" size={14} />
                                  </div>
                              </div>
                          </div>
-                         <div>
-                             <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ОПИСАНИЕ</label>
-                             <textarea value={newExhibit.description || ''} onChange={e => setNewExhibit({...newExhibit, description: e.target.value})} className="w-full bg-transparent border-2 p-2 font-mono text-sm h-32 rounded focus:outline-none" placeholder="История предмета..." />
-                         </div>
+                         <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ОПИСАНИЕ</label><textarea value={newExhibit.description || ''} onChange={e => setNewExhibit({...newExhibit, description: e.target.value})} className="w-full bg-transparent border-2 p-2 font-mono text-sm h-32 rounded focus:outline-none" placeholder="История предмета..." /></div>
                          <div>
                              <label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ИЗОБРАЖЕНИЯ</label>
                              <div className="flex flex-wrap gap-4">
-                                 {newExhibit.imageUrls?.map((url, idx) => (
-                                     <div key={idx} className="relative w-20 h-20 border rounded overflow-hidden group">
-                                         <img src={url} className="w-full h-full object-cover" />
-                                         <button onClick={() => removeImage(idx)} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
-                                     </div>
-                                 ))}
-                                 <label className="w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors opacity-50 hover:opacity-100">
-                                     <Camera size={24} />
-                                     <span className="text-[9px] mt-1">ADD</span>
-                                     <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                                 </label>
+                                 {newExhibit.imageUrls?.map((url, idx) => (<div key={idx} className="relative w-20 h-20 border rounded overflow-hidden group"><img src={url} className="w-full h-full object-cover" /><button onClick={() => removeImage(idx)} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button></div>))}
+                                 <label className="w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors opacity-50 hover:opacity-100"><Camera size={24} /><span className="text-[9px] mt-1">ADD</span><input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} /></label>
                              </div>
                          </div>
-                         <div>
-                             <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ВИДЕО (YOUTUBE / URL)</label>
-                             <div className="flex items-center gap-2 border-b-2 p-2">
-                                 <Video size={16} className="opacity-50" />
-                                 <input value={newExhibit.videoUrl || ''} onChange={e => setNewExhibit({...newExhibit, videoUrl: e.target.value})} className="w-full bg-transparent font-mono text-sm focus:outline-none" placeholder="https://..." />
-                             </div>
-                         </div>
-                         <div>
-                             <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">СОСТОЯНИЕ</label>
-                             <div className="flex flex-wrap gap-2">
-                                 {getConditionsList(newExhibit.category || DefaultCategory.MISC, newExhibit.subcategory).map(c => (
-                                     <button key={c} onClick={() => setNewExhibit({...newExhibit, condition: c})} className={`px-3 py-1 rounded text-[10px] font-bold border transition-colors ${newExhibit.condition === c ? (theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black') : 'border-gray-500 opacity-50 hover:opacity-100'}`}>{c}</button>
-                                 ))}
-                             </div>
-                         </div>
-                         <div>
-                             <label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ХАРАКТЕРИСТИКИ</label>
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                 {Object.keys(newExhibit.specs || {}).map(key => (
-                                     <div key={key}>
-                                         <label className="text-[9px] opacity-60 mb-0.5 block">{key}</label>
-                                         <input 
-                                            value={newExhibit.specs?.[key] || ''} 
-                                            onChange={e => setNewExhibit({...newExhibit, specs: { ...newExhibit.specs, [key]: e.target.value }})} 
-                                            list={`suggestions-${key}`} 
-                                            className="w-full bg-transparent border-b p-1 font-mono text-xs focus:outline-none" 
-                                         />
-                                         {COMMON_SPEC_VALUES[key] && (
-                                             <datalist id={`suggestions-${key}`}>
-                                                 {COMMON_SPEC_VALUES[key].map(v => <option key={v} value={v} />)}
-                                             </datalist>
-                                         )}
-                                     </div>
-                                 ))}
-                             </div>
-                         </div>
-                         <div className="flex gap-4 pt-4">
-                             <button onClick={() => handleSaveExhibit(false)} disabled={isLoading} className={`flex-1 py-3 font-bold font-pixel uppercase rounded transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black hover:bg-white' : 'bg-light-accent text-white hover:bg-black'}`}>{isLoading ? 'СОХРАНЕНИЕ...' : 'ОПУБЛИКОВАТЬ'}</button>
-                             <button onClick={() => handleSaveExhibit(true)} disabled={isLoading} className="px-4 py-3 border rounded hover:bg-white/10 font-bold font-pixel uppercase text-xs">В ЧЕРНОВИК</button>
-                         </div>
+                         <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ВИДЕО</label><div className="flex items-center gap-2 border-b-2 p-2"><Video size={16} className="opacity-50" /><input value={newExhibit.videoUrl || ''} onChange={e => setNewExhibit({...newExhibit, videoUrl: e.target.value})} className="w-full bg-transparent font-mono text-sm focus:outline-none" placeholder="https://..." /></div></div>
+                         <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">СОСТОЯНИЕ</label><div className="flex flex-wrap gap-2">{getConditionsList(newExhibit.category || DefaultCategory.MISC, newExhibit.subcategory).map(c => (<button key={c} onClick={() => setNewExhibit({...newExhibit, condition: c})} className={`px-3 py-1 rounded text-[10px] font-bold border transition-colors ${newExhibit.condition === c ? (theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black') : 'border-gray-500 opacity-50 hover:opacity-100'}`}>{c}</button>))}</div></div>
+                         <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ХАРАКТЕРИСТИКИ</label><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Object.keys(newExhibit.specs || {}).map(key => (<div key={key}><label className="text-[9px] opacity-60 mb-0.5 block">{key}</label><input value={newExhibit.specs?.[key] || ''} onChange={e => setNewExhibit({...newExhibit, specs: { ...newExhibit.specs, [key]: e.target.value }})} list={`suggestions-${key}`} className="w-full bg-transparent border-b p-1 font-mono text-xs focus:outline-none" />{COMMON_SPEC_VALUES[key] && (<datalist id={`suggestions-${key}`}>{COMMON_SPEC_VALUES[key].map(v => <option key={v} value={v} />)}</datalist>)}</div>))}</div></div>
+                         <div className="flex gap-4 pt-4"><button onClick={() => handleSaveExhibit(false)} disabled={isLoading} className={`flex-1 py-3 font-bold font-pixel uppercase rounded transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black hover:bg-white' : 'bg-light-accent text-white hover:bg-black'}`}>{isLoading ? 'СОХРАНЕНИЕ...' : 'ОПУБЛИКОВАТЬ'}</button><button onClick={() => handleSaveExhibit(true)} disabled={isLoading} className="px-4 py-3 border rounded hover:bg-white/10 font-bold font-pixel uppercase text-xs">В ЧЕРНОВИК</button></div>
                      </div>
-                </div>
+                 </div>
             )}
 
+            {/* USER PROFILE (UNCHANGED LOGIC) */}
             {view === 'USER_PROFILE' && (
                 <UserProfileView 
                     user={user!}
@@ -680,10 +677,7 @@ export default function App() {
                     onFollow={async (username) => {
                          if (!user) return;
                          const isFollowing = user.following.includes(username);
-                         const newFollowing = isFollowing 
-                            ? user.following.filter(u => u !== username)
-                            : [...user.following, username];
-                         
+                         const newFollowing = isFollowing ? user.following.filter(u => u !== username) : [...user.following, username];
                          const updatedUser = { ...user, following: newFollowing };
                          setUser(updatedUser);
                          await db.updateUserProfile(updatedUser);
@@ -698,14 +692,7 @@ export default function App() {
                     onViewHallOfFame={() => setView('HALL_OF_FAME')}
                     onGuestbookPost={async () => {
                          if (!user || !guestbookInput.trim()) return;
-                         const entry: GuestbookEntry = {
-                             id: crypto.randomUUID(),
-                             author: user.username,
-                             targetUser: viewedProfileUsername,
-                             text: guestbookInput,
-                             timestamp: new Date().toLocaleString(),
-                             isRead: false
-                         };
+                         const entry: GuestbookEntry = { id: crypto.randomUUID(), author: user.username, targetUser: viewedProfileUsername, text: guestbookInput, timestamp: new Date().toLocaleString(), isRead: false };
                          await db.saveGuestbookEntry(entry);
                          setGuestbookInput('');
                          refreshData();
@@ -723,13 +710,7 @@ export default function App() {
                     setEditPassword={setEditPassword}
                     onSaveProfile={async () => {
                           if (!user) return;
-                          const updatedUser: UserProfile = {
-                              ...user,
-                              tagline: editTagline,
-                              status: editStatus,
-                              telegram: editTelegram,
-                              password: editPassword ? editPassword : user.password
-                          };
+                          const updatedUser: UserProfile = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram, password: editPassword ? editPassword : user.password };
                           await db.updateUserProfile(updatedUser);
                           setUser(updatedUser);
                           setIsEditingProfile(false);
@@ -751,6 +732,7 @@ export default function App() {
                 />
             )}
 
+            {/* EXHIBIT DETAIL (UNCHANGED) */}
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
                     exhibit={selectedExhibit}
@@ -765,14 +747,7 @@ export default function App() {
                           if (!user) return;
                           const ex = exhibits.find(e => e.id === id);
                           if (!ex) return;
-                          const newComment = {
-                              id: crypto.randomUUID(),
-                              author: user.username,
-                              text,
-                              timestamp: new Date().toLocaleString(),
-                              likes: 0,
-                              likedBy: []
-                          };
+                          const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toLocaleString(), likes: 0, likedBy: [] };
                           const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] };
                           await db.updateExhibit(updatedEx);
                           refreshData();
@@ -789,15 +764,49 @@ export default function App() {
                 />
             )}
             
+            {/* COLLECTION DETAIL + ADD ARTIFACT MODAL */}
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
-                <div className="animate-in fade-in pb-20">
+                <div className="animate-in fade-in pb-20 relative">
                      <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs mb-6"><ArrowLeft size={16} /> НАЗАД</button>
                      <div className="mb-8 relative rounded-xl overflow-hidden border-2 border-gray-500/30 aspect-[21/9]"><img src={selectedCollection.coverImage} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent flex flex-col justify-end p-6"><h1 className="text-3xl font-pixel font-bold text-white mb-2">{selectedCollection.title}</h1><p className="text-white/80 font-mono text-sm max-w-2xl mb-4">{selectedCollection.description}</p><div className="flex items-center justify-between"><div className="flex items-center gap-2 text-white/70 text-xs font-mono cursor-pointer hover:text-white" onClick={() => handleAuthorClick(selectedCollection.owner)}><User size={14} /> @{selectedCollection.owner}</div>{user?.username === selectedCollection.owner && <button onClick={() => { setCollectionToEdit(selectedCollection); setView('EDIT_COLLECTION'); }} className="p-2 bg-white/20 hover:bg-white/40 text-white rounded"><Edit2 size={16} /></button>}</div></div></div>
+                     
+                     {/* ADD ARTIFACT BUTTON */}
+                     {user?.username === selectedCollection.owner && (
+                         <div className="mb-6 flex justify-end">
+                             <button onClick={() => setIsAddingToCollection(true)} className={`px-4 py-2 rounded font-bold font-pixel text-xs flex items-center gap-2 ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>
+                                 <Plus size={16} /> ДОБАВИТЬ АРТЕФАКТ
+                             </button>
+                         </div>
+                     )}
+
                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                         {exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id)).map(item => (
                             <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => handleLike(item.id, e)} onFavorite={() => {}} onAuthorClick={handleAuthorClick} />
                         ))}
                      </div>
+
+                     {/* ADD MODAL */}
+                     {isAddingToCollection && (
+                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                             <div className={`w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl border-2 p-6 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
+                                 <div className="flex justify-between items-center mb-4">
+                                     <h2 className="font-pixel text-lg">ВЫБЕРИТЕ АРТЕФАКТ</h2>
+                                     <button onClick={() => setIsAddingToCollection(false)}><X size={20}/></button>
+                                 </div>
+                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                     {exhibits.filter(e => e.owner === user?.username && !selectedCollection.exhibitIds.includes(e.id)).map(item => (
+                                         <div key={item.id} onClick={() => handleAddArtifactToCollection(item.id)} className="cursor-pointer opacity-70 hover:opacity-100 hover:scale-105 transition-all">
+                                             <div className="aspect-square bg-gray-500/20 rounded mb-2 overflow-hidden"><img src={item.imageUrls[0]} className="w-full h-full object-cover" /></div>
+                                             <div className="font-bold text-xs truncate">{item.title}</div>
+                                         </div>
+                                     ))}
+                                     {exhibits.filter(e => e.owner === user?.username && !selectedCollection.exhibitIds.includes(e.id)).length === 0 && (
+                                         <div className="col-span-full text-center opacity-50 py-10 font-mono text-sm">НЕТ ДОСТУПНЫХ АРТЕФАКТОВ</div>
+                                     )}
+                                 </div>
+                             </div>
+                         </div>
+                     )}
                 </div>
             )}
 
@@ -835,45 +844,17 @@ export default function App() {
                 </div>
             )}
             
-            {view === 'ACTIVITY' && (
-                <div className="max-w-2xl mx-auto animate-in fade-in">
-                    <div className="mb-6 border-b border-gray-500/30 pb-4">
-                        <h2 className="font-pixel text-xl mb-4">ACTIVITY_LOG</h2>
-                        <div className="space-y-4">
-                             {notifications.filter(n => n.recipient === user?.username).length === 0 ? <div className="opacity-50 font-mono text-sm">NO_DATA</div> : notifications.filter(n => n.recipient === user?.username).map(n => (
-                                 <div key={n.id} onClick={() => { if(n.type === 'FOLLOW') handleAuthorClick(n.actor); else if(n.targetId) handleExhibitClick(exhibits.find(e => e.id === n.targetId)!) }} className={`p-4 border rounded cursor-pointer hover:bg-white/5 transition-colors flex gap-4 ${n.isRead ? 'opacity-70' : 'border-green-500 bg-green-500/5'}`}>
-                                     <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={db.getUserAvatar(n.actor)} /></div>
-                                     <div>
-                                         <div className="font-bold text-sm">@{n.actor} <span className="opacity-50 font-normal ml-2">{n.timestamp}</span></div>
-                                         <div className="text-xs font-mono mt-1">{n.type === 'LIKE' ? 'Оценил ваш артефакт' : n.type === 'COMMENT' ? 'Прокомментировал' : n.type === 'FOLLOW' ? 'Подписался на вас' : 'Новое действие'}</div>
-                                         {n.targetPreview && <div className="text-[10px] opacity-50 italic mt-1">"{n.targetPreview}"</div>}
-                                     </div>
-                                 </div>
-                             ))}
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <h2 className="font-pixel text-xl mb-4">MESSAGES</h2>
-                        <div className="space-y-2">
-                             {/* Group messages by partner */}
-                             {Object.entries(messages.reduce((acc, m) => {
-                                 if (m.sender !== user?.username && m.receiver !== user?.username) return acc;
-                                 const partner = m.sender === user?.username ? m.receiver : m.sender;
-                                 if (!acc[partner] || new Date(m.timestamp) > new Date(acc[partner].timestamp)) acc[partner] = m;
-                                 return acc;
-                             }, {} as Record<string, Message>)).map(([partner, lastMsg]) => (
-                                 <div key={partner} onClick={() => handleOpenChat(partner)} className="p-4 border rounded cursor-pointer hover:bg-white/5 flex gap-4 items-center">
-                                     <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden"><img src={db.getUserAvatar(partner)} /></div>
-                                     <div className="flex-1">
-                                         <div className="font-bold text-sm flex justify-between">@{partner} <span className="opacity-50 font-normal text-[10px]">{lastMsg.timestamp}</span></div>
-                                         <div className="text-xs font-mono opacity-70 truncate">{lastMsg.sender === user?.username ? 'Вы: ' : ''}{lastMsg.text}</div>
-                                     </div>
-                                 </div>
-                             ))}
-                        </div>
-                    </div>
-                </div>
+            {/* NEW ACTIVITY VIEW */}
+            {view === 'ACTIVITY' && user && (
+                <ActivityView 
+                    notifications={notifications}
+                    messages={messages}
+                    currentUser={user}
+                    theme={theme}
+                    onAuthorClick={handleAuthorClick}
+                    onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }}
+                    onChatClick={handleOpenChat}
+                />
             )}
             
             {view === 'DIRECT_CHAT' && chatPartner && (

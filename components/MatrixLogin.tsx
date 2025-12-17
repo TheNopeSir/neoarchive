@@ -45,7 +45,6 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const [infoMessage, setInfoMessage] = useState('');
   const [showRecoverOption, setShowRecoverOption] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [glitchIntensity, setGlitchIntensity] = useState(0);
 
   // Check for Email Verification Success
   useEffect(() => {
@@ -53,18 +52,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     if (params.get('verified') === 'true') {
         setInfoMessage("ПОЧТА ПОДТВЕРЖДЕНА. ВЫПОЛНИТЕ ВХОД.");
         setStep('LOGIN');
-        // Clean URL
         window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
     }
-  }, []);
-
-  // Glitch effect on entry
-  useEffect(() => {
-    const interval = setInterval(() => {
-        setGlitchIntensity(Math.random());
-        setTimeout(() => setGlitchIntensity(0), 100);
-    }, 2000);
-    return () => clearInterval(interval);
   }, []);
 
   // Telegram Setup
@@ -73,7 +62,6 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
           window.onTelegramAuth = async (user: TelegramUser) => {
               setIsLoading(true);
               try {
-                  // Use the new unified endpoint that handles "Find or Create" logic
                   const userProfile = await db.loginViaTelegram(user);
                   onLogin(userProfile, true);
               } catch (err: any) {
@@ -155,16 +143,13 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     setShowRecoverOption(false);
     
     try {
-        // Register now returns success but NOT the user object immediately (waiting for email)
         await db.registerUser(username, password, tagline || 'Новый пользователь', email);
-        
         setInfoMessage('ПИСЬМО ОТПРАВЛЕНО. ПОДТВЕРДИТЕ EMAIL.');
         setStep('LOGIN');
         setPassword('');
 
     } catch (err: any) {
         setError(err.message || "ОШИБКА РЕГИСТРАЦИИ");
-        // Suggest recovery if duplicate
         if (err.message && (err.message.includes('уже существует') || err.message.includes('заняты'))) {
             setShowRecoverOption(true);
             setInfoMessage("Email занят. Попробуйте восстановить пароль.");
@@ -197,20 +182,20 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const renderContent = () => {
     if (step === 'ENTRY') {
         return (
-            <div className="flex flex-col gap-4 w-full">
+            <div className="flex flex-col gap-6 w-full">
                 <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => { setStep('LOGIN'); resetForm(); }} className={`py-4 px-2 border-2 font-pixel text-sm md:text-base uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-2 group ${theme === 'dark' ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'}`}>
-                        <Terminal size={24} className="group-hover:animate-pulse" /><span>ВХОД</span>
+                    <button onClick={() => { setStep('LOGIN'); resetForm(); }} className={`py-6 px-2 border-2 font-pixel text-sm md:text-base uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-3 group bg-black/50 backdrop-blur-md ${theme === 'dark' ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'}`}>
+                        <Terminal size={28} className="group-hover:animate-pulse" /><span>ВХОД</span>
                     </button>
-                    <button onClick={() => { setStep('REGISTER'); resetForm(); }} className={`py-4 px-2 border-2 font-pixel text-sm md:text-base uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-2 group ${theme === 'dark' ? 'border-dark-dim text-dark-dim hover:border-white hover:text-white' : 'border-light-dim text-light-dim hover:border-black hover:text-black'}`}>
-                        <UserPlus size={24} /><span>РЕГИСТРАЦИЯ</span>
+                    <button onClick={() => { setStep('REGISTER'); resetForm(); }} className={`py-6 px-2 border-2 font-pixel text-sm md:text-base uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-3 group bg-black/50 backdrop-blur-md ${theme === 'dark' ? 'border-dark-dim text-dark-dim hover:border-white hover:text-white' : 'border-light-dim text-light-dim hover:border-black hover:text-black'}`}>
+                        <UserPlus size={28} /><span>РЕГИСТРАЦИЯ</span>
                     </button>
                 </div>
-                <div className="flex items-center gap-2 opacity-50 my-2">
-                    <div className="h-px bg-current flex-1"></div><span className="text-[10px] font-mono">АЛЬТЕРНАТИВНЫЙ ДОСТУП</span><div className="h-px bg-current flex-1"></div>
+                <div className="flex items-center gap-4 opacity-70 my-2">
+                    <div className="h-px bg-current flex-1"></div><span className="text-xs font-mono font-bold">АЛЬТЕРНАТИВНЫЙ ДОСТУП</span><div className="h-px bg-current flex-1"></div>
                 </div>
-                <button onClick={() => { setStep('TELEGRAM'); resetForm(); }} className={`py-4 px-6 border-2 font-pixel text-sm uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group ${theme === 'dark' ? 'border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black' : 'border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white'}`}>
-                    <div className="flex flex-col items-start"><span>TELEGRAM LOGIN</span><span className="text-[8px] font-mono opacity-70 normal-case tracking-normal">Быстрый вход через мессенджер</span></div><Send size={24} />
+                <button onClick={() => { setStep('TELEGRAM'); resetForm(); }} className={`py-5 px-6 border-2 font-pixel text-sm uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group bg-black/50 backdrop-blur-md ${theme === 'dark' ? 'border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black' : 'border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white'}`}>
+                    <div className="flex flex-col items-start"><span>TELEGRAM LOGIN</span><span className="text-[9px] font-mono opacity-80 normal-case tracking-normal mt-1">Быстрый вход через мессенджер</span></div><Send size={24} />
                 </button>
             </div>
         )
@@ -233,36 +218,36 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
     if (step === 'RECOVERY') {
          return (
-            <form onSubmit={handleRecoverySubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
+            <form onSubmit={handleRecoverySubmit} className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-right-4">
                  <div className="text-center font-mono text-xs opacity-70 mb-2">ВОССТАНОВЛЕНИЕ ДОСТУПА</div>
-                 <div className="space-y-1">
+                 <div className="space-y-2">
                     <label className="text-[10px] font-pixel uppercase opacity-70">EMAIL</label>
-                    <div className="flex items-center gap-2 border-b-2 p-2 border-current">
+                    <div className="flex items-center gap-2 border-b-2 p-3 border-current bg-black/30">
                         <Mail size={18} />
                         <input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm" placeholder="user@example.com" required />
                     </div>
                  </div>
-                 {infoMessage && <div className="text-green-500 text-xs font-mono p-2 border border-green-500">{infoMessage}</div>}
-                 {error && <div className="text-red-500 font-bold text-xs font-mono border border-red-500 p-2">{error}</div>}
-                 <button type="submit" disabled={isLoading} className={`mt-4 py-3 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ОТПРАВКА...' : 'ВОССТАНОВИТЬ'}</button>
-                 <button type="button" onClick={() => { setStep('LOGIN'); }} className="text-xs font-mono opacity-50 hover:underline">НАЗАД</button>
+                 {infoMessage && <div className="text-green-500 text-xs font-mono p-2 border border-green-500 bg-green-900/20">{infoMessage}</div>}
+                 {error && <div className="text-red-500 font-bold text-xs font-mono border border-red-500 p-2 bg-red-900/20">{error}</div>}
+                 <button type="submit" disabled={isLoading} className={`mt-4 py-4 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ОТПРАВКА...' : 'ВОССТАНОВИТЬ'}</button>
+                 <button type="button" onClick={() => { setStep('LOGIN'); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
             </form>
          );
     }
 
     if (step === 'LOGIN') {
         return (
-            <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
+            <form onSubmit={handleLoginSubmit} className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-right-4">
                  {infoMessage && <div className="p-3 border border-green-500 bg-green-500/10 text-green-500 text-xs font-mono mb-2">{infoMessage}</div>}
-                 <div className="space-y-1">
+                 <div className="space-y-2">
                     <label className="text-[10px] font-pixel uppercase opacity-70">EMAIL ИЛИ НИКНЕЙМ</label>
-                    <div className="flex items-center gap-2 border-b-2 p-2 border-current opacity-70 focus-within:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 border-b-2 p-3 border-current bg-black/30 opacity-80 focus-within:opacity-100 transition-opacity">
                         <User size={18} /><input value={email} onChange={e => setEmail(e.target.value)} type="text" className="bg-transparent w-full focus:outline-none font-mono text-sm" placeholder="user@example.com" required />
                     </div>
                  </div>
-                 <div className="space-y-1">
+                 <div className="space-y-2">
                     <label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ</label>
-                    <div className="flex items-center gap-2 border-b-2 p-2 border-current opacity-70 focus-within:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 border-b-2 p-3 border-current bg-black/30 opacity-80 focus-within:opacity-100 transition-opacity">
                         <Lock size={18} />
                         <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm" placeholder="******" required />
                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100 focus:outline-none">
@@ -270,15 +255,15 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                         </button>
                     </div>
                  </div>
-                 <div className="flex justify-between items-center">
+                 <div className="flex justify-between items-center px-1">
                      <div onClick={() => setRememberMe(!rememberMe)} className="flex items-center gap-2 cursor-pointer opacity-70 hover:opacity-100 transition-opacity select-none">
                          {rememberMe ? <CheckSquare size={16} /> : <Square size={16} />}<span className="text-[10px] font-mono font-bold uppercase">СОХРАНИТЬ</span>
                      </div>
                      <button type="button" onClick={() => { setStep('RECOVERY'); resetForm(); }} className="text-[10px] font-mono opacity-50 hover:opacity-100 underline">ЗАБЫЛИ ПАРОЛЬ?</button>
                  </div>
-                 {error && <div className="flex items-center gap-2 text-red-500 font-bold text-xs font-mono justify-center animate-pulse border border-red-500 p-2"><AlertCircle size={16}/> {error}</div>}
-                 <button type="submit" disabled={isLoading} className={`mt-4 py-3 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ПОДКЛЮЧЕНИЕ...' : 'ВОЙТИ В СЕТЬ'}</button>
-                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline">НАЗАД</button>
+                 {error && <div className="flex items-center gap-2 text-red-500 font-bold text-xs font-mono justify-center animate-pulse border border-red-500 p-2 bg-red-900/20"><AlertCircle size={16}/> {error}</div>}
+                 <button type="submit" disabled={isLoading} className={`mt-4 py-4 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ПОДКЛЮЧЕНИЕ...' : 'ВОЙТИ В СЕТЬ'}</button>
+                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
             </form>
         )
     }
@@ -286,11 +271,11 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     if (step === 'REGISTER') {
         return (
             <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
-                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">EMAIL *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><Mail size={18} /><input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
+                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">EMAIL *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current bg-black/30"><Mail size={18} /><input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
                 
                 <div className="space-y-1">
                     <label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ (МИН. 6) *</label>
-                    <div className="flex items-center gap-2 border-b-2 p-2 border-current">
+                    <div className="flex items-center gap-2 border-b-2 p-2 border-current bg-black/30">
                         <Lock size={18} />
                         <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm" required />
                         <button type="button" onClick={generateSecurePassword} title="Сгенерировать безопасный пароль" className="opacity-50 hover:opacity-100 focus:outline-none hover:text-green-500">
@@ -302,8 +287,8 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                     </div>
                 </div>
 
-                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НИКНЕЙМ *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><User size={18} /><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
-                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">СТАТУС (TAGLINE)</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><Terminal size={18} /><input value={tagline} onChange={e => setTagline(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" /></div></div>
+                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НИКНЕЙМ *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current bg-black/30"><User size={18} /><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
+                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">СТАТУС (TAGLINE)</label><div className="flex items-center gap-2 border-b-2 p-2 border-current bg-black/30"><Terminal size={18} /><input value={tagline} onChange={e => setTagline(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" /></div></div>
                 
                 {infoMessage && <button type="button" onClick={() => setStep('RECOVERY')} className="text-yellow-500 text-xs font-mono border border-yellow-500 p-2 text-center hover:bg-yellow-500/10 block w-full mb-2">{infoMessage}</button>}
                 
@@ -314,10 +299,10 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                     </button>
                 )}
 
-                {error && <div className="text-red-500 font-bold text-xs font-mono text-center border border-red-500 p-2">{error}</div>}
+                {error && <div className="text-red-500 font-bold text-xs font-mono text-center border border-red-500 p-2 bg-red-900/20">{error}</div>}
 
                 <button type="submit" disabled={isLoading} className={`mt-4 py-3 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ОТПРАВКА...' : 'ЗАРЕГИСТРИРОВАТЬСЯ'}</button>
-                <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline">НАЗАД</button>
+                <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
             </form>
         )
     }
@@ -325,13 +310,13 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative z-20">
-      <div className={`w-full max-w-md border-2 p-8 rounded-lg shadow-2xl relative transition-all duration-300 ${theme === 'dark' ? 'bg-black/90 border-dark-primary shadow-[0_0_30px_rgba(74,222,128,0.2)]' : 'bg-white/95 border-light-accent shadow-xl'}`}>
+      <div className={`w-full max-w-md border-2 p-8 rounded-lg shadow-2xl relative transition-all duration-300 backdrop-blur-md ${theme === 'dark' ? 'bg-black/95 border-dark-primary shadow-[0_0_50px_rgba(74,222,128,0.2)]' : 'bg-white/95 border-light-accent shadow-xl'}`}>
          <div className="flex justify-between items-start mb-8 border-b-2 border-dashed pb-4 border-current opacity-70">
              <div className="flex items-center gap-2"><Terminal size={20} /><span className="font-pixel text-sm">NEO_AUTH</span></div>
              <div className="flex gap-1"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div><div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse delay-75"></div><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse delay-150"></div></div>
          </div>
          <div className="mb-8 relative overflow-hidden">
-             <h2 className={`text-lg md:text-xl font-pixel font-bold uppercase ${glitchIntensity > 0.5 ? 'translate-x-1 text-red-500' : ''}`}>{step === 'ENTRY' ? 'ИДЕНТИФИКАЦИЯ' : step === 'LOGIN' ? 'ВХОД В СИСТЕМУ' : step === 'RECOVERY' ? 'СБРОС КЛЮЧЕЙ' : 'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}</h2>
+             <h2 className="text-lg md:text-xl font-pixel font-bold uppercase tracking-wide text-center">{step === 'ENTRY' ? 'ИДЕНТИФИКАЦИЯ' : step === 'LOGIN' ? 'ВХОД В СИСТЕМУ' : step === 'RECOVERY' ? 'СБРОС КЛЮЧЕЙ' : 'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}</h2>
          </div>
          {renderContent()}
       </div>
