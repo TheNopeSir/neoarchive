@@ -19,7 +19,6 @@ const CACHE_KEY = 'neo_archive_v1';
 const SESSION_USER_KEY = 'neo_active_user';
 const CACHE_VERSION = '4.2.0-PasswordUpdate'; 
 
-// Changed: We assume online by default to force connection attempts
 let isOfflineMode = false;
 
 // Base API URL
@@ -114,18 +113,14 @@ const prepareCacheForStorage = (currentCache: typeof cache) => {
     const users = currentCache.users;
     const allExhibits = currentCache.exhibits;
     
-    // Always keep my own exhibits
     const myExhibits = activeUser ? allExhibits.filter(e => e.owner === activeUser) : [];
     
-    // Keep top 200 feed exhibits (increased from 50 to ensure feed continuity)
     const feedExhibits = allExhibits
         .filter(e => e.owner !== activeUser)
-        .sort((a,b) => b.timestamp.localeCompare(a.timestamp)) // Sort by timestamp, effectively
+        .sort((a,b) => b.timestamp.localeCompare(a.timestamp)) 
         .slice(0, 200);
     
     const combinedExhibits = [...myExhibits, ...feedExhibits];
-    
-    // Deduplicate
     const uniqueExhibits = Array.from(new Map(combinedExhibits.map(item => [item.id, item])).values());
 
     return {
@@ -151,8 +146,7 @@ const loadFromCache = async (): Promise<boolean> => {
     try {
         const stored: any = await idb.get(CACHE_KEY);
         if (stored) {
-            const parsed = stored; 
-            const data = parsed.data || parsed; 
+            const data = stored.data || stored; 
             cache = {
                 exhibits: data.exhibits || [],
                 collections: data.collections || [],
@@ -173,14 +167,20 @@ const loadFromCache = async (): Promise<boolean> => {
 
 // --- API CLIENT ---
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
     try {
         const options: RequestInit = {
             method,
             headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
         };
         if (body) options.body = JSON.stringify(body);
         
         const res = await fetch(`${API_BASE}${endpoint}`, options);
+        clearTimeout(timeoutId);
+
         if (!res.ok) {
             let errorMsg = res.statusText;
             try {
@@ -190,7 +190,9 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
             throw new Error(`API Error ${res.status}: ${errorMsg}`);
         }
         return await res.json();
-    } catch (error) {
+    } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') throw new Error("Время ожидания сервера истекло");
         console.error(`API Call Failed (${endpoint}):`, error);
         throw error;
     }
@@ -201,7 +203,6 @@ export const loadFeedBatch = async (page: number) => {
     try {
         const newItems: Exhibit[] = await apiCall(`/feed?page=${page}`);
         if (newItems && newItems.length > 0) {
-            // Merge logic
             const currentMap = new Map(cache.exhibits.map(e => [e.id, e]));
             newItems.forEach(item => currentMap.set(item.id, item));
             cache.exhibits = Array.from(currentMap.values()).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
@@ -209,7 +210,6 @@ export const loadFeedBatch = async (page: number) => {
         }
         return [];
     } catch (e) {
-        console.warn("Feed fetch failed", e);
         return [];
     }
 };
@@ -220,11 +220,6 @@ const performCloudSync = async () => {
     
     const data = await apiCall(endpoint);
     
-    // SMART MERGING: Don't just overwrite, upsert.
-    // This prevents "flicker" where items disappear because they aren't in the top 50 returned by server
-    // but still exist in the user's previously loaded timeline.
-    
-    // Protect Active User profile from being wiped if it's not in the bulk sync
     if (data.users) {
         const currentUserProfile = activeUser ? cache.users.find(u => u.username === activeUser) : null;
         cache.users = data.users;
@@ -236,17 +231,9 @@ const performCloudSync = async () => {
     if (data.exhibits) {
         const serverMap = new Map((data.exhibits as Exhibit[]).map(e => [e.id, e]));
         const localMap = new Map(cache.exhibits.map(e => [e.id, e]));
-        
-        // Update local with server (Authoritative)
         serverMap.forEach((val, key) => localMap.set(key, val));
-        
-        // Remove deleted items if we track them
         cache.deletedIds.forEach(id => localMap.delete(id));
-        
-        cache.exhibits = Array.from(localMap.values()).sort((a,b) => {
-            // Sort by timestamp Descending
-            return b.timestamp.localeCompare(a.timestamp);
-        });
+        cache.exhibits = Array.from(localMap.values()).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
     }
 
     if (data.collections) cache.collections = data.collections;
@@ -258,39 +245,39 @@ const performCloudSync = async () => {
 };
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
-    // 1. Load what we have locally instantly
+    // Priority 1: Load from local cache ASAP
     await loadFromCache();
     
-    // 2. Try to sync with server. 
+    // Priority 2: Sync in parallel or try to fetch cloud
     try {
-        await performCloudSync();
+        // We use a promise race or a shorter timeout for background sync during initial load
+        // so we don't block the UI forever
+        await Promise.race([
+            performCloudSync(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000))
+        ]).catch(e => console.warn("Sync took too long, proceeding with local data"));
+        
         isOfflineMode = false;
         cache.isLoaded = true;
-        console.log("✅ [Sync] Connected to Database.");
     } catch (e: any) {
-        console.warn("⚠️ [Sync] Warning: Could not sync with server.", e.message);
+        isOfflineMode = true;
     }
 
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
     if (localActiveUser) {
         let cachedUser = cache.users.find(u => u.username === localActiveUser);
         
-        // Fallback: If not in cache (e.g. huge user list not fully synced), try specific fetch
-        // This prevents logging out valid users after refresh if sync didn't include them
         if (!cachedUser && !isOfflineMode) {
             try {
                 const fetchedUser = await apiCall(`/users/${localActiveUser}`);
                 if (fetchedUser && fetchedUser.username) {
                     cachedUser = fetchedUser;
-                    // Safely add to cache
                     const idx = cache.users.findIndex(u => u.username === fetchedUser.username);
                     if (idx !== -1) cache.users[idx] = fetchedUser;
                     else cache.users.push(fetchedUser);
                     await saveToLocalCache();
                 }
-            } catch(e) {
-                console.warn("Failed to fetch active user profile directly", e);
-            }
+            } catch(e) {}
         }
 
         if (cachedUser) return cachedUser;
@@ -343,24 +330,21 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
         const idx = cache.users.findIndex(u => u.username === userProfile.username);
         if (idx !== -1) cache.users[idx] = userProfile;
         else cache.users.push(userProfile);
+        localStorage.setItem(SESSION_USER_KEY, userProfile.username);
         await saveToLocalCache();
         return userProfile;
     }
     throw new Error(res.error || "Login failed");
 };
 
-// NEW: Unified Telegram Auth
 export const loginViaTelegram = async (telegramUser: any): Promise<UserProfile> => {
-    // Send raw telegram data to backend, let backend decide if it's login or register
     const res = await apiCall('/auth/telegram', 'POST', telegramUser);
-    
     if (res.success && res.user) {
         const userProfile = res.user;
-        // Update local cache
         const idx = cache.users.findIndex(u => u.username === userProfile.username);
         if (idx !== -1) cache.users[idx] = userProfile;
         else cache.users.push(userProfile);
-        
+        localStorage.setItem(SESSION_USER_KEY, userProfile.username);
         await saveToLocalCache();
         return userProfile;
     }
@@ -376,27 +360,22 @@ export const logoutUser = async () => {
 };
 
 export const updateUserProfile = async (user: UserProfile) => {
-    // Optimistic update
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
     else cache.users.push(user);
     await saveToLocalCache();
-    // Fire and forget (or await if critical)
     await apiCall('/users/update', 'POST', user);
 };
 
-// Generic Helpers
-// CHANGED: syncItem now THROWS error if it fails. It does not fail silently.
 const syncItem = async (endpoint: string, item: any) => {
     try { 
         await apiCall(endpoint, 'POST', item); 
     } catch(e) { 
-        console.error(`Sync Item failed (${endpoint})`, e); 
         throw new Error("Не удалось сохранить данные на сервере. Проверьте соединение.");
     }
 };
 const deleteItem = async (endpoint: string, id: string) => {
-    try { await apiCall(`${endpoint}/${id}`, 'DELETE'); } catch(e) { console.error("Delete Item failed", e); }
+    try { await apiCall(`${endpoint}/${id}`, 'DELETE'); } catch(e) {}
 };
 
 export const updateUserPreference = async (username: string, category: string, weight: number) => {
@@ -408,19 +387,14 @@ export const updateUserPreference = async (username: string, category: string, w
     const updatedUser = { ...user, preferences: { ...currentPrefs, [category]: newWeight } };
     cache.users[userIndex] = updatedUser;
     await saveToLocalCache();
-    // Preferences are low priority, don't block
-    apiCall('/users/update', 'POST', updatedUser).catch(console.warn);
+    apiCall('/users/update', 'POST', updatedUser).catch(() => {});
 };
 
 // Exhibits
 export const getExhibits = (): Exhibit[] => cache.exhibits;
 export const saveExhibit = async (exhibit: Exhibit) => {
   exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
-  
-  // WRITE-THROUGH: Server FIRST
   await syncItem('/exhibits', exhibit);
-  
-  // If server success, update cache
   const existingIdx = cache.exhibits.findIndex(e => e.id === exhibit.id);
   if (existingIdx !== -1) cache.exhibits[existingIdx] = exhibit;
   else cache.exhibits.unshift(exhibit);
@@ -428,7 +402,6 @@ export const saveExhibit = async (exhibit: Exhibit) => {
 };
 export const updateExhibit = async (updatedExhibit: Exhibit) => {
   await syncItem('/exhibits', updatedExhibit);
-  
   const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
   if (index !== -1) {
     cache.exhibits[index] = updatedExhibit;
@@ -437,7 +410,6 @@ export const updateExhibit = async (updatedExhibit: Exhibit) => {
 };
 export const deleteExhibit = async (id: string) => {
   await deleteItem('/exhibits', id);
-  
   cache.exhibits = cache.exhibits.filter(e => e.id !== id);
   cache.notifications = cache.notifications.filter(n => n.targetId !== id);
   cache.deletedIds.push(id); 
@@ -448,15 +420,12 @@ export const deleteExhibit = async (id: string) => {
 export const getCollections = (): Collection[] => cache.collections;
 export const saveCollection = async (collection: Collection) => {
     collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
-    
     await syncItem('/collections', collection);
-    
     cache.collections.unshift(collection);
     await saveToLocalCache();
 };
 export const updateCollection = async (updatedCollection: Collection) => {
     await syncItem('/collections', updatedCollection);
-    
     const index = cache.collections.findIndex(c => c.id === updatedCollection.id);
     if (index !== -1) {
         cache.collections[index] = updatedCollection;
@@ -465,7 +434,6 @@ export const updateCollection = async (updatedCollection: Collection) => {
 };
 export const deleteCollection = async (id: string) => {
     await deleteItem('/collections', id);
-    
     cache.collections = cache.collections.filter(c => c.id !== id);
     cache.deletedIds.push(id);
     await saveToLocalCache();
@@ -474,8 +442,7 @@ export const deleteCollection = async (id: string) => {
 // Notifications/Messages/Guestbook
 export const getNotifications = (): Notification[] => cache.notifications;
 export const saveNotification = async (notif: Notification) => {
-    // Fire and forget notifications usually
-    apiCall('/notifications', 'POST', notif).catch(e => console.warn("Notif sync fail"));
+    apiCall('/notifications', 'POST', notif).catch(() => {});
     cache.notifications.unshift(notif);
     await saveToLocalCache();
 };
@@ -546,18 +513,9 @@ export const getStorageEstimate = async () => {
 export const clearLocalCache = async () => {
     try {
         localStorage.removeItem(SESSION_USER_KEY);
-        localStorage.removeItem('neo_archive_client_cache');
         await idb.clear();
         window.location.reload();
     } catch(e) {}
-};
-export const autoCleanStorage = async () => {
-    const estimate = await getStorageEstimate();
-    if (estimate && estimate.percentage > 90) {
-        console.warn("⚠️ Storage >90%. Cleaning...");
-        await idb.clear();
-        window.location.reload(); 
-    }
 };
 export const compressImage = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {

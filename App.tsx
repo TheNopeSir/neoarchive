@@ -62,8 +62,9 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewState>('AUTH');
   const [isLoading, setIsLoading] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true); // Added to handle initial auth check
+  const [isInitializing, setIsInitializing] = useState(true); 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   
   const [user, setUser] = useState<UserProfile | null>(null);
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
@@ -101,28 +102,38 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
 
   useEffect(() => {
+    // Safety fallback to close splash even if DB takes too long
+    const safetyTimer = setTimeout(() => {
+        setIsInitializing(false);
+        setTimeout(() => setShowSplash(false), 500);
+    }, 4000);
+
     const init = async () => {
-      // Small delay for smooth entry
       try {
           const activeUser = await db.initializeDatabase();
           if (activeUser) { 
               setUser(activeUser); 
               setView('FEED'); 
               refreshData(); 
-          }
-          else { 
+          } else { 
               setView('AUTH'); 
           }
       } catch (e) { 
           setView('AUTH'); 
       } finally { 
-          // Keep loader for at least 800ms for visual consistency
-          setTimeout(() => setIsInitializing(false), 800);
+          clearTimeout(safetyTimer);
+          setIsInitializing(false);
+          // Small delay for the fade-out CSS animation to feel smooth
+          setTimeout(() => setShowSplash(false), 300);
       }
     };
     init();
+    
     const interval = setInterval(() => { db.backgroundSync().then(refreshData); }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+        clearInterval(interval);
+        clearTimeout(safetyTimer);
+    };
   }, []);
 
   const refreshData = () => {
@@ -326,86 +337,84 @@ export default function App() {
       recommendedExhibits = displayExhibits.sort((a,b) => calculateArtifactScore(b, user?.preferences) - calculateArtifactScore(a, user?.preferences));
   }
 
-  // Pre-initialization splash screen
-  if (isInitializing) {
-    return (
-      <div className="bg-black min-h-screen flex items-center justify-center text-dark-primary overflow-hidden">
-        <MatrixRain theme="dark" />
-        <div className="relative z-10 text-center space-y-4">
-           <div className="font-pixel text-4xl animate-pulse tracking-widest">NEO_ARCHIVE</div>
-           <RetroLoader text="СИНХРОНИЗАЦИЯ СЕТИ" size="lg" />
-        </div>
-        <CRTOverlay />
-      </div>
-    );
-  }
-
-  if (view === 'AUTH') {
-    return (
-      <div className="bg-black min-h-screen animate-in fade-in duration-700">
-        <MatrixLogin theme={theme} onLogin={handleLogin} />
-      </div>
-    );
-  }
-
   return (
     <div className={`min-h-screen transition-colors duration-500 font-sans ${theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-900'}`}>
+        {/* Splash screen with smooth fade out */}
+        {showSplash && (
+          <div className={`fixed inset-0 z-[1000] bg-black flex items-center justify-center text-dark-primary overflow-hidden transition-all duration-700 ${!isInitializing ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100'}`}>
+            <MatrixRain theme="dark" />
+            <div className="relative z-10 text-center space-y-4">
+              <div className="font-pixel text-4xl animate-pulse tracking-widest drop-shadow-[0_0_10px_#4ade80]">NEO_ARCHIVE</div>
+              <RetroLoader text="СИНХРОНИЗАЦИЯ СЕТИ" size="lg" />
+            </div>
+            <CRTOverlay />
+          </div>
+        )}
+
         <>
             <MatrixRain theme={theme} />
             <PixelSnow theme={theme} />
             <CRTOverlay />
         </>
         
-        <header className={`fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-md transition-colors duration-300 ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
-            <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-                 <div className="flex items-center gap-4">
-                     <div className="font-pixel text-xl font-bold tracking-widest cursor-pointer group" onClick={() => setView('FEED')}>
-                         NEO_ARCHIVE
-                     </div>
-                     <div className={`hidden md:flex items-center px-3 py-1.5 rounded-full border ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'}`}>
-                         <Search size={14} className="opacity-50 mr-2" />
-                         <input 
-                            type="text" 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="SEARCH_DB..." 
-                            className="bg-transparent border-none outline-none text-xs font-mono w-48" 
-                         />
-                         {searchQuery && <button onClick={() => setSearchQuery('')}><X size={12}/></button>}
-                     </div>
-                 </div>
+        {view !== 'AUTH' && (
+          <header className={`fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-md transition-colors duration-300 ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
+              <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                      <div className="font-pixel text-xl font-bold tracking-widest cursor-pointer group" onClick={() => setView('FEED')}>
+                          NEO_ARCHIVE
+                      </div>
+                      <div className={`hidden md:flex items-center px-3 py-1.5 rounded-full border ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'}`}>
+                          <Search size={14} className="opacity-50 mr-2" />
+                          <input 
+                              type="text" 
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder="SEARCH_DB..." 
+                              className="bg-transparent border-none outline-none text-xs font-mono w-48" 
+                          />
+                          {searchQuery && <button onClick={() => setSearchQuery('')}><X size={12}/></button>}
+                      </div>
+                  </div>
 
-                 <div className="flex items-center gap-3 md:gap-6">
-                     <button onClick={handleManualSync} disabled={isSyncing} className={`${isSyncing ? 'animate-spin' : ''}`}>
-                         <RefreshCw size={16} />
-                     </button>
-                     <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                         {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
-                     </button>
-                     
-                     <div className="flex items-center gap-4">
-                         <button onClick={() => setView('MY_COLLECTION')} title="My Shelf" className={`opacity-70 hover:opacity-100 ${view === 'MY_COLLECTION' ? 'text-green-500' : ''}`}>
-                             <Package size={20} />
-                         </button>
-                         <button onClick={() => setView('ACTIVITY')} title="Activity" className={`opacity-70 hover:opacity-100 ${view === 'ACTIVITY' ? 'text-green-500' : ''} relative`}>
-                             <Bell size={20} />
-                             {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>}
-                         </button>
-                         {user && (
-                            <div 
-                                className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden cursor-pointer border border-transparent hover:border-green-500 transition-all"
-                                onClick={() => { setViewedProfileUsername(user.username); setView('USER_PROFILE'); }}
-                            >
-                                <img src={user.avatarUrl} alt="me" className="w-full h-full object-cover" />
-                            </div>
-                         )}
-                     </div>
-                 </div>
-            </div>
-        </header>
+                  <div className="flex items-center gap-3 md:gap-6">
+                      <button onClick={handleManualSync} disabled={isSyncing} className={`${isSyncing ? 'animate-spin' : ''}`}>
+                          <RefreshCw size={16} />
+                      </button>
+                      <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                          {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
+                      </button>
+                      
+                      <div className="flex items-center gap-4">
+                          <button onClick={() => setView('MY_COLLECTION')} title="My Shelf" className={`opacity-70 hover:opacity-100 ${view === 'MY_COLLECTION' ? 'text-green-500' : ''}`}>
+                              <Package size={20} />
+                          </button>
+                          <button onClick={() => setView('ACTIVITY')} title="Activity" className={`opacity-70 hover:opacity-100 ${view === 'ACTIVITY' ? 'text-green-500' : ''} relative`}>
+                              <Bell size={20} />
+                              {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>}
+                          </button>
+                          {user && (
+                              <div 
+                                  className="w-8 h-8 rounded-full bg-gray-600 overflow-hidden cursor-pointer border border-transparent hover:border-green-500 transition-all"
+                                  onClick={() => { setViewedProfileUsername(user.username); setView('USER_PROFILE'); }}
+                              >
+                                  <img src={user.avatarUrl} alt="me" className="w-full h-full object-cover" />
+                              </div>
+                          )}
+                      </div>
+                  </div>
+              </div>
+          </header>
+        )}
 
-        <main className="pt-20 pb-24 px-4 max-w-6xl mx-auto min-h-screen relative z-10 animate-in fade-in zoom-in-95 duration-500">
+        <main className={`pt-20 pb-24 px-4 max-w-6xl mx-auto min-h-screen relative z-10 transition-all duration-700 delay-150 ${!isInitializing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             
+            {view === 'AUTH' && (
+              <div className="animate-in fade-in duration-700">
+                <MatrixLogin theme={theme} onLogin={handleLogin} />
+              </div>
+            )}
+
             {(view === 'FEED' || view === 'SEARCH') && (
                 <div className="space-y-6 animate-in fade-in">
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -563,7 +572,7 @@ export default function App() {
                      </div>
 
                      {isAddingToCollection && (
-                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
                              <div className={`w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl border-2 p-6 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
                                  <div className="flex justify-between items-center mb-4 border-b pb-2">
                                      <h2 className="font-pixel text-lg uppercase tracking-widest">ВАШИ АРТЕФАКТЫ</h2>
@@ -667,13 +676,15 @@ export default function App() {
             </div>
         )}
         
-        <nav className={`fixed bottom-0 left-0 right-0 h-16 border-t md:hidden flex justify-around items-center z-50 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
-            <button onClick={() => { if(view !== 'FEED') { setView('FEED'); window.scrollTo(0,0); } }} className={`${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}><LayoutGrid size={24} /></button>
-            <button onClick={() => { if(view !== 'MY_COLLECTION') { setView('MY_COLLECTION'); window.scrollTo(0,0); } }} className={`${view === 'MY_COLLECTION' ? 'text-green-500' : 'opacity-50'}`}><Package size={24} /></button>
-            <button onClick={() => setView('CREATE_HUB')} className={`p-3 -mt-6 rounded-full border-2 ${theme === 'dark' ? 'bg-black border-green-500 text-green-500' : 'bg-white border-green-600 text-green-600'}`}><PlusCircle size={28} /></button>
-            <button onClick={() => setView('ACTIVITY')} className={`relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
-            <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`${view === 'USER_PROFILE' ? 'text-green-500' : 'opacity-50'}`}><User size={24} /></button>
-        </nav>
+        {view !== 'AUTH' && (
+          <nav className={`fixed bottom-0 left-0 right-0 h-16 border-t md:hidden flex justify-around items-center z-50 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
+              <button onClick={() => { if(view !== 'FEED') { setView('FEED'); window.scrollTo(0,0); } }} className={`${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}><LayoutGrid size={24} /></button>
+              <button onClick={() => { if(view !== 'MY_COLLECTION') { setView('MY_COLLECTION'); window.scrollTo(0,0); } }} className={`${view === 'MY_COLLECTION' ? 'text-green-500' : 'opacity-50'}`}><Package size={24} /></button>
+              <button onClick={() => setView('CREATE_HUB')} className={`p-3 -mt-6 rounded-full border-2 ${theme === 'dark' ? 'bg-black border-green-500 text-green-500' : 'bg-white border-green-600 text-green-600'}`}><PlusCircle size={28} /></button>
+              <button onClick={() => setView('ACTIVITY')} className={`relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
+              <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`${view === 'USER_PROFILE' ? 'text-green-500' : 'opacity-50'}`}><User size={24} /></button>
+          </nav>
+        )}
     </div>
   );
 }
