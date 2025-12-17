@@ -349,6 +349,20 @@ app.get('/api/sync', async (req, res) => {
     }
 });
 
+// 2.1 Fetch single user (for session restore)
+app.get('/api/users/:username', async (req, res) => {
+    try {
+        const result = await query(`SELECT data FROM users WHERE username = $1`, [req.params.username]);
+        if (result.rows.length > 0) {
+            res.json(result.rows[0].data);
+        } else {
+            res.status(404).json({ error: "User not found" });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/feed', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = 20;

@@ -224,7 +224,14 @@ const performCloudSync = async () => {
     // This prevents "flicker" where items disappear because they aren't in the top 50 returned by server
     // but still exist in the user's previously loaded timeline.
     
-    if (data.users) cache.users = data.users; // Users are small enough to overwrite usually
+    // Protect Active User profile from being wiped if it's not in the bulk sync
+    if (data.users) {
+        const currentUserProfile = activeUser ? cache.users.find(u => u.username === activeUser) : null;
+        cache.users = data.users;
+        if (currentUserProfile && !cache.users.find(u => u.username === activeUser)) {
+            cache.users.push(currentUserProfile);
+        }
+    }
     
     if (data.exhibits) {
         const serverMap = new Map((data.exhibits as Exhibit[]).map(e => [e.id, e]));
@@ -266,7 +273,26 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
 
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
     if (localActiveUser) {
-        const cachedUser = cache.users.find(u => u.username === localActiveUser);
+        let cachedUser = cache.users.find(u => u.username === localActiveUser);
+        
+        // Fallback: If not in cache (e.g. huge user list not fully synced), try specific fetch
+        // This prevents logging out valid users after refresh if sync didn't include them
+        if (!cachedUser && !isOfflineMode) {
+            try {
+                const fetchedUser = await apiCall(`/users/${localActiveUser}`);
+                if (fetchedUser && fetchedUser.username) {
+                    cachedUser = fetchedUser;
+                    // Safely add to cache
+                    const idx = cache.users.findIndex(u => u.username === fetchedUser.username);
+                    if (idx !== -1) cache.users[idx] = fetchedUser;
+                    else cache.users.push(fetchedUser);
+                    await saveToLocalCache();
+                }
+            } catch(e) {
+                console.warn("Failed to fetch active user profile directly", e);
+            }
+        }
+
         if (cachedUser) return cachedUser;
     }
     return null;
