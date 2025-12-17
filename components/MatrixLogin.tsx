@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, Lock, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square, Send, ArrowRight, Wand2, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, UserPlus, User, AlertCircle, CheckSquare, Square, Send, ArrowRight, Wand2, Eye, EyeOff, Terminal } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -50,7 +50,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('verified') === 'true') {
-        setInfoMessage("ПОЧТА ПОДТВЕРЖДЕНА. ВЫПОЛНИТЕ ВХОД.");
+        setInfoMessage("ПОЧТА ПОДТВЕРЖДЕНА");
         setStep('LOGIN');
         window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
     }
@@ -144,7 +144,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     
     try {
         await db.registerUser(username, password, tagline || 'Новый пользователь', email);
-        setInfoMessage('ПИСЬМО ОТПРАВЛЕНО. ПОДТВЕРДИТЕ EMAIL.');
+        setInfoMessage('ПИСЬМО ОТПРАВЛЕНО');
         setStep('LOGIN');
         setPassword('');
 
@@ -152,7 +152,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
         setError(err.message || "ОШИБКА РЕГИСТРАЦИИ");
         if (err.message && (err.message.includes('уже существует') || err.message.includes('заняты'))) {
             setShowRecoverOption(true);
-            setInfoMessage("Email занят. Попробуйте восстановить пароль.");
+            setInfoMessage("Email занят");
         }
     } finally {
         setIsLoading(false);
@@ -173,7 +173,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
           setInfoMessage(res.message || "Инструкции отправлены на email");
           setTimeout(() => setStep('LOGIN'), 4000);
       } catch (err: any) {
-          setError("ОШИБКА ОТПРАВКИ: " + (err.message || "Сервис недоступен"));
+          setError("ОШИБКА: " + (err.message || "Сервис недоступен"));
       } finally {
           setIsLoading(false);
       }
@@ -182,20 +182,18 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const renderContent = () => {
     if (step === 'ENTRY') {
         return (
-            <div className="flex flex-col gap-6 w-full">
+            <div className="flex flex-col gap-4 w-full">
                 <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => { setStep('LOGIN'); resetForm(); }} className={`py-6 px-2 border-2 font-pixel text-sm md:text-base uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-3 group bg-black/50 backdrop-blur-md ${theme === 'dark' ? 'border-dark-primary text-dark-primary hover:bg-dark-primary hover:text-black' : 'border-light-accent text-light-accent hover:bg-light-accent hover:text-white'}`}>
-                        <Terminal size={28} className="group-hover:animate-pulse" /><span>ВХОД</span>
+                    <button onClick={() => { setStep('LOGIN'); resetForm(); }} className="py-6 border font-pixel text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-colors flex flex-col items-center gap-2 border-white/20 text-white/80">
+                        <Terminal size={24} /><span>ВХОД</span>
                     </button>
-                    <button onClick={() => { setStep('REGISTER'); resetForm(); }} className={`py-6 px-2 border-2 font-pixel text-sm md:text-base uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-3 group bg-black/50 backdrop-blur-md ${theme === 'dark' ? 'border-dark-dim text-dark-dim hover:border-white hover:text-white' : 'border-light-dim text-light-dim hover:border-black hover:text-black'}`}>
-                        <UserPlus size={28} /><span>РЕГИСТРАЦИЯ</span>
+                    <button onClick={() => { setStep('REGISTER'); resetForm(); }} className="py-6 border font-pixel text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-colors flex flex-col items-center gap-2 border-white/20 text-white/80">
+                        <UserPlus size={24} /><span>РЕГ</span>
                     </button>
                 </div>
-                <div className="flex items-center gap-4 opacity-70 my-2">
-                    <div className="h-px bg-current flex-1"></div><span className="text-xs font-mono font-bold">АЛЬТЕРНАТИВНЫЙ ДОСТУП</span><div className="h-px bg-current flex-1"></div>
-                </div>
-                <button onClick={() => { setStep('TELEGRAM'); resetForm(); }} className={`py-5 px-6 border-2 font-pixel text-sm uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center justify-between group bg-black/50 backdrop-blur-md ${theme === 'dark' ? 'border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black' : 'border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white'}`}>
-                    <div className="flex flex-col items-start"><span>TELEGRAM LOGIN</span><span className="text-[9px] font-mono opacity-80 normal-case tracking-normal mt-1">Быстрый вход через мессенджер</span></div><Send size={24} />
+                
+                <button onClick={() => { setStep('TELEGRAM'); resetForm(); }} className="py-4 border font-pixel text-xs uppercase tracking-widest hover:bg-[#0088cc] hover:text-white hover:border-[#0088cc] transition-colors flex items-center justify-center gap-2 border-white/20 text-white/60">
+                    <Send size={16} /> TELEGRAM LOGIN
                 </button>
             </div>
         )
@@ -203,121 +201,100 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
     if (step === 'TELEGRAM') {
         return (
-            <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
-                 <div className="text-center font-mono text-xs opacity-70 mb-2 border-b border-dashed border-gray-500 pb-2">МОДУЛЬ АВТОРИЗАЦИИ TELEGRAM</div>
-                 {isLoading ? (
-                     <div className="flex justify-center my-4 min-h-[80px]"><RetroLoader text="CONNECTING..." /></div>
-                 ) : (
-                     <div className="flex justify-center my-4 min-h-[80px]" ref={telegramWrapperRef}><RetroLoader text="INIT_WIDGET" /></div>
-                 )}
-                 {error && <div className="text-red-500 font-bold text-xs font-mono border border-red-500 p-2 mt-4">{error}</div>}
-                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="mt-4 text-xs font-mono opacity-50 hover:underline text-center">ОТМЕНА</button>
+            <div className="flex flex-col gap-4 w-full">
+                 <div className="flex justify-center my-4 min-h-[80px]" ref={telegramWrapperRef}>
+                     {isLoading ? <div className="animate-pulse text-xs font-mono text-white/50">CONNECTING...</div> : <div className="animate-pulse text-xs font-mono text-white/50">WIDGET LOADING...</div>}
+                 </div>
+                 {error && <div className="text-red-500 text-xs font-mono text-center">{error}</div>}
+                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center text-white">ОТМЕНА</button>
             </div>
         );
     }
 
     if (step === 'RECOVERY') {
          return (
-            <form onSubmit={handleRecoverySubmit} className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-right-4">
-                 <div className="text-center font-mono text-xs opacity-70 mb-2">ВОССТАНОВЛЕНИЕ ДОСТУПА</div>
+            <form onSubmit={handleRecoverySubmit} className="flex flex-col gap-4 w-full">
                  <div className="space-y-2">
-                    <label className="text-[10px] font-pixel uppercase opacity-70">EMAIL</label>
-                    <div className="flex items-center gap-2 border-b-2 p-3 border-current bg-black/30">
-                        <Mail size={18} />
-                        <input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm" placeholder="user@example.com" required />
+                    <div className="flex items-center gap-2 border-b p-3 border-white/20">
+                        <Mail size={16} className="text-white/50" />
+                        <input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="email@domain.com" required />
                     </div>
                  </div>
-                 {infoMessage && <div className="text-green-500 text-xs font-mono p-2 border border-green-500 bg-green-900/20">{infoMessage}</div>}
-                 {error && <div className="text-red-500 font-bold text-xs font-mono border border-red-500 p-2 bg-red-900/20">{error}</div>}
-                 <button type="submit" disabled={isLoading} className={`mt-4 py-4 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ОТПРАВКА...' : 'ВОССТАНОВИТЬ'}</button>
-                 <button type="button" onClick={() => { setStep('LOGIN'); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
+                 {infoMessage && <div className="text-green-500 text-xs font-mono text-center">{infoMessage}</div>}
+                 {error && <div className="text-red-500 text-xs font-mono text-center">{error}</div>}
+                 <button type="submit" disabled={isLoading} className="mt-2 py-3 font-bold font-pixel uppercase bg-white text-black hover:bg-gray-200">{isLoading ? '...' : 'СБРОСИТЬ'}</button>
+                 <button type="button" onClick={() => { setStep('LOGIN'); }} className="text-xs font-mono opacity-50 hover:underline text-center text-white">НАЗАД</button>
             </form>
          );
     }
 
     if (step === 'LOGIN') {
         return (
-            <form onSubmit={handleLoginSubmit} className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-right-4">
-                 {infoMessage && <div className="p-3 border border-green-500 bg-green-500/10 text-green-500 text-xs font-mono mb-2">{infoMessage}</div>}
+            <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4 w-full">
+                 {infoMessage && <div className="text-green-500 text-xs font-mono text-center mb-2">{infoMessage}</div>}
                  <div className="space-y-2">
-                    <label className="text-[10px] font-pixel uppercase opacity-70">EMAIL ИЛИ НИКНЕЙМ</label>
-                    <div className="flex items-center gap-2 border-b-2 p-3 border-current bg-black/30 opacity-80 focus-within:opacity-100 transition-opacity">
-                        <User size={18} /><input value={email} onChange={e => setEmail(e.target.value)} type="text" className="bg-transparent w-full focus:outline-none font-mono text-sm" placeholder="user@example.com" required />
+                    <div className="flex items-center gap-2 border-b p-3 border-white/20">
+                        <User size={16} className="text-white/50" /><input value={email} onChange={e => setEmail(e.target.value)} type="text" className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="email / login" required />
                     </div>
                  </div>
                  <div className="space-y-2">
-                    <label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ</label>
-                    <div className="flex items-center gap-2 border-b-2 p-3 border-current bg-black/30 opacity-80 focus-within:opacity-100 transition-opacity">
-                        <Lock size={18} />
-                        <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm" placeholder="******" required />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100 focus:outline-none">
+                    <div className="flex items-center gap-2 border-b p-3 border-white/20">
+                        <Lock size={16} className="text-white/50" />
+                        <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="******" required />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100 focus:outline-none text-white">
                             {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
                         </button>
                     </div>
                  </div>
                  <div className="flex justify-between items-center px-1">
-                     <div onClick={() => setRememberMe(!rememberMe)} className="flex items-center gap-2 cursor-pointer opacity-70 hover:opacity-100 transition-opacity select-none">
-                         {rememberMe ? <CheckSquare size={16} /> : <Square size={16} />}<span className="text-[10px] font-mono font-bold uppercase">СОХРАНИТЬ</span>
+                     <div onClick={() => setRememberMe(!rememberMe)} className="flex items-center gap-2 cursor-pointer opacity-70 hover:opacity-100 transition-opacity select-none text-white">
+                         {rememberMe ? <CheckSquare size={14} /> : <Square size={14} />}<span className="text-[10px] font-mono uppercase">СОХРАНИТЬ</span>
                      </div>
-                     <button type="button" onClick={() => { setStep('RECOVERY'); resetForm(); }} className="text-[10px] font-mono opacity-50 hover:opacity-100 underline">ЗАБЫЛИ ПАРОЛЬ?</button>
+                     <button type="button" onClick={() => { setStep('RECOVERY'); resetForm(); }} className="text-[10px] font-mono opacity-50 hover:opacity-100 underline text-white">ЗАБЫЛИ?</button>
                  </div>
-                 {error && <div className="flex items-center gap-2 text-red-500 font-bold text-xs font-mono justify-center animate-pulse border border-red-500 p-2 bg-red-900/20"><AlertCircle size={16}/> {error}</div>}
-                 <button type="submit" disabled={isLoading} className={`mt-4 py-4 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ПОДКЛЮЧЕНИЕ...' : 'ВОЙТИ В СЕТЬ'}</button>
-                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
+                 {error && <div className="flex items-center gap-2 text-red-500 text-xs font-mono justify-center"><AlertCircle size={14}/> {error}</div>}
+                 <button type="submit" disabled={isLoading} className="mt-2 py-3 font-bold font-pixel uppercase bg-white text-black hover:bg-gray-200">{isLoading ? '...' : 'ВОЙТИ'}</button>
+                 <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center text-white">НАЗАД</button>
             </form>
         )
     }
 
     if (step === 'REGISTER') {
         return (
-            <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
-                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">EMAIL *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current bg-black/30"><Mail size={18} /><input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
+            <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-4 w-full">
+                <div className="flex items-center gap-2 border-b p-2 border-white/20"><Mail size={16} className="text-white/50"/><input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="EMAIL" required /></div>
                 
-                <div className="space-y-1">
-                    <label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ (МИН. 6) *</label>
-                    <div className="flex items-center gap-2 border-b-2 p-2 border-current bg-black/30">
-                        <Lock size={18} />
-                        <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm" required />
-                        <button type="button" onClick={generateSecurePassword} title="Сгенерировать безопасный пароль" className="opacity-50 hover:opacity-100 focus:outline-none hover:text-green-500">
-                             <Wand2 size={16} />
-                        </button>
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100 focus:outline-none">
-                            {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
-                        </button>
-                    </div>
+                <div className="flex items-center gap-2 border-b p-2 border-white/20">
+                    <Lock size={16} className="text-white/50" />
+                    <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="ПАРОЛЬ" required />
+                    <button type="button" onClick={generateSecurePassword} className="opacity-50 hover:opacity-100 text-white">
+                            <Wand2 size={14} />
+                    </button>
                 </div>
 
-                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НИКНЕЙМ *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current bg-black/30"><User size={18} /><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
-                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">СТАТУС (TAGLINE)</label><div className="flex items-center gap-2 border-b-2 p-2 border-current bg-black/30"><Terminal size={18} /><input value={tagline} onChange={e => setTagline(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" /></div></div>
+                <div className="flex items-center gap-2 border-b p-2 border-white/20"><User size={16} className="text-white/50"/><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="LOGIN" required /></div>
+                <div className="flex items-center gap-2 border-b p-2 border-white/20"><Terminal size={16} className="text-white/50"/><input value={tagline} onChange={e => setTagline(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="СТАТУС" /></div>
                 
-                {infoMessage && <button type="button" onClick={() => setStep('RECOVERY')} className="text-yellow-500 text-xs font-mono border border-yellow-500 p-2 text-center hover:bg-yellow-500/10 block w-full mb-2">{infoMessage}</button>}
+                {infoMessage && <div className="text-green-500 text-xs font-mono text-center">{infoMessage}</div>}
                 
-                {/* Specific option to recover if email exists */}
                 {showRecoverOption && (
-                    <button type="button" onClick={() => setStep('RECOVERY')} className="w-full py-2 bg-yellow-500/20 text-yellow-500 border border-yellow-500 font-pixel text-xs font-bold animate-pulse hover:bg-yellow-500 hover:text-black">
-                        ВОССТАНОВИТЬ ПАРОЛЬ ДЛЯ {email}
+                    <button type="button" onClick={() => setStep('RECOVERY')} className="w-full py-2 bg-yellow-500/20 text-yellow-500 border border-yellow-500 font-pixel text-xs font-bold hover:bg-yellow-500 hover:text-black">
+                        ВОССТАНОВИТЬ
                     </button>
                 )}
 
-                {error && <div className="text-red-500 font-bold text-xs font-mono text-center border border-red-500 p-2 bg-red-900/20">{error}</div>}
+                {error && <div className="text-red-500 text-xs font-mono text-center">{error}</div>}
 
-                <button type="submit" disabled={isLoading} className={`mt-4 py-3 font-bold font-pixel uppercase ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>{isLoading ? 'ОТПРАВКА...' : 'ЗАРЕГИСТРИРОВАТЬСЯ'}</button>
-                <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center">НАЗАД</button>
+                <button type="submit" disabled={isLoading} className="mt-2 py-3 font-bold font-pixel uppercase bg-white text-black hover:bg-gray-200">{isLoading ? '...' : 'СОЗДАТЬ'}</button>
+                <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-xs font-mono opacity-50 hover:underline text-center text-white">НАЗАД</button>
             </form>
         )
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative z-20">
-      <div className={`w-full max-w-md border-2 p-8 rounded-lg shadow-2xl relative transition-all duration-300 backdrop-blur-md ${theme === 'dark' ? 'bg-black/95 border-dark-primary shadow-[0_0_50px_rgba(74,222,128,0.2)]' : 'bg-white/95 border-light-accent shadow-xl'}`}>
-         <div className="flex justify-between items-start mb-8 border-b-2 border-dashed pb-4 border-current opacity-70">
-             <div className="flex items-center gap-2"><Terminal size={20} /><span className="font-pixel text-sm">NEO_AUTH</span></div>
-             <div className="flex gap-1"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div><div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse delay-75"></div><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse delay-150"></div></div>
-         </div>
-         <div className="mb-8 relative overflow-hidden">
-             <h2 className="text-lg md:text-xl font-pixel font-bold uppercase tracking-wide text-center">{step === 'ENTRY' ? 'ИДЕНТИФИКАЦИЯ' : step === 'LOGIN' ? 'ВХОД В СИСТЕМУ' : step === 'RECOVERY' ? 'СБРОС КЛЮЧЕЙ' : 'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}</h2>
-         </div>
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-sm p-8 rounded-xl border border-white/10 bg-black">
          {renderContent()}
       </div>
     </div>
@@ -325,7 +302,9 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 };
 
 const RetroLoader = ({text}: {text: string}) => (
-    <div className="flex flex-col items-center"><div className="w-4 h-4 border-2 border-t-transparent border-current rounded-full animate-spin mb-2"></div><span className="text-[9px] font-mono animate-pulse">{text}</span></div>
+    <div className="flex flex-col items-center gap-2 opacity-50">
+        <div className="w-4 h-4 border-2 border-t-transparent border-white rounded-full animate-spin"></div>
+    </div>
 );
 
 export default MatrixLogin;
