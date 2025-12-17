@@ -62,6 +62,7 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewState>('AUTH');
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true); // Added to handle initial auth check
   const [isSyncing, setIsSyncing] = useState(false);
   
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -101,12 +102,23 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      setIsLoading(true);
+      // Small delay for smooth entry
       try {
           const activeUser = await db.initializeDatabase();
-          if (activeUser) { setUser(activeUser); setView('FEED'); refreshData(); }
-          else { setView('AUTH'); }
-      } catch (e) { setView('AUTH'); } finally { setIsLoading(false); }
+          if (activeUser) { 
+              setUser(activeUser); 
+              setView('FEED'); 
+              refreshData(); 
+          }
+          else { 
+              setView('AUTH'); 
+          }
+      } catch (e) { 
+          setView('AUTH'); 
+      } finally { 
+          // Keep loader for at least 800ms for visual consistency
+          setTimeout(() => setIsInitializing(false), 800);
+      }
     };
     init();
     const interval = setInterval(() => { db.backgroundSync().then(refreshData); }, 30000);
@@ -314,9 +326,23 @@ export default function App() {
       recommendedExhibits = displayExhibits.sort((a,b) => calculateArtifactScore(b, user?.preferences) - calculateArtifactScore(a, user?.preferences));
   }
 
+  // Pre-initialization splash screen
+  if (isInitializing) {
+    return (
+      <div className="bg-black min-h-screen flex items-center justify-center text-dark-primary overflow-hidden">
+        <MatrixRain theme="dark" />
+        <div className="relative z-10 text-center space-y-4">
+           <div className="font-pixel text-4xl animate-pulse tracking-widest">NEO_ARCHIVE</div>
+           <RetroLoader text="СИНХРОНИЗАЦИЯ СЕТИ" size="lg" />
+        </div>
+        <CRTOverlay />
+      </div>
+    );
+  }
+
   if (view === 'AUTH') {
     return (
-      <div className="bg-black min-h-screen">
+      <div className="bg-black min-h-screen animate-in fade-in duration-700">
         <MatrixLogin theme={theme} onLogin={handleLogin} />
       </div>
     );
@@ -378,7 +404,7 @@ export default function App() {
             </div>
         </header>
 
-        <main className="pt-20 pb-24 px-4 max-w-6xl mx-auto min-h-screen relative z-10">
+        <main className="pt-20 pb-24 px-4 max-w-6xl mx-auto min-h-screen relative z-10 animate-in fade-in zoom-in-95 duration-500">
             
             {(view === 'FEED' || view === 'SEARCH') && (
                 <div className="space-y-6 animate-in fade-in">
@@ -606,7 +632,7 @@ export default function App() {
         
         {/* ADD TO COLLECTION SELECTOR MODAL (When triggered from artifact detail) */}
         {isSelectingCollectionForExhibit && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in">
                 <div className={`w-full max-w-sm rounded-xl border-2 p-6 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="font-pixel text-sm uppercase tracking-widest">ВЫБОР КОЛЛЕКЦИИ</h2>
