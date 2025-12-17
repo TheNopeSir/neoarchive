@@ -5,7 +5,8 @@ import {
   LogOut, FolderPlus, ArrowLeft, ImageIcon, X, FolderOpen,
   Plus, Terminal, ChevronDown, Trash2, Camera, Video,
   MessageCircle, Send, Package, Grid, Settings, RefreshCw,
-  Sun, Moon, Check, Edit2, Zap, FilePlus, MinusSquare, BookmarkPlus
+  Sun, Moon, Check, Edit2, Zap, FilePlus, MinusSquare, BookmarkPlus,
+  Archive
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -357,8 +358,8 @@ export default function App() {
                      </button>
                      
                      <div className="flex items-center gap-4">
-                         <button onClick={() => setView('MY_COLLECTION')} title="My Collection" className={`opacity-70 hover:opacity-100 ${view === 'MY_COLLECTION' ? 'text-green-500' : ''}`}>
-                             <FolderPlus size={20} />
+                         <button onClick={() => setView('MY_COLLECTION')} title="My Shelf" className={`opacity-70 hover:opacity-100 ${view === 'MY_COLLECTION' ? 'text-green-500' : ''}`}>
+                             <Package size={20} />
                          </button>
                          <button onClick={() => setView('ACTIVITY')} title="Activity" className={`opacity-70 hover:opacity-100 ${view === 'ACTIVITY' ? 'text-green-500' : ''} relative`}>
                              <Bell size={20} />
@@ -592,7 +593,7 @@ export default function App() {
                     <div className="flex items-center gap-3 border-b border-gray-500/30 pb-4 mb-4"><button onClick={handleBack}><ArrowLeft size={20}/></button><div className="w-8 h-8 rounded-full overflow-hidden bg-gray-500"><img src={db.getUserAvatar(chatPartner)} /></div><span className="font-bold font-pixel">@{chatPartner}</span></div>
                     <div className="flex-1 overflow-y-auto space-y-4 p-2 scrollbar-hide flex flex-col-reverse">
                         {[...messages].sort((a,b) => b.timestamp.localeCompare(a.timestamp)).filter(m => (m.sender === user?.username && m.receiver === chatPartner) || (m.sender === chatPartner && m.receiver === user?.username)).map(m => (
-                            <div key={m.id} className={`flex ${m.sender === user?.username ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[75%] p-3 rounded-xl text-sm font-mono ${m.sender === user?.username ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : (theme === 'dark' ? 'bg-white/10' : 'bg-black/5')}`}>{m.text}<div className="text-[9px] opacity-50 text-right mt-1">{m.timestamp.split(',')[1]}</div></div></div>
+                            <div key={m.id} className={`flex ${m.sender === user?.username ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[75%] p-3 rounded-xl text-sm font-mono ${m.sender === user?.username ? 'bg-dark-primary text-black' : (theme === 'dark' ? 'bg-white/10' : 'bg-black/5')}`}>{m.text}<div className="text-[9px] opacity-50 text-right mt-1">{m.timestamp.split(',')[1]}</div></div></div>
                         ))}
                     </div>
                     <div className="pt-4 flex gap-2"><input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} className="flex-1 bg-transparent border rounded-full px-4 py-2 font-mono text-sm focus:outline-none focus:border-green-500" placeholder="Сообщение..." /><button onClick={handleSendMessage} className="p-2 rounded-full bg-green-500 text-black hover:bg-green-400 transition-colors"><Send size={18} /></button></div>
@@ -642,7 +643,7 @@ export default function App() {
         
         <nav className={`fixed bottom-0 left-0 right-0 h-16 border-t md:hidden flex justify-around items-center z-50 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
             <button onClick={() => { if(view !== 'FEED') { setView('FEED'); window.scrollTo(0,0); } }} className={`${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}><LayoutGrid size={24} /></button>
-            <button onClick={() => { setView('SEARCH'); window.scrollTo(0,0); }} className={`${view === 'SEARCH' ? 'text-green-500' : 'opacity-50'}`}><Search size={24} /></button>
+            <button onClick={() => { if(view !== 'MY_COLLECTION') { setView('MY_COLLECTION'); window.scrollTo(0,0); } }} className={`${view === 'MY_COLLECTION' ? 'text-green-500' : 'opacity-50'}`}><Package size={24} /></button>
             <button onClick={() => setView('CREATE_HUB')} className={`p-3 -mt-6 rounded-full border-2 ${theme === 'dark' ? 'bg-black border-green-500 text-green-500' : 'bg-white border-green-600 text-green-600'}`}><PlusCircle size={28} /></button>
             <button onClick={() => setView('ACTIVITY')} className={`relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
             <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`${view === 'USER_PROFILE' ? 'text-green-500' : 'opacity-50'}`}><User size={24} /></button>
