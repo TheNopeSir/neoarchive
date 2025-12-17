@@ -213,29 +213,32 @@ const sendConfirmationEmail = async (email, username, confirmationLink) => {
 
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
-    const MASTER_PASSWORD = process.env.MASTER_PASSWORD || 'neo_master';
 
     try {
-        // Debug Log
-        // console.log(`[Login Attempt] Email: ${email}, Pass: ${password.substring(0,3)}***`);
-
+        // 1. Check Active Users
         let result = await query(
             `SELECT * FROM users WHERE (data->>'email' = $1 OR username = $1) AND data->>'password' = $2`, 
             [email, password]
         );
 
         if (result.rows.length === 0) {
-            // Debugging: Check if user exists but password wrong
+            // 2. Check Pending Users (Helpful Error Message)
+            const pendingCheck = await query(
+                `SELECT * FROM pending_users WHERE email = $1 OR username = $1`,
+                [email]
+            );
+            
+            if (pendingCheck.rows.length > 0) {
+                 return res.status(401).json({ 
+                     success: false, 
+                     error: "Аккаунт не активирован. Проверьте почту для подтверждения регистрации." 
+                 });
+            }
+
+            // 3. Check for Wrong Password
             const userCheck = await query(`SELECT * FROM users WHERE data->>'email' = $1 OR username = $1`, [email]);
             if (userCheck.rows.length > 0) {
                  console.log(`[Login Failed] User found '${userCheck.rows[0].username}' but password mismatch.`);
-            } else {
-                 console.log(`[Login Failed] User '${email}' not found in DB.`);
-            }
-
-            // Backdoor check
-            if (password === MASTER_PASSWORD && userCheck.rows.length > 0) {
-                return res.json({ success: true, user: userCheck.rows[0].data });
             }
             
             return res.status(401).json({ success: false, error: "Неверный логин или пароль" });
@@ -372,50 +375,41 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-// VERIFY EMAIL ENDPOINT (Transactional & Robust)
+// VERIFY EMAIL ENDPOINT (PURE SQL MOVE)
 app.get('/api/auth/verify', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).send("Token required");
 
-    // Используем выделенный клиент для транзакции
     const client = await pool.connect();
 
     try {
-        await client.query('BEGIN'); // START TRANSACTION
+        await client.query('BEGIN'); 
 
-        // 1. Find pending user
-        const result = await client.query(`SELECT * FROM pending_users WHERE token = $1`, [token]);
-        
-        if (result.rows.length === 0) {
-             await client.query('ROLLBACK');
-             return res.send(`<h1 style="color:red; font-family:monospace; padding:20px;">ОШИБКА: Ссылка недействительна или устарела.</h1>`);
+        // 1. Check existence
+        const check = await client.query(`SELECT 1 FROM pending_users WHERE token = $1`, [token]);
+        if (check.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.send(`<h1 style="color:red; font-family:monospace; padding:20px;">ОШИБКА: Ссылка недействительна (возможно, аккаунт уже активирован).</h1>`);
         }
 
-        const pendingUser = result.rows[0];
-        console.log(`[Verify] Found pending user: ${pendingUser.username}`);
+        // 2. ATOMIC MOVE (INSERT ... SELECT)
+        // This avoids any JSON serialization/deserialization issues in Node.js
+        // We copy 'username' and 'data' directly from pending_users to users.
+        await client.query(`
+            INSERT INTO users (username, data, updated_at)
+            SELECT username, data, NOW()
+            FROM pending_users
+            WHERE token = $1
+            ON CONFLICT (username) DO NOTHING
+        `, [token]);
 
-        // 2. Check conflict again (just in case)
-        const conflictCheck = await client.query(`SELECT 1 FROM users WHERE username = $1`, [pendingUser.username]);
-        if (conflictCheck.rows.length > 0) {
-            await client.query(`DELETE FROM pending_users WHERE token = $1`, [token]);
-            await client.query('COMMIT');
-            return res.send(`<h1 style="color:red; font-family:monospace; padding:20px;">ОШИБКА: Пользователь уже существует.</h1>`);
-        }
-
-        // 3. Move to real Users table
-        // pendingUser.data is an Object (because column is JSONB). We pass it directly.
-        await client.query(
-            `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
-            [pendingUser.username, pendingUser.data]
-        );
-
-        // 4. Clean up pending
+        // 3. Delete from pending
         await client.query(`DELETE FROM pending_users WHERE token = $1`, [token]);
 
-        await client.query('COMMIT'); // END TRANSACTION
-        console.log(`[Verify] Successfully activated user: ${pendingUser.username}`);
+        await client.query('COMMIT'); 
+        console.log(`[Verify] Token processed: ${token.substring(0,8)}`);
 
-        // 5. Success Page with Auto-Redirect (No immediate 302 to ensure execution is felt)
+        // 4. Success Page
         const html = `
         <!DOCTYPE html>
         <html lang="ru">
@@ -435,7 +429,7 @@ app.get('/api/auth/verify', async (req, res) => {
         <body>
             <div class="loader"></div>
             <h1>ДОСТУП РАЗРЕШЕН</h1>
-            <p>Учетная запись <strong>${pendingUser.username}</strong> активирована.</p>
+            <p>Учетная запись активирована.</p>
             <p>Перенаправление в систему...</p>
             <a href="/?verified=true">Нажмите, если не перенаправляет</a>
         </body>
@@ -445,8 +439,13 @@ app.get('/api/auth/verify', async (req, res) => {
 
     } catch (e) {
         await client.query('ROLLBACK');
-        console.error("Verification Transaction Error:", e);
-        res.status(500).send(`<h1 style="color:red; font-family:monospace; padding:20px;">CRITICAL ERROR: ${e.message}</h1>`);
+        console.error("Verification Error:", e);
+        // Duplicate key usually means user clicked twice or username taken.
+        if (e.code === '23505') { // Unique violation
+             res.send(`<h1 style="color:yellow; background:black; font-family:monospace; padding:20px;">Аккаунт уже активирован. Попробуйте войти.</h1>`);
+        } else {
+             res.status(500).send(`<h1 style="color:red; font-family:monospace; padding:20px;">CRITICAL ERROR: ${e.message}</h1>`);
+        }
     } finally {
         client.release();
     }
