@@ -5,7 +5,7 @@ import {
   LogOut, FolderPlus, ArrowLeft, ImageIcon, X, FolderOpen,
   Plus, Terminal, ChevronDown, Trash2, Camera, Video,
   MessageCircle, Send, Package, Grid, Settings, RefreshCw,
-  Sun, Moon, Check, Edit2, Zap, FilePlus
+  Sun, Moon, Check, Edit2, Zap, FilePlus, MinusSquare, BookmarkPlus
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -34,7 +34,6 @@ import {
 } from './constants';
 import { moderateContent } from './services/geminiService';
 
-// Helpers
 const generateSpecsForCategory = (cat: string, subcat?: string) => {
     let template = CATEGORY_SPECS_TEMPLATES[cat] || [];
     if (subcat && SUBCATEGORY_SPECS[cat] && SUBCATEGORY_SPECS[cat][subcat]) {
@@ -55,31 +54,15 @@ const getDefaultCondition = (cat: string, subcat?: string) => {
     return list[0] || 'Good';
 };
 
-// Default empty collection state
-const EMPTY_COLLECTION: Partial<Collection> = {
-  title: '',
-  description: '',
-  coverImage: '',
-  exhibitIds: []
-};
-
-// Default empty exhibit state
-const EMPTY_EXHIBIT: Partial<Exhibit> = {
-    category: DefaultCategory.PHONES,
-    subcategory: '',
-    specs: {},
-    imageUrls: [],
-    condition: ''
-};
+const EMPTY_COLLECTION: Partial<Collection> = { title: '', description: '', coverImage: '', exhibitIds: [] };
+const EMPTY_EXHIBIT: Partial<Exhibit> = { category: DefaultCategory.PHONES, subcategory: '', specs: {}, imageUrls: [], condition: '' };
 
 export default function App() {
-  // System State
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewState>('AUTH');
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // Data State
   const [user, setUser] = useState<UserProfile | null>(null);
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -87,7 +70,6 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [guestbook, setGuestbook] = useState<GuestbookEntry[]>([]);
 
-  // Navigation & Filter State
   const [selectedExhibit, setSelectedExhibit] = useState<Exhibit | null>(null);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [viewedProfileUsername, setViewedProfileUsername] = useState<string>('');
@@ -95,17 +77,15 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
   
-  // Collection Management State
   const [newCollection, setNewCollection] = useState<Partial<Collection>>(EMPTY_COLLECTION);
   const [collectionToEdit, setCollectionToEdit] = useState<Collection | null>(null);
-  const [isAddingToCollection, setIsAddingToCollection] = useState(false); // Modal state
-  const [targetCollectionId, setTargetCollectionId] = useState<string | null>(null); // For creating artifact DIRECTLY into collection
+  const [isAddingToCollection, setIsAddingToCollection] = useState(false);
+  const [isSelectingCollectionForExhibit, setIsSelectingCollectionForExhibit] = useState<string | null>(null);
+  const [targetCollectionId, setTargetCollectionId] = useState<string | null>(null);
 
-  // Exhibit Management State
   const [newExhibit, setNewExhibit] = useState<Partial<Exhibit>>(EMPTY_EXHIBIT);
   const [editingExhibitId, setEditingExhibitId] = useState<string | null>(null);
 
-  // Profile Editing State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editTagline, setEditTagline] = useState('');
   const [editStatus, setEditStatus] = useState<UserStatus>('ONLINE');
@@ -115,38 +95,20 @@ export default function App() {
   const guestbookInputRef = useRef<HTMLInputElement>(null);
   const [profileTab, setProfileTab] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
 
-  // Chat State
   const [chatPartner, setChatPartner] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
 
-  // Initialization
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
       try {
           const activeUser = await db.initializeDatabase();
-          if (activeUser) {
-            setUser(activeUser);
-            setView('FEED');
-            refreshData();
-          } else {
-            setView('AUTH');
-          }
-      } catch (e) {
-          console.error("Init failed", e);
-          setView('AUTH');
-      } finally {
-          setIsLoading(false);
-      }
+          if (activeUser) { setUser(activeUser); setView('FEED'); refreshData(); }
+          else { setView('AUTH'); }
+      } catch (e) { setView('AUTH'); } finally { setIsLoading(false); }
     };
     init();
-
-    // Auto-refresh interval
-    const interval = setInterval(() => {
-        // We use a safe check here because 'view' in closure is stale (always initial value)
-        // db.backgroundSync handles connection checks internally
-        db.backgroundSync().then(refreshData);
-    }, 30000);
+    const interval = setInterval(() => { db.backgroundSync().then(refreshData); }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -157,7 +119,6 @@ export default function App() {
     setNotifications(data.notifications);
     setMessages(data.messages);
     setGuestbook(data.guestbook);
-    
     if (user) {
        const updatedUser = data.users.find(u => u.username === user.username);
        if (updatedUser) setUser(updatedUser);
@@ -171,109 +132,62 @@ export default function App() {
       setTimeout(() => setIsSyncing(false), 800);
   };
 
-  // --- NAVIGATION HANDLERS ---
-
-  const handleLogin = (u: UserProfile) => {
-    setUser(u);
-    setView('FEED');
-    refreshData();
-  };
-
-  const handleLogout = async () => {
-    await db.logoutUser();
-    setUser(null);
-    setView('AUTH');
-  };
+  const handleLogin = (u: UserProfile) => { setUser(u); setView('FEED'); refreshData(); };
+  const handleLogout = async () => { await db.logoutUser(); setUser(null); setView('AUTH'); };
 
   const handleBack = () => {
     if (['CREATE_ARTIFACT', 'CREATE_COLLECTION', 'EDIT_COLLECTION'].includes(view)) {
         if (targetCollectionId) {
-            // Returned from creating artifact inside a collection
             const col = collections.find(c => c.id === targetCollectionId);
             if (col) setSelectedCollection(col);
             setTargetCollectionId(null);
             setView('COLLECTION_DETAIL');
-        } else {
-            setView('MY_COLLECTION');
-        }
-    } else if (view === 'EXHIBIT') {
-        setSelectedExhibit(null);
-        setView('FEED');
-    } else if (view === 'COLLECTION_DETAIL') {
-        setSelectedCollection(null);
-        setIsAddingToCollection(false);
-        setView('FEED');
-    } else if (view === 'DIRECT_CHAT') {
-        setChatPartner(null);
-        setView('ACTIVITY');
-    } else {
-        setView('FEED');
-    }
+        } else { setView('MY_COLLECTION'); }
+    } else if (view === 'EXHIBIT') { setSelectedExhibit(null); setView('FEED'); }
+    else if (view === 'COLLECTION_DETAIL') { setSelectedCollection(null); setIsAddingToCollection(false); setView('FEED'); }
+    else if (view === 'DIRECT_CHAT') { setChatPartner(null); setView('ACTIVITY'); }
+    else { setView('FEED'); }
   };
 
   const handleExhibitClick = (item: Exhibit) => {
     if (user) db.updateUserPreference(user.username, item.category, 0.1);
-    
     const updated = { ...item, views: item.views + 1 };
     db.updateExhibit(updated);
-    
     setSelectedExhibit(updated);
     setView('EXHIBIT');
   };
 
-  const handleCollectionClick = (col: Collection) => {
-      setSelectedCollection(col);
-      setView('COLLECTION_DETAIL');
-  };
-
-  const handleAuthorClick = (author: string) => {
-    setViewedProfileUsername(author);
-    setView('USER_PROFILE');
-  };
+  const handleCollectionClick = (col: Collection) => { setSelectedCollection(col); setView('COLLECTION_DETAIL'); };
+  const handleAuthorClick = (author: string) => { setViewedProfileUsername(author); setView('USER_PROFILE'); };
 
   const handleLike = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     const ex = exhibits.find(e => e.id === id);
     if (!ex || !user) return;
-    
-    if (!ex.likedBy?.includes(user.username)) {
-         db.updateUserPreference(user.username, ex.category, 0.5); 
-    }
-
+    if (!ex.likedBy?.includes(user.username)) { db.updateUserPreference(user.username, ex.category, 0.5); }
     const isLiked = ex.likedBy?.includes(user.username);
-    const updated = {
-        ...ex,
-        likes: isLiked ? Math.max(0, ex.likes - 1) : ex.likes + 1,
-        likedBy: isLiked ? (ex.likedBy?.filter(u => u !== user.username) || []) : [...(ex.likedBy || []), user.username]
-    };
-    
+    const updated = { ...ex, likes: isLiked ? Math.max(0, ex.likes - 1) : ex.likes + 1, likedBy: isLiked ? (ex.likedBy?.filter(u => u !== user.username) || []) : [...(ex.likedBy || []), user.username] };
     setExhibits(prev => prev.map(item => item.id === id ? updated : item));
     if (selectedExhibit?.id === id) setSelectedExhibit(updated);
-    
     await db.updateExhibit(updated);
-    
     if (!isLiked && ex.owner !== user.username) {
-         db.saveNotification({
-             id: crypto.randomUUID(),
-             type: 'LIKE',
-             actor: user.username,
-             recipient: ex.owner,
-             targetId: ex.id,
-             targetPreview: ex.title,
-             timestamp: new Date().toLocaleString(),
-             isRead: false
-         });
+         db.saveNotification({ id: crypto.randomUUID(), type: 'LIKE', actor: user.username, recipient: ex.owner, targetId: ex.id, targetPreview: ex.title, timestamp: new Date().toLocaleString(), isRead: false });
     }
   };
 
-  // --- COLLECTION MANAGEMENT ---
-  
-  const handleAddArtifactToCollection = async (exhibitId: string) => {
+  const handleAddArtifactToCollection = async (exhibitId: string, colId?: string) => {
+      const targetCol = colId ? collections.find(c => c.id === colId) : selectedCollection;
+      if (!targetCol) return;
+      if (targetCol.exhibitIds.includes(exhibitId)) return;
+      const updatedCollection = { ...targetCol, exhibitIds: [...targetCol.exhibitIds, exhibitId] };
+      await db.updateCollection(updatedCollection);
+      if (selectedCollection?.id === updatedCollection.id) setSelectedCollection(updatedCollection);
+      refreshData();
+  };
+
+  const handleRemoveArtifactFromCollection = async (exhibitId: string) => {
       if (!selectedCollection) return;
-      const updatedCollection = {
-          ...selectedCollection,
-          exhibitIds: [...selectedCollection.exhibitIds, exhibitId]
-      };
+      const updatedCollection = { ...selectedCollection, exhibitIds: selectedCollection.exhibitIds.filter(id => id !== exhibitId) };
       await db.updateCollection(updatedCollection);
       setSelectedCollection(updatedCollection);
       refreshData();
@@ -282,26 +196,15 @@ export default function App() {
   const handleCollectionCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
         const b64 = await db.fileToBase64(e.target.files[0]);
-        if (view === 'EDIT_COLLECTION' && collectionToEdit) {
-            setCollectionToEdit({ ...collectionToEdit, coverImage: b64 });
-        } else {
-            setNewCollection({ ...newCollection, coverImage: b64 });
-        }
+        if (view === 'EDIT_COLLECTION' && collectionToEdit) { setCollectionToEdit({ ...collectionToEdit, coverImage: b64 }); }
+        else { setNewCollection({ ...newCollection, coverImage: b64 }); }
     }
   };
 
   const handleCreateCollection = async () => {
     if (!user || !newCollection.title) return;
     setIsLoading(true);
-    const col: Collection = {
-        id: crypto.randomUUID(),
-        title: newCollection.title || 'Untitled',
-        description: newCollection.description || '',
-        owner: user.username,
-        coverImage: newCollection.coverImage || '',
-        exhibitIds: [],
-        timestamp: new Date().toLocaleString()
-    };
+    const col: Collection = { id: crypto.randomUUID(), title: newCollection.title || 'Untitled', description: newCollection.description || '', owner: user.username, coverImage: newCollection.coverImage || '', exhibitIds: [], timestamp: new Date().toLocaleString() };
     await db.saveCollection(col);
     refreshData();
     setIsLoading(false);
@@ -320,123 +223,61 @@ export default function App() {
 
   const handleDeleteCollection = async () => {
       if (!collectionToEdit) return;
-      if (confirm('Delete collection?')) {
-          await db.deleteCollection(collectionToEdit.id);
-          refreshData();
-          setView('MY_COLLECTION');
-      }
+      if (confirm('Delete collection?')) { await db.deleteCollection(collectionToEdit.id); refreshData(); setView('MY_COLLECTION'); }
   };
 
-  // --- ARTIFACT MANAGEMENT (CREATE/EDIT) ---
   const handleStartCreateArtifact = () => {
-      setNewExhibit({
-          category: DefaultCategory.PHONES,
-          subcategory: '',
-          specs: generateSpecsForCategory(DefaultCategory.PHONES),
-          condition: getDefaultCondition(DefaultCategory.PHONES),
-          imageUrls: []
-      });
+      setNewExhibit({ category: DefaultCategory.PHONES, subcategory: '', specs: generateSpecsForCategory(DefaultCategory.PHONES), condition: getDefaultCondition(DefaultCategory.PHONES), imageUrls: [] });
       setEditingExhibitId(null);
       setView('CREATE_ARTIFACT');
   };
 
-  const handleCreateArtifactInCollection = (collectionId: string) => {
-      setTargetCollectionId(collectionId);
-      handleStartCreateArtifact();
-  };
-
-  const handleEditExhibit = (item: Exhibit) => {
-      setEditingExhibitId(item.id);
-      setNewExhibit({ ...item });
-      setView('CREATE_ARTIFACT');
-  };
+  const handleCreateArtifactInCollection = (collectionId: string) => { setTargetCollectionId(collectionId); handleStartCreateArtifact(); };
+  const handleEditExhibit = (item: Exhibit) => { setEditingExhibitId(item.id); setNewExhibit({ ...item }); setView('CREATE_ARTIFACT'); };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      // Support for multiple files
       if (e.target.files && e.target.files.length > 0) {
           try {
               const files = Array.from(e.target.files);
               const promises = files.map(file => db.fileToBase64(file));
               const base64Results = await Promise.all(promises);
-              
-              setNewExhibit(prev => ({ 
-                  ...prev, 
-                  imageUrls: [...(prev.imageUrls || []), ...base64Results] 
-              }));
+              setNewExhibit(prev => ({ ...prev, imageUrls: [...(prev.imageUrls || []), ...base64Results] }));
           } catch(err) { alert("Error uploading images"); }
       }
   };
 
-  const removeImage = (index: number) => {
-      setNewExhibit(prev => ({ ...prev, imageUrls: prev.imageUrls?.filter((_, i) => i !== index) }));
-  };
+  const removeImage = (index: number) => { setNewExhibit(prev => ({ ...prev, imageUrls: prev.imageUrls?.filter((_, i) => i !== index) })); };
 
   const handleSaveExhibit = async (isDraft = false) => {
       if (!user) return;
       if (!newExhibit.title) { alert("Title required"); return; }
       if (!isDraft && (!newExhibit.imageUrls || newExhibit.imageUrls.length === 0)) { alert("Image required for publication"); return; }
-
       setIsLoading(true);
-
       if (!isDraft) {
           const modCheck = await moderateContent(`${newExhibit.title} ${newExhibit.description || ''}`);
-          if (!modCheck.allowed) {
-              alert(`Content Warning: ${modCheck.reason}`);
-              setIsLoading(false);
-              return;
-          }
+          if (!modCheck.allowed) { alert(`Content Warning: ${modCheck.reason}`); setIsLoading(false); return; }
       }
-
       const newId = editingExhibitId || crypto.randomUUID();
-
-      const ex: Exhibit = {
-          id: newId,
-          title: newExhibit.title,
-          description: newExhibit.description || '',
-          imageUrls: newExhibit.imageUrls || [],
-          videoUrl: newExhibit.videoUrl,
-          category: newExhibit.category || DefaultCategory.MISC,
-          subcategory: newExhibit.subcategory,
-          condition: newExhibit.condition,
-          specs: newExhibit.specs || {},
-          owner: user.username,
-          timestamp: new Date().toLocaleString(),
-          likes: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likes || 0 : 0,
-          likedBy: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likedBy || [] : [],
-          views: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.views || 0 : 0,
-          comments: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.comments || [] : [],
-          quality: newExhibit.quality || 'Standard',
-          isDraft: isDraft
-      };
-
+      const ex: Exhibit = { id: newId, title: newExhibit.title, description: newExhibit.description || '', imageUrls: newExhibit.imageUrls || [], videoUrl: newExhibit.videoUrl, category: newExhibit.category || DefaultCategory.MISC, subcategory: newExhibit.subcategory, condition: newExhibit.condition, specs: newExhibit.specs || {}, owner: user.username, timestamp: new Date().toLocaleString(), likes: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likes || 0 : 0, likedBy: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.likedBy || [] : [], views: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.views || 0 : 0, comments: editingExhibitId ? exhibits.find(e => e.id === editingExhibitId)?.comments || [] : [], quality: newExhibit.quality || 'Standard', isDraft: isDraft };
       if (editingExhibitId) await db.updateExhibit(ex);
       else await db.saveExhibit(ex);
-
-      // If created specifically for a collection, add it now
       if (targetCollectionId && !editingExhibitId) {
           const targetCol = collections.find(c => c.id === targetCollectionId);
           if (targetCol) {
               const updatedCol = { ...targetCol, exhibitIds: [...targetCol.exhibitIds, newId] };
               await db.updateCollection(updatedCol);
-              setSelectedCollection(updatedCol); // Update local view
+              setSelectedCollection(updatedCol);
           }
       }
-
       refreshData();
       setIsLoading(false);
-      handleBack(); // Should handle return to collection if needed
+      handleBack();
   };
 
   const handleDeleteExhibit = async (id: string) => {
-      if(confirm("Delete artifact?")) {
-          await db.deleteExhibit(id);
-          refreshData();
-          handleBack();
-      }
+      if(confirm("Delete artifact?")) { await db.deleteExhibit(id); refreshData(); handleBack(); }
   };
 
-  // --- CHAT SYSTEM ---
-  
   const handleOpenChat = (partner: string) => {
       if (!user) return;
       setChatPartner(partner);
@@ -447,21 +288,12 @@ export default function App() {
 
   const handleSendMessage = async () => {
       if (!user || !chatPartner || !chatInput.trim()) return;
-      const msg: Message = {
-          id: crypto.randomUUID(),
-          sender: user.username,
-          receiver: chatPartner,
-          text: chatInput,
-          timestamp: new Date().toLocaleString(),
-          isRead: false
-      };
+      const msg: Message = { id: crypto.randomUUID(), sender: user.username, receiver: chatPartner, text: chatInput, timestamp: new Date().toLocaleString(), isRead: false };
       await db.saveMessage(msg);
       setMessages([...db.getMessages(), msg]); 
       setChatInput('');
   };
 
-  // --- FEED & SEARCH ALGORITHM ---
-  
   let displayExhibits = exhibits.filter(e => {
       if (e.isDraft) return false;
       if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
@@ -481,8 +313,6 @@ export default function App() {
       recommendedExhibits = displayExhibits.sort((a,b) => calculateArtifactScore(b, user?.preferences) - calculateArtifactScore(a, user?.preferences));
   }
 
-  // --- RENDER ---
-  
   if (view === 'AUTH') {
     return (
       <div className="bg-black min-h-screen">
@@ -493,14 +323,12 @@ export default function App() {
 
   return (
     <div className={`min-h-screen transition-colors duration-500 font-sans ${theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-900'}`}>
-        {/* Effects only when NOT in Auth */}
         <>
             <MatrixRain theme={theme} />
             <PixelSnow theme={theme} />
             <CRTOverlay />
         </>
         
-        {/* Header */}
         <header className={`fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-md transition-colors duration-300 ${theme === 'dark' ? 'bg-black/80 border-dark-dim' : 'bg-white/80 border-light-dim'}`}>
             <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
                  <div className="flex items-center gap-4">
@@ -549,12 +377,10 @@ export default function App() {
             </div>
         </header>
 
-        {/* Main Content Area */}
         <main className="pt-20 pb-24 px-4 max-w-6xl mx-auto min-h-screen relative z-10">
             
             {(view === 'FEED' || view === 'SEARCH') && (
                 <div className="space-y-6 animate-in fade-in">
-                    {/* Categories Bar */}
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                          <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-4 py-2 rounded font-pixel text-[10px] font-bold whitespace-nowrap border ${selectedCategory === 'ВСЕ' ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : 'border-gray-500/50 opacity-70'}`}>ВСЕ</button>
                          {Object.values(DefaultCategory).map(cat => (
@@ -576,7 +402,6 @@ export default function App() {
                     
                     {feedMode === 'ARTIFACTS' ? (
                         <div className="space-y-8">
-                            {/* FOLLOWING SECTION */}
                             {followingExhibits.length > 0 && (
                                 <div>
                                     <div className="font-pixel text-xs opacity-50 mb-4 flex items-center gap-2">
@@ -585,23 +410,13 @@ export default function App() {
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
                                         {followingExhibits.map(item => (
                                              <ExhibitCard 
-                                                key={item.id} 
-                                                item={item} 
-                                                theme={theme}
-                                                similarExhibits={[]}
-                                                onClick={handleExhibitClick}
-                                                isLiked={item.likedBy?.includes(user?.username || '') || false}
-                                                isFavorited={false}
-                                                onLike={(e) => handleLike(item.id, e)}
-                                                onFavorite={() => {}}
-                                                onAuthorClick={handleAuthorClick}
+                                                key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => handleLike(item.id, e)} onFavorite={() => {}} onAuthorClick={handleAuthorClick}
                                              />
                                         ))}
                                     </div>
                                 </div>
                             )}
 
-                            {/* RECOMMENDED SECTION */}
                             {recommendedExhibits.length > 0 && (
                                 <div>
                                     <div className="font-pixel text-xs opacity-50 mb-4 flex items-center gap-2">
@@ -610,37 +425,17 @@ export default function App() {
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
                                         {recommendedExhibits.map(item => (
                                              <ExhibitCard 
-                                                key={item.id} 
-                                                item={item} 
-                                                theme={theme}
-                                                similarExhibits={[]}
-                                                onClick={handleExhibitClick}
-                                                isLiked={item.likedBy?.includes(user?.username || '') || false}
-                                                isFavorited={false}
-                                                onLike={(e) => handleLike(item.id, e)}
-                                                onFavorite={() => {}}
-                                                onAuthorClick={handleAuthorClick}
+                                                key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => handleLike(item.id, e)} onFavorite={() => {}} onAuthorClick={handleAuthorClick}
                                              />
                                         ))}
                                     </div>
                                 </div>
                             )}
-                            
-                            {followingExhibits.length === 0 && recommendedExhibits.length === 0 && (
-                                <div className="text-center opacity-50 font-mono py-10">НИЧЕГО НЕ НАЙДЕНО</div>
-                            )}
+                            {followingExhibits.length === 0 && recommendedExhibits.length === 0 && ( <div className="text-center opacity-50 font-mono py-10">НИЧЕГО НЕ НАЙДЕНО</div> )}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {collections.map(col => (
-                                <CollectionCard 
-                                    key={col.id} 
-                                    col={col} 
-                                    theme={theme} 
-                                    onClick={handleCollectionClick} 
-                                    onShare={() => {}} 
-                                />
-                            ))}
+                            {collections.map(col => ( <CollectionCard key={col.id} col={col} theme={theme} onClick={handleCollectionClick} onShare={() => {}} /> ))}
                         </div>
                     )}
                 </div>
@@ -656,7 +451,6 @@ export default function App() {
                 </div>
             )}
 
-            {/* EXHIBIT CREATION/EDITING LOGIC */}
             {view === 'CREATE_ARTIFACT' && (
                  <div className="max-w-2xl mx-auto animate-in fade-in pb-20">
                      <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs mb-6"><ArrowLeft size={16} /> НАЗАД</button>
@@ -681,7 +475,7 @@ export default function App() {
                          </div>
                          <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ОПИСАНИЕ</label><textarea value={newExhibit.description || ''} onChange={e => setNewExhibit({...newExhibit, description: e.target.value})} className="w-full bg-transparent border-2 p-2 font-mono text-sm h-32 rounded focus:outline-none" placeholder="История предмета..." /></div>
                          <div>
-                             <label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ИЗОБРАЖЕНИЯ (МОЖНО ВЫБРАТЬ НЕСКОЛЬКО)</label>
+                             <label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ИЗОБРАЖЕНИЯ (МУЛЬТИЗАГРУЗКА)</label>
                              <div className="flex flex-wrap gap-4">
                                  {newExhibit.imageUrls?.map((url, idx) => (<div key={idx} className="relative w-20 h-20 border rounded overflow-hidden group"><img src={url} className="w-full h-full object-cover" /><button onClick={() => removeImage(idx)} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button></div>))}
                                  <label className="w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors opacity-50 hover:opacity-100"><Camera size={24} /><span className="text-[9px] mt-1">ADD</span><input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} /></label>
@@ -695,114 +489,24 @@ export default function App() {
                  </div>
             )}
 
-            {/* USER PROFILE */}
             {view === 'USER_PROFILE' && (
                 <UserProfileView 
-                    user={user!}
-                    viewedProfileUsername={viewedProfileUsername}
-                    exhibits={exhibits}
-                    collections={collections}
-                    guestbook={guestbook}
-                    theme={theme}
-                    onBack={handleBack}
-                    onLogout={handleLogout}
-                    onFollow={async (username) => {
-                         if (!user) return;
-                         const isFollowing = user.following.includes(username);
-                         const newFollowing = isFollowing ? user.following.filter(u => u !== username) : [...user.following, username];
-                         const updatedUser = { ...user, following: newFollowing };
-                         setUser(updatedUser);
-                         await db.updateUserProfile(updatedUser);
-                    }}
-                    onChat={handleOpenChat}
-                    onExhibitClick={handleExhibitClick}
-                    onLike={(id, e) => handleLike(id, e)}
-                    onFavorite={() => {}}
-                    onAuthorClick={handleAuthorClick}
-                    onCollectionClick={handleCollectionClick} 
-                    onShareCollection={() => {}}
-                    onViewHallOfFame={() => setView('HALL_OF_FAME')}
-                    onGuestbookPost={async () => {
-                         if (!user || !guestbookInput.trim()) return;
-                         const entry: GuestbookEntry = { id: crypto.randomUUID(), author: user.username, targetUser: viewedProfileUsername, text: guestbookInput, timestamp: new Date().toLocaleString(), isRead: false };
-                         await db.saveGuestbookEntry(entry);
-                         setGuestbookInput('');
-                         refreshData();
-                    }}
-                    refreshData={refreshData}
-                    isEditingProfile={isEditingProfile}
-                    setIsEditingProfile={setIsEditingProfile}
-                    editTagline={editTagline}
-                    setEditTagline={setEditTagline}
-                    editStatus={editStatus}
-                    setEditStatus={setEditStatus}
-                    editTelegram={editTelegram}
-                    setEditTelegram={setEditTelegram}
-                    editPassword={editPassword}
-                    setEditPassword={setEditPassword}
-                    onSaveProfile={async () => {
-                          if (!user) return;
-                          const updatedUser: UserProfile = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram, password: editPassword ? editPassword : user.password };
-                          await db.updateUserProfile(updatedUser);
-                          setUser(updatedUser);
-                          setIsEditingProfile(false);
-                          setEditPassword('');
-                    }}
-                    onProfileImageUpload={async (e) => {
-                          if (e.target.files && e.target.files[0] && user) {
-                              const b64 = await db.fileToBase64(e.target.files[0]);
-                              const updated = { ...user, avatarUrl: b64 };
-                              await db.updateUserProfile(updated);
-                              setUser(updated);
-                          }
-                    }}
-                    guestbookInput={guestbookInput}
-                    setGuestbookInput={setGuestbookInput}
-                    guestbookInputRef={guestbookInputRef}
-                    profileTab={profileTab}
-                    setProfileTab={setProfileTab}
+                    user={user!} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={handleBack} onLogout={handleLogout} onFollow={async (username) => { if (!user) return; const isFollowing = user.following.includes(username); const newFollowing = isFollowing ? user.following.filter(u => u !== username) : [...user.following, username]; const updatedUser = { ...user, following: newFollowing }; setUser(updatedUser); await db.updateUserProfile(updatedUser); }} onChat={handleOpenChat} onExhibitClick={handleExhibitClick} onLike={(id, e) => handleLike(id, e)} onFavorite={() => {}} onAuthorClick={handleAuthorClick} onCollectionClick={handleCollectionClick} onShareCollection={() => {}} onViewHallOfFame={() => setView('HALL_OF_FAME')} onGuestbookPost={async () => { if (!user || !guestbookInput.trim()) return; const entry: GuestbookEntry = { id: crypto.randomUUID(), author: user.username, targetUser: viewedProfileUsername, text: guestbookInput, timestamp: new Date().toLocaleString(), isRead: false }; await db.saveGuestbookEntry(entry); setGuestbookInput(''); refreshData(); }} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if (!user) return; const updatedUser: UserProfile = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram, password: editPassword ? editPassword : user.password }; await db.updateUserProfile(updatedUser); setUser(updatedUser); setIsEditingProfile(false); setEditPassword(''); }} onProfileImageUpload={async (e) => { if (e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; await db.updateUserProfile(updated); setUser(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab}
                 />
             )}
 
-            {/* EXHIBIT DETAIL */}
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
-                    exhibit={selectedExhibit}
-                    theme={theme}
-                    onBack={handleBack}
-                    onShare={() => {}}
-                    onFavorite={() => {}}
-                    onLike={(id) => handleLike(id)}
-                    isFavorited={false}
-                    isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
-                    onPostComment={async (id, text) => {
-                          if (!user) return;
-                          const ex = exhibits.find(e => e.id === id);
-                          if (!ex) return;
-                          const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toLocaleString(), likes: 0, likedBy: [] };
-                          const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] };
-                          await db.updateExhibit(updatedEx);
-                          refreshData();
-                          if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx);
-                    }}
-                    onAuthorClick={handleAuthorClick}
-                    onFollow={() => {}}
-                    onMessage={handleOpenChat}
-                    currentUser={user?.username || ''}
-                    isAdmin={user?.isAdmin || false}
-                    isFollowing={user?.following.includes(selectedExhibit.owner) || false}
-                    onDelete={handleDeleteExhibit}
-                    onEdit={handleEditExhibit}
+                    exhibit={selectedExhibit} theme={theme} onBack={handleBack} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toLocaleString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={handleAuthorClick} onFollow={() => {}} onMessage={handleOpenChat} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false} onDelete={handleDeleteExhibit} onEdit={handleEditExhibit}
+                    onAddToCollection={user?.username === selectedExhibit.owner ? () => setIsSelectingCollectionForExhibit(selectedExhibit.id) : undefined}
                 />
             )}
             
-            {/* COLLECTION DETAIL + ADD/CREATE ARTIFACT MODAL */}
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
                 <div className="animate-in fade-in pb-20 relative">
                      <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs mb-6"><ArrowLeft size={16} /> НАЗАД</button>
                      <div className="mb-8 relative rounded-xl overflow-hidden border-2 border-gray-500/30 aspect-[21/9]"><img src={selectedCollection.coverImage} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent flex flex-col justify-end p-6"><h1 className="text-3xl font-pixel font-bold text-white mb-2">{selectedCollection.title}</h1><p className="text-white/80 font-mono text-sm max-w-2xl mb-4">{selectedCollection.description}</p><div className="flex items-center justify-between"><div className="flex items-center gap-2 text-white/70 text-xs font-mono cursor-pointer hover:text-white" onClick={() => handleAuthorClick(selectedCollection.owner)}><User size={14} /> @{selectedCollection.owner}</div>{user?.username === selectedCollection.owner && <button onClick={() => { setCollectionToEdit(selectedCollection); setView('EDIT_COLLECTION'); }} className="p-2 bg-white/20 hover:bg-white/40 text-white rounded"><Edit2 size={16} /></button>}</div></div></div>
                      
-                     {/* ADD / CREATE BUTTONS */}
                      {user?.username === selectedCollection.owner && (
                          <div className="mb-6 flex justify-end gap-2">
                              <button onClick={() => handleCreateArtifactInCollection(selectedCollection.id)} className={`px-4 py-2 rounded font-bold font-pixel text-xs flex items-center gap-2 ${theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white'}`}>
@@ -816,27 +520,40 @@ export default function App() {
 
                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                         {exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id)).map(item => (
-                            <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => handleLike(item.id, e)} onFavorite={() => {}} onAuthorClick={handleAuthorClick} />
+                            <div key={item.id} className="relative group">
+                                <ExhibitCard item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => handleLike(item.id, e)} onFavorite={() => {}} onAuthorClick={handleAuthorClick} />
+                                {user?.username === selectedCollection.owner && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleRemoveArtifactFromCollection(item.id); }}
+                                        className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                        title="Удалить из коллекции"
+                                    >
+                                        <MinusSquare size={16} />
+                                    </button>
+                                )}
+                            </div>
                         ))}
                      </div>
 
-                     {/* ADD EXISTING MODAL */}
                      {isAddingToCollection && (
                          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                              <div className={`w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl border-2 p-6 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
-                                 <div className="flex justify-between items-center mb-4">
-                                     <h2 className="font-pixel text-lg">ВЫБЕРИТЕ АРТЕФАКТ</h2>
+                                 <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                     <h2 className="font-pixel text-lg uppercase tracking-widest">ВАШИ АРТЕФАКТЫ</h2>
                                      <button onClick={() => setIsAddingToCollection(false)}><X size={20}/></button>
                                  </div>
-                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                     {exhibits.filter(e => e.owner === user?.username && !selectedCollection.exhibitIds.includes(e.id)).map(item => (
-                                         <div key={item.id} onClick={() => handleAddArtifactToCollection(item.id)} className="cursor-pointer opacity-70 hover:opacity-100 hover:scale-105 transition-all">
-                                             <div className="aspect-square bg-gray-500/20 rounded mb-2 overflow-hidden"><img src={item.imageUrls[0]} className="w-full h-full object-cover" /></div>
+                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4">
+                                     {exhibits.filter(e => e.owner === user?.username && !selectedCollection.exhibitIds.includes(e.id) && !e.isDraft).map(item => (
+                                         <div key={item.id} onClick={() => handleAddArtifactToCollection(item.id)} className="cursor-pointer opacity-70 hover:opacity-100 hover:scale-105 transition-all group relative">
+                                             <div className="aspect-square bg-gray-500/20 rounded mb-2 overflow-hidden border border-white/10">
+                                                 <img src={item.imageUrls[0]} className="w-full h-full object-cover" />
+                                                 <div className="absolute inset-0 bg-green-500/20 opacity-0 group-hover:opacity-100 flex items-center justify-center"><Plus size={32} /></div>
+                                             </div>
                                              <div className="font-bold text-xs truncate">{item.title}</div>
                                          </div>
                                      ))}
-                                     {exhibits.filter(e => e.owner === user?.username && !selectedCollection.exhibitIds.includes(e.id)).length === 0 && (
-                                         <div className="col-span-full text-center opacity-50 py-10 font-mono text-sm">НЕТ ДОСТУПНЫХ АРТЕФАКТОВ</div>
+                                     {exhibits.filter(e => e.owner === user?.username && !selectedCollection.exhibitIds.includes(e.id) && !e.isDraft).length === 0 && (
+                                         <div className="col-span-full py-20 text-center font-mono opacity-50 uppercase text-xs">Все ваши артефакты уже добавлены или отсутствуют</div>
                                      )}
                                  </div>
                              </div>
@@ -846,24 +563,11 @@ export default function App() {
             )}
 
             {view === 'MY_COLLECTION' && user && (
-                 <MyCollection 
-                    theme={theme}
-                    user={user}
-                    exhibits={exhibits.filter(e => e.owner === user.username)}
-                    collections={collections.filter(c => c.owner === user.username)}
-                    onBack={handleBack}
-                    onExhibitClick={handleExhibitClick}
-                    onCollectionClick={(c) => { setCollectionToEdit(c); setView('EDIT_COLLECTION'); }}
-                    onLike={(id, e) => handleLike(id, e)}
-                 />
+                 <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onLike={(id, e) => handleLike(id, e)} />
             )}
 
             {view === 'HALL_OF_FAME' && user && (
-                <HallOfFame 
-                    theme={theme}
-                    achievedIds={user.achievements || []}
-                    onBack={handleBack}
-                />
+                <HallOfFame theme={theme} achievedIds={user.achievements || []} onBack={handleBack} />
             )}
 
             {(view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') && (
@@ -880,15 +584,7 @@ export default function App() {
             )}
             
             {view === 'ACTIVITY' && user && (
-                <ActivityView 
-                    notifications={notifications}
-                    messages={messages}
-                    currentUser={user}
-                    theme={theme}
-                    onAuthorClick={handleAuthorClick}
-                    onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }}
-                    onChatClick={handleOpenChat}
-                />
+                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={handleAuthorClick} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={handleOpenChat} />
             )}
             
             {view === 'DIRECT_CHAT' && chatPartner && (
@@ -903,35 +599,53 @@ export default function App() {
                 </div>
             )}
 
-            {view === 'SETTINGS' && (
-                <div className="max-w-md mx-auto">
-                    <StorageMonitor theme={theme} />
-                </div>
-            )}
+            {view === 'SETTINGS' && ( <div className="max-w-md mx-auto"><StorageMonitor theme={theme} /></div> )}
 
         </main>
         
-        {/* Navigation Bar Mobile */}
+        {/* ADD TO COLLECTION SELECTOR MODAL (When triggered from artifact detail) */}
+        {isSelectingCollectionForExhibit && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+                <div className={`w-full max-w-sm rounded-xl border-2 p-6 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="font-pixel text-sm uppercase tracking-widest">ВЫБОР КОЛЛЕКЦИИ</h2>
+                        <button onClick={() => setIsSelectingCollectionForExhibit(null)}><X size={20}/></button>
+                    </div>
+                    <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+                        {collections.filter(c => c.owner === user?.username).map(col => {
+                            const isContained = col.exhibitIds.includes(isSelectingCollectionForExhibit);
+                            return (
+                                <button 
+                                    key={col.id} 
+                                    onClick={() => { handleAddArtifactToCollection(isSelectingCollectionForExhibit, col.id); setIsSelectingCollectionForExhibit(null); }}
+                                    disabled={isContained}
+                                    className={`w-full p-4 flex items-center justify-between rounded border transition-all ${isContained ? 'opacity-40 bg-white/5 cursor-not-allowed' : 'hover:bg-green-500/10 hover:border-green-500'}`}
+                                >
+                                    <span className="font-pixel text-xs">{col.title}</span>
+                                    {isContained ? <Check size={14} /> : <Plus size={14} />}
+                                </button>
+                            );
+                        })}
+                        {collections.filter(c => c.owner === user?.username).length === 0 && (
+                            <div className="text-center py-4 opacity-50 font-mono text-xs">У ВАС НЕТ КОЛЛЕКЦИЙ</div>
+                        )}
+                    </div>
+                    <button 
+                        onClick={() => { setIsSelectingCollectionForExhibit(null); setView('CREATE_COLLECTION'); }}
+                        className="w-full mt-6 py-3 border border-dashed border-gray-500 opacity-70 hover:opacity-100 rounded text-[10px] font-pixel"
+                    >
+                        + НОВАЯ КОЛЛЕКЦИЯ
+                    </button>
+                </div>
+            </div>
+        )}
+        
         <nav className={`fixed bottom-0 left-0 right-0 h-16 border-t md:hidden flex justify-around items-center z-50 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
-            <button onClick={() => { if(view !== 'FEED') { setView('FEED'); window.scrollTo(0,0); } }} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}>
-                <LayoutGrid size={20} />
-                <span className="text-[9px] font-pixel">FEED</span>
-            </button>
-            <button onClick={() => { setView('SEARCH'); window.scrollTo(0,0); }} className={`flex flex-col items-center gap-1 ${view === 'SEARCH' ? 'text-green-500' : 'opacity-50'}`}>
-                <Search size={20} />
-                <span className="text-[9px] font-pixel">FIND</span>
-            </button>
-            <button onClick={() => setView('CREATE_HUB')} className={`p-3 -mt-6 rounded-full border-2 ${theme === 'dark' ? 'bg-black border-green-500 text-green-500' : 'bg-white border-green-600 text-green-600'}`}>
-                <PlusCircle size={24} />
-            </button>
-            <button onClick={() => setView('ACTIVITY')} className={`flex flex-col items-center gap-1 ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}>
-                <Bell size={20} />
-                <span className="text-[9px] font-pixel">NOTIF</span>
-            </button>
-            <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`flex flex-col items-center gap-1 ${view === 'USER_PROFILE' ? 'text-green-500' : 'opacity-50'}`}>
-                <User size={20} />
-                <span className="text-[9px] font-pixel">ME</span>
-            </button>
+            <button onClick={() => { if(view !== 'FEED') { setView('FEED'); window.scrollTo(0,0); } }} className={`${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}><LayoutGrid size={24} /></button>
+            <button onClick={() => { setView('SEARCH'); window.scrollTo(0,0); }} className={`${view === 'SEARCH' ? 'text-green-500' : 'opacity-50'}`}><Search size={24} /></button>
+            <button onClick={() => setView('CREATE_HUB')} className={`p-3 -mt-6 rounded-full border-2 ${theme === 'dark' ? 'bg-black border-green-500 text-green-500' : 'bg-white border-green-600 text-green-600'}`}><PlusCircle size={28} /></button>
+            <button onClick={() => setView('ACTIVITY')} className={`relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
+            <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`${view === 'USER_PROFILE' ? 'text-green-500' : 'opacity-50'}`}><User size={24} /></button>
         </nav>
     </div>
   );
