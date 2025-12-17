@@ -209,7 +209,7 @@ export default function App() {
     if (view !== 'FEED') return;
     const observer = new IntersectionObserver(
       async (entries) => {
-        if (entries[0].isIntersecting && !loadingFeed) {
+        if (entries[0].isIntersecting && !loadingFeed && exhibits.length > 0) {
            setLoadingFeed(true);
            const nextBatch = await db.loadFeedBatch(feedPage + 1);
            if (nextBatch.length > 0) {
@@ -224,7 +224,7 @@ export default function App() {
     );
     if (loadMoreRef.current) observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
-  }, [view, feedPage, loadingFeed]);
+  }, [view, feedPage, loadingFeed, exhibits.length]);
 
   useEffect(() => {
     autoCleanStorage();
@@ -372,6 +372,12 @@ export default function App() {
       if (remember) {
           localStorage.setItem('neo_active_user', loggedInUser.username);
       }
+      
+      // Force sync during transition so data is ready when animation ends
+      db.forceSync().then(() => {
+          refreshData();
+      }).catch(console.error);
+
       setTimeout(() => {
           setUser(loggedInUser);
           setView('FEED');
@@ -862,12 +868,22 @@ export default function App() {
                 </div>
 
                 {feedMode === 'ARTIFACTS' ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
-                        {sortedFeed.map(item => <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />)}
-                        <div ref={loadMoreRef} className="h-10 w-full flex justify-center py-4">
-                            {loadingFeed && <Loader className="animate-spin opacity-50" />}
-                        </div>
-                    </div>
+                    <>
+                        {sortedFeed.length === 0 && !loadingFeed ? (
+                            <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                                <Search size={48} className="mb-4" />
+                                <span className="font-pixel text-sm">НИЧЕГО НЕ НАЙДЕНО</span>
+                                <span className="font-mono text-xs mt-2">База данных пуста или запрос не дал результатов.</span>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
+                                {sortedFeed.map(item => <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={(e) => toggleFavorite(item.id, e)} onAuthorClick={handleAuthorClick} />)}
+                                <div ref={loadMoreRef} className="h-10 w-full flex justify-center py-4">
+                                    {loadingFeed && <Loader className="animate-spin opacity-80 text-green-500" />}
+                                </div>
+                            </div>
+                        )}
+                    </>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
                         {filteredCollections.map(col => <CollectionCard key={col.id} col={col} theme={theme} onClick={handleCollectionClick} onShare={handleShareCollection} />)}
