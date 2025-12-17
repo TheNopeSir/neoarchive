@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
+import PixelSnow from './components/PixelSnow';
 import ExhibitCard from './components/ExhibitCard';
 import RetroLoader from './components/RetroLoader';
 import ExhibitDetailPage from './components/ExhibitDetailPage';
@@ -905,11 +906,6 @@ export default function App() {
         );
     }
 
-    // ... (CREATE_ARTIFACT and CREATE_COLLECTION blocks remain largely the same, included via implicit context or assumed unchanged if not listed)
-    // For brevity in this prompt, I assume CREATE_ARTIFACT and CREATE_COLLECTION are maintained.
-    // However, since I need to output the FULL FILE content in the XML as per rules, I must include them.
-    // I will copy the previous implementation for those blocks to ensure integrity.
-
     if (view === 'CREATE_ARTIFACT') {
         const conditionOptions = getConditionsList(newExhibit.category || DefaultCategory.MISC, newExhibit.subcategory);
         return (
@@ -977,6 +973,7 @@ export default function App() {
   return (
     <div className={`min-h-screen transition-colors duration-500 ${theme === 'dark' ? 'bg-black text-gray-300' : 'bg-gray-50 text-gray-800'} font-sans selection:bg-green-500 selection:text-black`}>
        <MatrixRain theme={theme} />
+       <PixelSnow theme={theme} />
        <CRTOverlay />
        {isLoginTransition && <LoginTransition />}
        {showInstallBanner && <InstallBanner theme={theme} onInstall={handleInstallClick} onClose={handleDismissInstall} />}
