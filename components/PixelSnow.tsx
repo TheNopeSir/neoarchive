@@ -19,7 +19,7 @@ const PixelSnow: React.FC<PixelSnowProps> = ({ theme }) => {
     let height = canvas.height = window.innerHeight;
 
     // Configuration
-    const particleCount = width < 768 ? 80 : 150; // Less snow on mobile
+    const particleCount = width < 768 ? 80 : 150; 
     const particles: { x: number; y: number; size: number; speed: number; opacity: number; wobble: number }[] = [];
 
     // Initialize particles
@@ -27,9 +27,11 @@ const PixelSnow: React.FC<PixelSnowProps> = ({ theme }) => {
       particles.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        size: Math.floor(Math.random() * 3) + 2, // 2px to 4px integer squares for pixel look
+        // Increased size for visibility
+        size: Math.floor(Math.random() * 4) + 2, 
         speed: Math.random() * 1.5 + 0.5,
-        opacity: Math.random() * 0.6 + 0.1,
+        // Increased opacity range
+        opacity: Math.random() * 0.7 + 0.3,
         wobble: Math.random() * Math.PI * 2
       });
     }
@@ -81,10 +83,11 @@ const PixelSnow: React.FC<PixelSnowProps> = ({ theme }) => {
   }, [theme]);
 
   // Changed z-index from -z-[5] to z-[1] to sit on top of background color but below content (z-10)
+  // Removed opacity-60 class to make it brighter
   return (
     <canvas 
       ref={canvasRef} 
-      className="fixed top-0 left-0 w-full h-full pointer-events-none z-[1] opacity-60"
+      className="fixed top-0 left-0 w-full h-full pointer-events-none z-[1]"
     />
   );
 };

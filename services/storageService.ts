@@ -17,7 +17,7 @@ const DB_NAME = 'NeoArchiveDB';
 const STORE_NAME = 'client_cache';
 const CACHE_KEY = 'neo_archive_v1';
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '4.0.0-Optimized'; 
+const CACHE_VERSION = '4.2.0-PasswordUpdate'; 
 
 // Changed: We assume online by default to force connection attempts
 let isOfflineMode = false;

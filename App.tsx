@@ -28,6 +28,9 @@ import * as db from './services/storageService';
 import { compressImage, isOffline, getUserAvatar, autoCleanStorage, updateUserPreference } from './services/storageService';
 import useSwipe from './hooks/useSwipe';
 
+// FORCE UPDATE VERSION
+const APP_VERSION = '4.2.0-FORCE-REFRESH';
+
 // Helper to generate specs based on category AND subcategory
 const generateSpecsForCategory = (cat: string, subcat?: string) => {
     let template = CATEGORY_SPECS_TEMPLATES[cat] || [];
@@ -181,6 +184,34 @@ export default function App() {
       description: '', 
       coverImage: '' 
   });
+
+  // --- VERSION CONTROL & CLEANUP ---
+  useEffect(() => {
+      const storedVersion = localStorage.getItem('app_version');
+      if (storedVersion !== APP_VERSION) {
+          console.log("🚀 [System] New version detected. Purging cache...");
+          
+          // Clear Service Workers
+          if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(registrations => {
+                  for(let registration of registrations) {
+                      registration.unregister();
+                  }
+              });
+          }
+          
+          // Clear Cache Storage
+          if ('caches' in window) {
+              caches.keys().then(names => {
+                  for (let name of names) caches.delete(name);
+              });
+          }
+
+          localStorage.setItem('app_version', APP_VERSION);
+          // Reload to apply changes
+          window.location.reload();
+      }
+  }, []);
 
   const refreshData = () => {
       // Sync from cache primarily for speed
@@ -919,208 +950,62 @@ export default function App() {
             </div>
         );
     }
+    // ... rest of component logic (Create Artifact, Collection, etc) is standard
     
+    // Ensure all views are handled properly
     if (view === 'CREATE_ARTIFACT') {
+        // ... Code from previous steps for Create Artifact
         return (
              <div className="max-w-2xl mx-auto animate-in fade-in pb-20">
                  <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs mb-6"><ArrowLeft size={16} /> НАЗАД</button>
                  <h2 className="font-pixel text-xl mb-6 flex items-center gap-2"><PlusSquare /> {editingExhibitId ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ АРТЕФАКТ'}</h2>
                  
                  <div className={`p-6 rounded-xl border-2 space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                     {/* Title */}
                      <div>
                          <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">НАЗВАНИЕ *</label>
                          <input value={newExhibit.title || ''} onChange={e => setNewExhibit({...newExhibit, title: e.target.value})} className="w-full bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors" placeholder="Например: Nokia 3310" />
                      </div>
-                     
-                     {/* Category & Subcategory */}
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div>
                              <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">КАТЕГОРИЯ</label>
                              <div className="relative">
-                                 <select 
-                                     value={newExhibit.category} 
-                                     onChange={e => {
-                                         const cat = e.target.value;
-                                         setNewExhibit({
-                                             ...newExhibit, 
-                                             category: cat, 
-                                             subcategory: '', // reset sub
-                                             specs: generateSpecsForCategory(cat),
-                                             condition: getDefaultCondition(cat)
-                                         });
-                                     }} 
-                                     className={`w-full appearance-none bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
-                                 >
-                                     {Object.values(DefaultCategory).map(c => <option key={c} value={c}>{c}</option>)}
-                                 </select>
+                                 <select value={newExhibit.category} onChange={e => { const cat = e.target.value; setNewExhibit({ ...newExhibit, category: cat, subcategory: '', specs: generateSpecsForCategory(cat), condition: getDefaultCondition(cat) }); }} className={`w-full appearance-none bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}>{Object.values(DefaultCategory).map(c => <option key={c} value={c}>{c}</option>)}</select>
                                  <ChevronDown className="absolute right-2 top-3 opacity-50 pointer-events-none" size={14} />
                              </div>
                          </div>
-                         
                          <div>
                              <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ПОДКАТЕГОРИЯ</label>
                              <div className="relative">
-                                 <select 
-                                     value={newExhibit.subcategory || ''} 
-                                     onChange={e => {
-                                         const sub = e.target.value;
-                                          setNewExhibit({
-                                             ...newExhibit, 
-                                             subcategory: sub,
-                                             specs: generateSpecsForCategory(newExhibit.category || DefaultCategory.MISC, sub),
-                                             condition: getDefaultCondition(newExhibit.category || DefaultCategory.MISC, sub)
-                                         });
-                                     }}
-                                     className={`w-full appearance-none bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
-                                 >
-                                     <option value="">- Выберите -</option>
-                                     {CATEGORY_SUBCATEGORIES[newExhibit.category || DefaultCategory.MISC]?.map(s => <option key={s} value={s}>{s}</option>)}
-                                 </select>
+                                 <select value={newExhibit.subcategory || ''} onChange={e => { const sub = e.target.value; setNewExhibit({ ...newExhibit, subcategory: sub, specs: generateSpecsForCategory(newExhibit.category || DefaultCategory.MISC, sub), condition: getDefaultCondition(newExhibit.category || DefaultCategory.MISC, sub) }); }} className={`w-full appearance-none bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}><option value="">- Выберите -</option>{CATEGORY_SUBCATEGORIES[newExhibit.category || DefaultCategory.MISC]?.map(s => <option key={s} value={s}>{s}</option>)}</select>
                                  <ChevronDown className="absolute right-2 top-3 opacity-50 pointer-events-none" size={14} />
                              </div>
                          </div>
                      </div>
-
-                     {/* Description */}
-                     <div>
-                         <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ОПИСАНИЕ</label>
-                         <textarea value={newExhibit.description || ''} onChange={e => setNewExhibit({...newExhibit, description: e.target.value})} className="w-full bg-transparent border-2 p-2 font-mono text-sm h-32 rounded focus:outline-none focus:border-green-500 transition-colors" placeholder="История предмета..." />
-                     </div>
-
-                     {/* Images */}
-                     <div>
-                         <label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ИЗОБРАЖЕНИЯ</label>
-                         <div className="flex flex-wrap gap-4">
-                             {newExhibit.imageUrls?.map((url, idx) => (
-                                 <div key={idx} className="relative w-20 h-20 border rounded overflow-hidden group">
-                                     <img src={url} className="w-full h-full object-cover" />
-                                     <button onClick={() => removeImage(idx)} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
-                                 </div>
-                             ))}
-                             <label className="w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors opacity-50 hover:opacity-100">
-                                 <Camera size={24} />
-                                 <span className="text-[9px] mt-1">ADD</span>
-                                 <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                             </label>
-                         </div>
-                     </div>
-
-                     {/* Video URL */}
-                     <div>
-                         <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ВИДЕО (YOUTUBE / URL)</label>
-                         <div className="flex items-center gap-2 border-b-2 p-2">
-                            <Video size={16} className="opacity-50" />
-                            <input value={newExhibit.videoUrl || ''} onChange={e => setNewExhibit({...newExhibit, videoUrl: e.target.value})} className="w-full bg-transparent font-mono text-sm focus:outline-none" placeholder="https://..." />
-                         </div>
-                     </div>
-
-                     {/* Condition */}
-                     <div>
-                         <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">СОСТОЯНИЕ</label>
-                         <div className="flex flex-wrap gap-2">
-                             {getConditionsList(newExhibit.category || DefaultCategory.MISC, newExhibit.subcategory).map(c => (
-                                 <button key={c} onClick={() => setNewExhibit({...newExhibit, condition: c})} className={`px-3 py-1 rounded text-[10px] font-bold border transition-colors ${newExhibit.condition === c ? (theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black') : 'border-gray-500 opacity-50 hover:opacity-100'}`}>
-                                     {c}
-                                 </button>
-                             ))}
-                         </div>
-                     </div>
-
-                     {/* Specs */}
-                     <div>
-                         <label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ХАРАКТЕРИСТИКИ</label>
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             {Object.keys(newExhibit.specs || {}).map(key => (
-                                 <div key={key}>
-                                     <label className="text-[9px] opacity-60 mb-0.5 block">{key}</label>
-                                     <input 
-                                         value={newExhibit.specs?.[key] || ''} 
-                                         onChange={e => setNewExhibit({
-                                             ...newExhibit, 
-                                             specs: { ...newExhibit.specs, [key]: e.target.value }
-                                         })}
-                                         list={`suggestions-${key}`}
-                                         className="w-full bg-transparent border-b p-1 font-mono text-xs focus:outline-none focus:border-green-500" 
-                                     />
-                                     {COMMON_SPEC_VALUES[key] && (
-                                         <datalist id={`suggestions-${key}`}>
-                                             {COMMON_SPEC_VALUES[key].map(v => <option key={v} value={v} />)}
-                                         </datalist>
-                                     )}
-                                 </div>
-                             ))}
-                         </div>
-                     </div>
-                     
-                     {/* Buttons */}
-                     <div className="flex gap-4 pt-4">
-                         <button onClick={() => handleCreateExhibit(false)} disabled={isLoading} className={`flex-1 py-3 font-bold font-pixel uppercase rounded transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black hover:bg-white' : 'bg-light-accent text-white hover:bg-black'}`}>
-                             {isLoading ? 'СОХРАНЕНИЕ...' : 'ОПУБЛИКОВАТЬ'}
-                         </button>
-                         <button onClick={() => handleCreateExhibit(true)} disabled={isLoading} className="px-4 py-3 border rounded hover:bg-white/10 font-bold font-pixel uppercase text-xs">
-                             В ЧЕРНОВИК
-                         </button>
-                     </div>
+                     <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ОПИСАНИЕ</label><textarea value={newExhibit.description || ''} onChange={e => setNewExhibit({...newExhibit, description: e.target.value})} className="w-full bg-transparent border-2 p-2 font-mono text-sm h-32 rounded focus:outline-none focus:border-green-500 transition-colors" placeholder="История предмета..." /></div>
+                     <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ИЗОБРАЖЕНИЯ</label><div className="flex flex-wrap gap-4">{newExhibit.imageUrls?.map((url, idx) => (<div key={idx} className="relative w-20 h-20 border rounded overflow-hidden group"><img src={url} className="w-full h-full object-cover" /><button onClick={() => removeImage(idx)} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button></div>))}<label className="w-20 h-20 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors opacity-50 hover:opacity-100"><Camera size={24} /><span className="text-[9px] mt-1">ADD</span><input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} /></label></div></div>
+                     <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ВИДЕО (YOUTUBE / URL)</label><div className="flex items-center gap-2 border-b-2 p-2"><Video size={16} className="opacity-50" /><input value={newExhibit.videoUrl || ''} onChange={e => setNewExhibit({...newExhibit, videoUrl: e.target.value})} className="w-full bg-transparent font-mono text-sm focus:outline-none" placeholder="https://..." /></div></div>
+                     <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">СОСТОЯНИЕ</label><div className="flex flex-wrap gap-2">{getConditionsList(newExhibit.category || DefaultCategory.MISC, newExhibit.subcategory).map(c => (<button key={c} onClick={() => setNewExhibit({...newExhibit, condition: c})} className={`px-3 py-1 rounded text-[10px] font-bold border transition-colors ${newExhibit.condition === c ? (theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black') : 'border-gray-500 opacity-50 hover:opacity-100'}`}>{c}</button>))}</div></div>
+                     <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ХАРАКТЕРИСТИКИ</label><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Object.keys(newExhibit.specs || {}).map(key => (<div key={key}><label className="text-[9px] opacity-60 mb-0.5 block">{key}</label><input value={newExhibit.specs?.[key] || ''} onChange={e => setNewExhibit({...newExhibit, specs: { ...newExhibit.specs, [key]: e.target.value }})} list={`suggestions-${key}`} className="w-full bg-transparent border-b p-1 font-mono text-xs focus:outline-none focus:border-green-500" />{COMMON_SPEC_VALUES[key] && (<datalist id={`suggestions-${key}`}>{COMMON_SPEC_VALUES[key].map(v => <option key={v} value={v} />)}</datalist>)}</div>))}</div></div>
+                     <div className="flex gap-4 pt-4"><button onClick={() => handleCreateExhibit(false)} disabled={isLoading} className={`flex-1 py-3 font-bold font-pixel uppercase rounded transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black hover:bg-white' : 'bg-light-accent text-white hover:bg-black'}`}>{isLoading ? 'СОХРАНЕНИЕ...' : 'ОПУБЛИКОВАТЬ'}</button><button onClick={() => handleCreateExhibit(true)} disabled={isLoading} className="px-4 py-3 border rounded hover:bg-white/10 font-bold font-pixel uppercase text-xs">В ЧЕРНОВИК</button></div>
                  </div>
              </div>
         );
     }
-    
+
     if (view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') {
         const isEdit = view === 'EDIT_COLLECTION';
         const targetCol = isEdit ? collectionToEdit : newCollection;
         const setTargetCol = isEdit ? setCollectionToEdit : setNewCollection;
-
         return (
             <div className="max-w-xl mx-auto animate-in fade-in">
                  <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs mb-6"><ArrowLeft size={16} /> НАЗАД</button>
                  <h2 className="font-pixel text-xl mb-6 flex items-center gap-2"><FolderPlus /> {isEdit ? 'РЕДАКТИРОВАТЬ КОЛЛЕКЦИЮ' : 'НОВАЯ КОЛЛЕКЦИЯ'}</h2>
-                 
                  <div className={`p-6 rounded-xl border-2 space-y-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                      <div>
-                         <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">НАЗВАНИЕ</label>
-                         <input value={targetCol?.title || ''} onChange={e => setTargetCol(prev => ({...prev!, title: e.target.value}))} className="w-full bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none" placeholder="Моя ретро полка" />
-                     </div>
-                     
-                     <div>
-                         <label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ОПИСАНИЕ</label>
-                         <textarea value={targetCol?.description || ''} onChange={e => setTargetCol(prev => ({...prev!, description: e.target.value}))} className="w-full bg-transparent border-2 p-2 font-mono text-sm h-24 rounded focus:outline-none" placeholder="О чем эта коллекция?" />
-                     </div>
-                     
-                     <div>
-                         <label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ОБЛОЖКА</label>
-                         <div className="relative aspect-video rounded border-2 border-dashed overflow-hidden group flex items-center justify-center cursor-pointer hover:bg-white/5">
-                             {targetCol?.coverImage ? (
-                                 <img src={targetCol.coverImage} className="w-full h-full object-cover" />
-                             ) : (
-                                 <div className="text-center opacity-50"><ImageIcon size={32} className="mx-auto mb-2" /><span className="text-xs">ЗАГРУЗИТЬ ОБЛОЖКУ</span></div>
-                             )}
-                             <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={isEdit ? handleCollectionCoverUpload : handleNewCollectionCoverUpload} />
-                         </div>
-                     </div>
-                     
-                     {isEdit && (
-                         <div className="pt-4 border-t border-dashed border-gray-500/30">
-                             <div className="flex justify-between items-center mb-2">
-                                 <span className="text-[10px] font-pixel uppercase opacity-70">СОДЕРЖИМОЕ</span>
-                                 <span className="text-xs font-mono">{targetCol?.exhibitIds?.length || 0} items</span>
-                             </div>
-                             {/* Items management could go here, for now just basic meta edit */}
-                             <p className="text-[10px] opacity-50 italic">Управление составом коллекции доступно через добавление артефактов на их страницах (в разработке).</p>
-                         </div>
-                     )}
-
-                     <div className="flex gap-4 pt-4">
-                         <button onClick={isEdit ? handleSaveCollection : handleCreateCollection} disabled={isLoading} className={`flex-1 py-3 font-bold font-pixel uppercase rounded transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black hover:bg-white' : 'bg-light-accent text-white hover:bg-black'}`}>
-                             {isLoading ? 'СОХРАНЕНИЕ...' : 'СОХРАНИТЬ'}
-                         </button>
-                         {isEdit && (
-                             <button onClick={handleDeleteCollection} className="px-4 py-3 border border-red-500 text-red-500 rounded hover:bg-red-500/10 font-bold font-pixel uppercase text-xs">
-                                 УДАЛИТЬ
-                             </button>
-                         )}
-                     </div>
+                      <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">НАЗВАНИЕ</label><input value={targetCol?.title || ''} onChange={e => setTargetCol(prev => ({...prev!, title: e.target.value}))} className="w-full bg-transparent border-b-2 p-2 font-mono text-sm focus:outline-none" placeholder="Моя ретро полка" /></div>
+                      <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-1">ОПИСАНИЕ</label><textarea value={targetCol?.description || ''} onChange={e => setTargetCol(prev => ({...prev!, description: e.target.value}))} className="w-full bg-transparent border-2 p-2 font-mono text-sm h-24 rounded focus:outline-none" placeholder="О чем эта коллекция?" /></div>
+                      <div><label className="block text-[10px] font-pixel uppercase opacity-70 mb-2">ОБЛОЖКА</label><div className="relative aspect-video rounded border-2 border-dashed overflow-hidden group flex items-center justify-center cursor-pointer hover:bg-white/5">{targetCol?.coverImage ? (<img src={targetCol.coverImage} className="w-full h-full object-cover" />) : (<div className="text-center opacity-50"><ImageIcon size={32} className="mx-auto mb-2" /><span className="text-xs">ЗАГРУЗИТЬ ОБЛОЖКУ</span></div>)}<input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={isEdit ? handleCollectionCoverUpload : handleNewCollectionCoverUpload} /></div></div>
+                      {isEdit && (<div className="pt-4 border-t border-dashed border-gray-500/30"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-pixel uppercase opacity-70">СОДЕРЖИМОЕ</span><span className="text-xs font-mono">{(targetCol as Collection)?.exhibitIds?.length || 0} items</span></div><p className="text-[10px] opacity-50 italic">Управление составом коллекции доступно через добавление артефактов на их страницах (в разработке).</p></div>)}
+                      <div className="flex gap-4 pt-4"><button onClick={isEdit ? handleSaveCollection : handleCreateCollection} disabled={isLoading} className={`flex-1 py-3 font-bold font-pixel uppercase rounded transition-colors ${theme === 'dark' ? 'bg-dark-primary text-black hover:bg-white' : 'bg-light-accent text-white hover:bg-black'}`}>{isLoading ? 'СОХРАНЕНИЕ...' : 'СОХРАНИТЬ'}</button>{isEdit && (<button onClick={handleDeleteCollection} className="px-4 py-3 border border-red-500 text-red-500 rounded hover:bg-red-500/10 font-bold font-pixel uppercase text-xs">УДАЛИТЬ</button>)}</div>
                  </div>
             </div>
         );
@@ -1129,118 +1014,34 @@ export default function App() {
     if (view === 'COLLECTION_DETAIL' && selectedCollection) {
         const colItems = exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id));
         const isOwner = user?.username === selectedCollection.owner;
-        
         return (
              <div className="animate-in fade-in pb-20">
                  <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs mb-6"><ArrowLeft size={16} /> НАЗАД</button>
-                 
-                 <div className="mb-8 relative rounded-xl overflow-hidden border-2 border-gray-500/30 aspect-[21/9]">
-                     <img src={selectedCollection.coverImage} className="w-full h-full object-cover" />
-                     <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent flex flex-col justify-end p-6">
-                         <h1 className="text-3xl font-pixel font-bold text-white mb-2">{selectedCollection.title}</h1>
-                         <p className="text-white/80 font-mono text-sm max-w-2xl mb-4">{selectedCollection.description}</p>
-                         <div className="flex items-center justify-between">
-                             <div className="flex items-center gap-2 text-white/70 text-xs font-mono cursor-pointer hover:text-white" onClick={() => handleAuthorClick(selectedCollection.owner)}>
-                                 <User size={14} /> @{selectedCollection.owner}
-                             </div>
-                             <div className="flex gap-2">
-                                 <button onClick={() => handleShareCollection(selectedCollection)} className="p-2 bg-white/20 hover:bg-white/40 text-white rounded"><Share2 size={16} /></button>
-                                 {isOwner && <button onClick={() => handleEditCollection(selectedCollection)} className="p-2 bg-white/20 hover:bg-white/40 text-white rounded"><Edit2 size={16} /></button>}
-                             </div>
-                         </div>
-                     </div>
-                 </div>
-                 
-                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                     {colItems.map(item => (
-                        <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={() => {}} onAuthorClick={handleAuthorClick} />
-                     ))}
-                 </div>
+                 <div className="mb-8 relative rounded-xl overflow-hidden border-2 border-gray-500/30 aspect-[21/9]"><img src={selectedCollection.coverImage} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent flex flex-col justify-end p-6"><h1 className="text-3xl font-pixel font-bold text-white mb-2">{selectedCollection.title}</h1><p className="text-white/80 font-mono text-sm max-w-2xl mb-4">{selectedCollection.description}</p><div className="flex items-center justify-between"><div className="flex items-center gap-2 text-white/70 text-xs font-mono cursor-pointer hover:text-white" onClick={() => handleAuthorClick(selectedCollection.owner)}><User size={14} /> @{selectedCollection.owner}</div><div className="flex gap-2"><button onClick={() => handleShareCollection(selectedCollection)} className="p-2 bg-white/20 hover:bg-white/40 text-white rounded"><Share2 size={16} /></button>{isOwner && <button onClick={() => handleEditCollection(selectedCollection)} className="p-2 bg-white/20 hover:bg-white/40 text-white rounded"><Edit2 size={16} /></button>}</div></div></div></div>
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{colItems.map(item => (<ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => toggleLike(item.id, e)} onFavorite={() => {}} onAuthorClick={handleAuthorClick} />))}</div>
              </div>
         );
     }
     
     if (view === 'ACTIVITY') {
         const updates = activityTab === 'UPDATES' ? aggregatedNotifications : [];
-        const dialogs = activityTab === 'DIALOGS' ? Object.values(messages.reduce((acc, m) => {
-            const partner = m.sender === user?.username ? m.receiver : m.sender;
-            if(!acc[partner] || m.timestamp > acc[partner].timestamp) acc[partner] = m;
-            return acc;
-        }, {} as Record<string, Message>)).sort((a,b) => b.timestamp.localeCompare(a.timestamp)) : [];
-
+        const dialogs = activityTab === 'DIALOGS' ? Object.values(messages.reduce((acc, m) => { const partner = m.sender === user?.username ? m.receiver : m.sender; if(!acc[partner] || m.timestamp > acc[partner].timestamp) acc[partner] = m; return acc; }, {} as Record<string, Message>)).sort((a,b) => b.timestamp.localeCompare(a.timestamp)) : [];
         return (
             <div className="max-w-2xl mx-auto animate-in fade-in">
-                <div className="flex gap-4 border-b border-gray-500/30 mb-6">
-                    <button onClick={() => setActivityTab('UPDATES')} className={`pb-2 font-pixel text-xs flex items-center gap-2 ${activityTab === 'UPDATES' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}><Bell size={14} /> УВЕДОМЛЕНИЯ</button>
-                    <button onClick={() => setActivityTab('DIALOGS')} className={`pb-2 font-pixel text-xs flex items-center gap-2 ${activityTab === 'DIALOGS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}><MessageCircle size={14} /> СООБЩЕНИЯ</button>
-                </div>
-                
-                {activityTab === 'UPDATES' && (
-                    <div className="space-y-4">
-                        {updates.length === 0 ? <div className="text-center opacity-50 font-mono text-sm py-10">Нет новых уведомлений</div> : updates.map(n => (
-                            <div key={n.id} onClick={() => handleNotificationClick(n)} className={`p-4 border rounded flex gap-4 cursor-pointer hover:bg-white/5 transition-colors ${!n.isRead ? (theme === 'dark' ? 'border-green-500/50 bg-green-500/5' : 'border-green-500/50 bg-green-50') : (theme === 'dark' ? 'border-dark-dim' : 'border-light-dim')}`}>
-                                <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(n.actor)} /></div>
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start">
-                                        <span className="font-bold text-sm">@{n.actor}</span>
-                                        <span className="text-[10px] opacity-50 font-mono">{n.timestamp}</span>
-                                    </div>
-                                    <p className="text-xs font-mono mt-1 opacity-80">{renderNotificationText(n)}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-                
-                {activityTab === 'DIALOGS' && (
-                    <div className="space-y-4">
-                         {dialogs.length === 0 ? <div className="text-center opacity-50 font-mono text-sm py-10">Нет сообщений</div> : dialogs.map(m => {
-                             const partner = m.sender === user?.username ? m.receiver : m.sender;
-                             return (
-                                 <div key={m.id} onClick={() => handleOpenChat(partner)} className={`p-4 border rounded flex gap-4 cursor-pointer hover:bg-white/5 transition-colors ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                                     <div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(partner)} /></div>
-                                     <div className="flex-1">
-                                         <div className="flex justify-between items-start">
-                                             <span className="font-bold text-sm">@{partner}</span>
-                                             <span className="text-[10px] opacity-50 font-mono">{m.timestamp}</span>
-                                         </div>
-                                         <p className="text-xs font-mono mt-1 opacity-80 truncate">{m.sender === user?.username ? 'Вы: ' : ''}{m.text}</p>
-                                     </div>
-                                 </div>
-                             );
-                         })}
-                    </div>
-                )}
+                <div className="flex gap-4 border-b border-gray-500/30 mb-6"><button onClick={() => setActivityTab('UPDATES')} className={`pb-2 font-pixel text-xs flex items-center gap-2 ${activityTab === 'UPDATES' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}><Bell size={14} /> УВЕДОМЛЕНИЯ</button><button onClick={() => setActivityTab('DIALOGS')} className={`pb-2 font-pixel text-xs flex items-center gap-2 ${activityTab === 'DIALOGS' ? 'border-b-2 border-current font-bold' : 'opacity-50'}`}><MessageCircle size={14} /> СООБЩЕНИЯ</button></div>
+                {activityTab === 'UPDATES' && (<div className="space-y-4">{updates.length === 0 ? <div className="text-center opacity-50 font-mono text-sm py-10">Нет новых уведомлений</div> : updates.map(n => (<div key={n.id} onClick={() => handleNotificationClick(n)} className={`p-4 border rounded flex gap-4 cursor-pointer hover:bg-white/5 transition-colors ${!n.isRead ? (theme === 'dark' ? 'border-green-500/50 bg-green-500/5' : 'border-green-500/50 bg-green-50') : (theme === 'dark' ? 'border-dark-dim' : 'border-light-dim')}`}><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(n.actor)} /></div><div className="flex-1"><div className="flex justify-between items-start"><span className="font-bold text-sm">@{n.actor}</span><span className="text-[10px] opacity-50 font-mono">{n.timestamp}</span></div><p className="text-xs font-mono mt-1 opacity-80">{renderNotificationText(n)}</p></div></div>))}</div>)}
+                {activityTab === 'DIALOGS' && (<div className="space-y-4">{dialogs.length === 0 ? <div className="text-center opacity-50 font-mono text-sm py-10">Нет сообщений</div> : dialogs.map(m => { const partner = m.sender === user?.username ? m.receiver : m.sender; return (<div key={m.id} onClick={() => handleOpenChat(partner)} className={`p-4 border rounded flex gap-4 cursor-pointer hover:bg-white/5 transition-colors ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}><div className="w-10 h-10 rounded-full bg-gray-500 overflow-hidden flex-shrink-0"><img src={getUserAvatar(partner)} /></div><div className="flex-1"><div className="flex justify-between items-start"><span className="font-bold text-sm">@{partner}</span><span className="text-[10px] opacity-50 font-mono">{m.timestamp}</span></div><p className="text-xs font-mono mt-1 opacity-80 truncate">{m.sender === user?.username ? 'Вы: ' : ''}{m.text}</p></div></div>); })}</div>)}
             </div>
         );
     }
     
     if (view === 'DIRECT_CHAT' && chatPartner) {
         const chatMsgs = messages.filter(m => (m.sender === user?.username && m.receiver === chatPartner) || (m.sender === chatPartner && m.receiver === user?.username)).sort((a,b) => a.timestamp.localeCompare(b.timestamp));
-        
         return (
             <div className="max-w-2xl mx-auto h-[calc(100vh-100px)] flex flex-col animate-in fade-in">
-                <div className="flex items-center gap-3 border-b border-gray-500/30 pb-4 mb-4">
-                    <button onClick={handleBack}><ArrowLeft size={20}/></button>
-                    <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-500"><img src={getUserAvatar(chatPartner)} /></div>
-                    <span className="font-bold font-pixel">@{chatPartner}</span>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto space-y-4 p-2 scrollbar-hide">
-                    {chatMsgs.map(m => (
-                        <div key={m.id} className={`flex ${m.sender === user?.username ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[75%] p-3 rounded-xl text-sm font-mono ${m.sender === user?.username ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : (theme === 'dark' ? 'bg-white/10' : 'bg-black/5')}`}>
-                                {m.text}
-                                <div className="text-[9px] opacity-50 text-right mt-1">{m.timestamp.split(',')[1]}</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                
-                <div className="pt-4 flex gap-2">
-                    <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} className="flex-1 bg-transparent border rounded-full px-4 py-2 font-mono text-sm focus:outline-none focus:border-green-500" placeholder="Сообщение..." />
-                    <button onClick={handleSendMessage} className="p-2 rounded-full bg-green-500 text-black hover:bg-green-400 transition-colors"><Send size={18} /></button>
-                </div>
+                <div className="flex items-center gap-3 border-b border-gray-500/30 pb-4 mb-4"><button onClick={handleBack}><ArrowLeft size={20}/></button><div className="w-8 h-8 rounded-full overflow-hidden bg-gray-500"><img src={getUserAvatar(chatPartner)} /></div><span className="font-bold font-pixel">@{chatPartner}</span></div>
+                <div className="flex-1 overflow-y-auto space-y-4 p-2 scrollbar-hide">{chatMsgs.map(m => (<div key={m.id} className={`flex ${m.sender === user?.username ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[75%] p-3 rounded-xl text-sm font-mono ${m.sender === user?.username ? (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white') : (theme === 'dark' ? 'bg-white/10' : 'bg-black/5')}`}>{m.text}<div className="text-[9px] opacity-50 text-right mt-1">{m.timestamp.split(',')[1]}</div></div></div>))}</div>
+                <div className="pt-4 flex gap-2"><input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} className="flex-1 bg-transparent border rounded-full px-4 py-2 font-mono text-sm focus:outline-none focus:border-green-500" placeholder="Сообщение..." /><button onClick={handleSendMessage} className="p-2 rounded-full bg-green-500 text-black hover:bg-green-400 transition-colors"><Send size={18} /></button></div>
             </div>
         );
     }
@@ -1250,31 +1051,17 @@ export default function App() {
             <div className="max-w-md mx-auto animate-in fade-in">
                 <button onClick={handleBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs mb-6"><ArrowLeft size={16} /> НАЗАД</button>
                 <h2 className="font-pixel text-xl mb-6 flex items-center gap-2"><Settings /> НАСТРОЙКИ</h2>
+                <div className={`p-4 rounded border mb-4 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}><h3 className="font-bold text-sm mb-4">ИНТЕРФЕЙС</h3><div className="flex items-center justify-between mb-2"><span className="text-xs font-mono">ТЕМА ОФОРМЛЕНИЯ</span><button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 border rounded hover:bg-white/10">{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</button></div></div>
+                <div className={`p-4 rounded border mb-4 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}><h3 className="font-bold text-sm mb-4">ХРАНИЛИЩЕ</h3><StorageMonitor theme={theme} /></div>
+                <div className={`p-4 rounded border mb-4 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}><h3 className="font-bold text-sm mb-4">АККАУНТ</h3><button onClick={handleLogout} className="w-full py-2 border border-red-500 text-red-500 rounded hover:bg-red-500/10 font-bold text-xs">ВЫЙТИ</button></div>
                 
-                <div className={`p-4 rounded border mb-4 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                    <h3 className="font-bold text-sm mb-4">ИНТЕРФЕЙС</h3>
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-mono">ТЕМА ОФОРМЛЕНИЯ</span>
-                        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 border rounded hover:bg-white/10">
-                            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                        </button>
-                    </div>
+                {/* Manual Force Update Button */}
+                <div className={`p-4 rounded border mb-4 border-red-500/50 bg-red-500/5`}>
+                    <h3 className="font-bold text-xs text-red-500 mb-2">ОБНОВЛЕНИЕ</h3>
+                    <button onClick={() => { localStorage.removeItem('app_version'); window.location.reload(); }} className="w-full py-2 bg-red-500 text-white font-bold text-xs rounded hover:bg-red-600">ПРИНУДИТЕЛЬНО ОБНОВИТЬ КЭШ</button>
                 </div>
 
-                <div className={`p-4 rounded border mb-4 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                    <h3 className="font-bold text-sm mb-4">ХРАНИЛИЩЕ</h3>
-                    <StorageMonitor theme={theme} />
-                </div>
-                
-                <div className={`p-4 rounded border mb-4 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
-                    <h3 className="font-bold text-sm mb-4">АККАУНТ</h3>
-                    <button onClick={handleLogout} className="w-full py-2 border border-red-500 text-red-500 rounded hover:bg-red-500/10 font-bold text-xs">ВЫЙТИ</button>
-                </div>
-                
-                <div className="text-center text-[10px] opacity-30 font-mono mt-8">
-                    NeoArchive v4.0.2 (Build 2024)
-                    <br/>System Status: ONLINE
-                </div>
+                <div className="text-center text-[10px] opacity-30 font-mono mt-8">NeoArchive v{APP_VERSION} (Build 2024)<br/>System Status: ONLINE</div>
             </div>
         );
     }
