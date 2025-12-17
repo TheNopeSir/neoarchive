@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, Lock, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square, Send, ArrowRight } from 'lucide-react';
+import { Mail, Lock, UserPlus, Terminal, User, AlertCircle, CheckSquare, Square, Send, ArrowRight, Wand2, Eye, EyeOff } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -33,6 +33,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState('');
   const [tagline, setTagline] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -101,6 +102,17 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
       setPassword('');
       setUsername('');
       setTagline('');
+      setShowPassword(false);
+  };
+
+  const generateSecurePassword = () => {
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+      let pass = "";
+      for(let i=0; i<16; i++) {
+          pass += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      setPassword(pass);
+      setShowPassword(true);
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -251,7 +263,11 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                  <div className="space-y-1">
                     <label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ</label>
                     <div className="flex items-center gap-2 border-b-2 p-2 border-current opacity-70 focus-within:opacity-100 transition-opacity">
-                        <Lock size={18} /><input value={password} onChange={e => setPassword(e.target.value)} type="password" className="bg-transparent w-full focus:outline-none font-mono text-sm" placeholder="******" required />
+                        <Lock size={18} />
+                        <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm" placeholder="******" required />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100 focus:outline-none">
+                            {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+                        </button>
                     </div>
                  </div>
                  <div className="flex justify-between items-center">
@@ -271,7 +287,21 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
         return (
             <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4">
                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">EMAIL *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><Mail size={18} /><input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
-                <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ (МИН. 6) *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><Lock size={18} /><input value={password} onChange={e => setPassword(e.target.value)} type="password" className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
+                
+                <div className="space-y-1">
+                    <label className="text-[10px] font-pixel uppercase opacity-70">ПАРОЛЬ (МИН. 6) *</label>
+                    <div className="flex items-center gap-2 border-b-2 p-2 border-current">
+                        <Lock size={18} />
+                        <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm" required />
+                        <button type="button" onClick={generateSecurePassword} title="Сгенерировать безопасный пароль" className="opacity-50 hover:opacity-100 focus:outline-none hover:text-green-500">
+                             <Wand2 size={16} />
+                        </button>
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100 focus:outline-none">
+                            {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+                        </button>
+                    </div>
+                </div>
+
                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">НИКНЕЙМ *</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><User size={18} /><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" required /></div></div>
                 <div className="space-y-1"><label className="text-[10px] font-pixel uppercase opacity-70">СТАТУС (TAGLINE)</label><div className="flex items-center gap-2 border-b-2 p-2 border-current"><Terminal size={18} /><input value={tagline} onChange={e => setTagline(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm" /></div></div>
                 

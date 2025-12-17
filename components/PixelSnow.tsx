@@ -40,8 +40,6 @@ const PixelSnow: React.FC<PixelSnowProps> = ({ theme }) => {
       ctx.clearRect(0, 0, width, height);
 
       // Green color base (Neo Green)
-      // In light mode, we might want it slightly darker to be visible, or keep it subtle.
-      // Keeping it "Radioactive Green" for the theme.
       const r = 74, g = 222, b = 128; 
 
       particles.forEach((p) => {
@@ -82,10 +80,11 @@ const PixelSnow: React.FC<PixelSnowProps> = ({ theme }) => {
     };
   }, [theme]);
 
+  // Changed z-index from -z-[5] to z-[1] to sit on top of background color but below content (z-10)
   return (
     <canvas 
       ref={canvasRef} 
-      className="fixed top-0 left-0 w-full h-full pointer-events-none -z-[5] opacity-60"
+      className="fixed top-0 left-0 w-full h-full pointer-events-none z-[1] opacity-60"
     />
   );
 };

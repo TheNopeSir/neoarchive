@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X } from 'lucide-react';
+import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff } from 'lucide-react';
 import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus } from '../types';
 import { STATUS_OPTIONS, BADGES } from '../constants';
 import * as db from '../services/storageService';
@@ -37,6 +37,8 @@ interface UserProfileViewProps {
     setEditStatus: (v: UserStatus) => void;
     editTelegram: string;
     setEditTelegram: (v: string) => void;
+    editPassword: string; // New prop
+    setEditPassword: (v: string) => void; // New prop
     onSaveProfile: () => void;
     onProfileImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
     guestbookInput: string;
@@ -51,6 +53,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     onBack, onLogout, onFollow, onChat, onExhibitClick, onLike, onFavorite, onAuthorClick, 
     onCollectionClick, onShareCollection, onViewHallOfFame, onGuestbookPost, 
     isEditingProfile, setIsEditingProfile, editTagline, setEditTagline, editStatus, setEditStatus, editTelegram, setEditTelegram, 
+    editPassword, setEditPassword,
     onSaveProfile, onProfileImageUpload, guestbookInput, setGuestbookInput, guestbookInputRef, profileTab, setProfileTab, refreshData
 }) => {
     const profileUser = db.getFullDatabase().users.find(u => u.username === viewedProfileUsername) || { username: viewedProfileUsername, email: 'ghost@matrix.net', tagline: 'Цифровой призрак', avatarUrl: getUserAvatar(viewedProfileUsername), joinedDate: 'Unknown', following: [], achievements: [], telegram: '' } as UserProfile;
@@ -62,6 +65,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     // Guestbook Edit State
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [editEntryText, setEditEntryText] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleEditEntry = (entry: GuestbookEntry) => {
         setEditingEntryId(entry.id);
@@ -81,6 +85,16 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
             await db.deleteGuestbookEntry(id);
             refreshData();
         }
+    };
+
+    const generateSecurePassword = () => {
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+        let pass = "";
+        for(let i=0; i<16; i++) {
+            pass += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        setEditPassword(pass);
+        setShowPassword(true);
     };
 
     return (
@@ -113,6 +127,24 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                         <div className="space-y-2 max-w-sm">
                             <input value={editTagline} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditTagline(e.target.value)} placeholder="Статус..." className="w-full bg-transparent border-b p-1 font-mono text-sm" />
                             <input value={editTelegram} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditTelegram(e.target.value)} placeholder="Telegram (без @)" className="w-full bg-transparent border-b p-1 font-mono text-sm" />
+                            
+                            {/* Password Change Field */}
+                            <div className="flex items-center gap-2 border-b p-1">
+                                <input 
+                                    value={editPassword} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditPassword(e.target.value)} 
+                                    placeholder="Новый пароль (пусто = без изменений)" 
+                                    type={showPassword ? "text" : "password"}
+                                    className="w-full bg-transparent font-mono text-sm focus:outline-none" 
+                                />
+                                <button type="button" onClick={generateSecurePassword} title="Сгенерировать безопасный пароль" className="opacity-50 hover:opacity-100 hover:text-green-500">
+                                    <Wand2 size={14} />
+                                </button>
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100">
+                                    {showPassword ? <EyeOff size={14}/> : <Eye size={14}/>}
+                                </button>
+                            </div>
+
                             <div className="flex gap-2">
                                 {(Object.keys(STATUS_OPTIONS) as UserStatus[]).map(s => (
                                     <button key={s} onClick={() => setEditStatus(s)} className={`p-1 rounded border ${editStatus === s ? 'border-green-500 bg-green-500/20' : 'border-transparent'}`} title={STATUS_OPTIONS[s].label}>
@@ -131,7 +163,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                             <p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">
                                 {profileUser.tagline}
                                 {isCurrentUser && (
-                                    <button onClick={() => { setEditTagline(user?.tagline || ''); setEditStatus(user?.status || 'ONLINE'); setEditTelegram(user?.telegram || ''); setIsEditingProfile(true); }} className="opacity-50 hover:opacity-100">
+                                    <button onClick={() => { setEditTagline(user?.tagline || ''); setEditStatus(user?.status || 'ONLINE'); setEditTelegram(user?.telegram || ''); setEditPassword(''); setIsEditingProfile(true); }} className="opacity-50 hover:opacity-100">
                                         <Edit2 size={12} />
                                     </button>
                                 )}
