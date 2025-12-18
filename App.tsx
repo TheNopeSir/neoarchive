@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -162,6 +162,25 @@ export default function App() {
       if(!user) return;
       await db.toggleFollow(user.username, username);
       refreshData();
+  };
+  
+  const handleAddItemToCollection = async (collectionId: string) => {
+      if (!isAddingToCollection || !user) return;
+      const collection = collections.find(c => c.id === collectionId);
+      if (!collection) return;
+      
+      // Avoid duplicates
+      if (!collection.exhibitIds.includes(isAddingToCollection)) {
+          const updatedCollection = {
+              ...collection,
+              exhibitIds: [...collection.exhibitIds, isAddingToCollection]
+          };
+          await db.updateCollection(updatedCollection);
+          
+          // Optimistic update
+          setCollections(prev => prev.map(c => c.id === collectionId ? updatedCollection : c));
+      }
+      setIsAddingToCollection(null);
   };
 
   const filteredExhibits = exhibits.filter(e => {
@@ -334,6 +353,18 @@ export default function App() {
                     exhibit={selectedExhibit} theme={theme} onBack={() => setView('FEED')} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toISOString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onFollow={handleFollow} onMessage={(u) => { setViewedProfileUsername(u); setView('DIRECT_CHAT'); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false} onAddToCollection={(id) => setIsAddingToCollection(id)}
                 />
             )}
+            
+            {view === 'COLLECTION_DETAIL' && selectedCollection && (
+                <CollectionDetailPage
+                    collection={selectedCollection}
+                    artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))}
+                    theme={theme}
+                    onBack={() => setView('FEED')}
+                    onExhibitClick={handleExhibitClick}
+                    onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }}
+                    currentUser={user?.username || ''}
+                />
+            )}
 
             {view === 'DIRECT_CHAT' && user && viewedProfileUsername && (
                 <DirectChat 
@@ -359,6 +390,42 @@ export default function App() {
             )}
 
         </main>
+        
+        {/* ADD TO COLLECTION MODAL */}
+        {isAddingToCollection && user && (
+            <div className="fixed inset-0 z-[2000] bg-black/80 flex items-center justify-center p-4">
+                <div className={`w-full max-w-md p-6 rounded-2xl border ${theme === 'dark' ? 'bg-dark-surface border-white/10' : 'bg-white border-black/10'}`}>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-pixel text-sm uppercase flex items-center gap-2"><FolderPlus size={16} /> Добавить в коллекцию</h3>
+                        <button onClick={() => setIsAddingToCollection(null)} className="opacity-50 hover:opacity-100"><X size={20}/></button>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-[60vh] overflow-y-auto mb-4 scrollbar-hide">
+                        {collections.filter(c => c.owner === user.username).length === 0 ? (
+                            <div className="text-center py-8 opacity-50 font-mono text-xs">Нет коллекций</div>
+                        ) : (
+                            collections.filter(c => c.owner === user.username).map(col => {
+                                const isAdded = col.exhibitIds.includes(isAddingToCollection);
+                                return (
+                                    <button 
+                                        key={col.id} 
+                                        onClick={() => handleAddItemToCollection(col.id)}
+                                        disabled={isAdded}
+                                        className={`w-full text-left p-4 rounded-xl border flex items-center justify-between transition-all ${isAdded ? 'border-green-500/50 bg-green-500/10 opacity-50 cursor-default' : 'border-white/5 hover:bg-white/5 hover:border-white/20'}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded bg-gray-800 overflow-hidden"><img src={col.coverImage} className="w-full h-full object-cover" /></div>
+                                            <span className="font-pixel text-xs">{col.title}</span>
+                                        </div>
+                                        {isAdded && <Check size={16} className="text-green-500" />}
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
         
         {view !== 'AUTH' && (
           <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">
