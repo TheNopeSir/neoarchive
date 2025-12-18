@@ -172,6 +172,10 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                     <span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.following?.length || 0}</span>
                                     <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Following</span>
                                 </button>
+                                <button onClick={onViewHallOfFame} className="flex flex-col items-center md:items-start group">
+                                    <Trophy size={18} className="group-hover:text-yellow-500 transition-colors" />
+                                    <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Achievements</span>
+                                </button>
                             </div>
 
                             {profileUser.status && (

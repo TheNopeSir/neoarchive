@@ -57,7 +57,7 @@ export default function App() {
   // Social list state
   const [socialListType, setSocialListType] = useState<'followers' | 'following'>('followers');
 
-  // New Item States (Artifact/Collection Creation)
+  // New Item States
   const [newArtifact, setNewArtifact] = useState<Partial<Exhibit>>({ category: DefaultCategory.PHONES, specs: {}, imageUrls: [] });
   const [newCollection, setNewCollection] = useState<Partial<Collection>>({ exhibitIds: [] });
 
@@ -322,6 +322,10 @@ export default function App() {
                 </div>
             )}
 
+            {view === 'HALL_OF_FAME' && user && (
+                <HallOfFame theme={theme} achievements={user.achievements} onBack={() => setView('USER_PROFILE')} />
+            )}
+
             {view === 'ACTIVITY' && user && (
                 <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => setView('DIRECT_CHAT')} />
             )}
@@ -330,13 +334,8 @@ export default function App() {
                 <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => setView('FEED')} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onLike={handleLike} />
             )}
 
-            {view === 'HALL_OF_FAME' && user && (
-                <HallOfFame theme={theme} achievements={user.achievements} onBack={() => setView('USER_PROFILE')} />
-            )}
-
         </main>
         
-        {/* Mobile Navigation Bar - Labels Removed */}
         {view !== 'AUTH' && (
           <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">
               <button onClick={() => setView('FEED')} className={`p-2 transition-all ${view === 'FEED' ? 'text-green-500 scale-125' : 'opacity-40'}`}><LayoutGrid size={24} /></button>
