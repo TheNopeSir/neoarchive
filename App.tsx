@@ -126,7 +126,6 @@ export default function App() {
     await db.updateExhibit(updated);
   };
 
-  // Restore Dual Section Feed Logic
   const filteredExhibits = exhibits.filter(e => {
       if (e.isDraft) return false;
       if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
@@ -326,10 +325,18 @@ export default function App() {
             {view === 'ACTIVITY' && user && (
                 <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => setView('DIRECT_CHAT')} />
             )}
+            
+            {view === 'MY_COLLECTION' && user && (
+                <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => setView('FEED')} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onLike={handleLike} />
+            )}
+
+            {view === 'HALL_OF_FAME' && user && (
+                <HallOfFame theme={theme} achievements={user.achievements} onBack={() => setView('USER_PROFILE')} />
+            )}
 
         </main>
         
-        {/* Fixed Mobile Navigation - Restored UI with no labels */}
+        {/* Mobile Navigation Bar - Labels Removed */}
         {view !== 'AUTH' && (
           <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">
               <button onClick={() => setView('FEED')} className={`p-2 transition-all ${view === 'FEED' ? 'text-green-500 scale-125' : 'opacity-40'}`}><LayoutGrid size={24} /></button>

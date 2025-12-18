@@ -22,7 +22,6 @@ interface UserProfileViewProps {
     onChat: (username: string) => void;
     onExhibitClick: (item: Exhibit) => void;
     onLike: (id: string, e?: React.MouseEvent) => void;
-    onFavorite: (id: string, e?: React.MouseEvent) => void;
     onAuthorClick: (author: string) => void;
     onCollectionClick: (col: Collection) => void;
     onShareCollection: (col: Collection) => void;
@@ -46,6 +45,7 @@ interface UserProfileViewProps {
     guestbookInputRef: React.RefObject<HTMLInputElement>;
     profileTab: 'ARTIFACTS' | 'COLLECTIONS';
     setProfileTab: (v: 'ARTIFACTS' | 'COLLECTIONS') => void;
+    onOpenSocialList: (username: string, type: 'followers' | 'following') => void;
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({ 
@@ -54,7 +54,8 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     onCollectionClick, onShareCollection, onViewHallOfFame, onGuestbookPost, 
     isEditingProfile, setIsEditingProfile, editTagline, setEditTagline, editStatus, setEditStatus, editTelegram, setEditTelegram, 
     editPassword, setEditPassword,
-    onSaveProfile, onProfileImageUpload, guestbookInput, setGuestbookInput, guestbookInputRef, profileTab, setProfileTab, refreshData
+    onSaveProfile, onProfileImageUpload, guestbookInput, setGuestbookInput, guestbookInputRef, profileTab, setProfileTab, refreshData,
+    onOpenSocialList
 }) => {
     const profileUser = db.getFullDatabase().users.find(u => u.username === viewedProfileUsername) || { 
         username: viewedProfileUsername, 
@@ -76,7 +77,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [editEntryText, setEditEntryText] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [showSocialModal, setShowSocialModal] = useState<'followers' | 'following' | null>(null);
 
     const handleEditEntry = (entry: GuestbookEntry) => {
         setEditingEntryId(entry.id);
@@ -150,7 +150,12 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                         </div>
                     ) : (
                         <>
-                            <h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2>
+                            <div className="flex items-center justify-center md:justify-start gap-4">
+                                <h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2>
+                                {isCurrentUser && (
+                                    <button onClick={onLogout} className="text-red-500 opacity-50 hover:opacity-100" title="ВЫХОД"><LogOut size={18}/></button>
+                                )}
+                            </div>
                             <p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">
                                 {profileUser.tagline}
                                 {isCurrentUser && (
@@ -159,13 +164,13 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                             </p>
                             
                             <div className="flex items-center justify-center md:justify-start gap-6 pt-2 pb-2">
-                                <button onClick={() => setShowSocialModal('followers')} className="flex flex-col items-center md:items-start">
-                                    <span className="font-pixel text-lg leading-none">{profileUser.followers?.length || 0}</span>
-                                    <span className="text-[9px] font-pixel opacity-50 uppercase">Followers</span>
+                                <button onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="flex flex-col items-center md:items-start group">
+                                    <span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.followers?.length || 0}</span>
+                                    <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Followers</span>
                                 </button>
-                                <button onClick={() => setShowSocialModal('following')} className="flex flex-col items-center md:items-start">
-                                    <span className="font-pixel text-lg leading-none">{profileUser.following?.length || 0}</span>
-                                    <span className="text-[9px] font-pixel opacity-50 uppercase">Following</span>
+                                <button onClick={() => onOpenSocialList(profileUser.username, 'following')} className="flex flex-col items-center md:items-start group">
+                                    <span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.following?.length || 0}</span>
+                                    <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Following</span>
                                 </button>
                             </div>
 
@@ -188,17 +193,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 </div>
             </div>
 
-            {/* Achievements Section */}
-            {profileUser.achievements && profileUser.achievements.length > 0 && (
-                <div className="flex gap-2 flex-wrap justify-center md:justify-start">
-                    {profileUser.achievements.filter(a => a.unlocked).map(achievement => { 
-                        const b = BADGE_CONFIG[achievement.id as keyof typeof BADGE_CONFIG]; 
-                        if(!b) return null; 
-                        return (<div key={achievement.id} className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-white ${b.color} flex items-center gap-2 shadow-lg`} title={b.desc}><b.icon size={12}/> {b.label}</div>) 
-                    })}
-                </div>
-            )}
-
             <div className="flex gap-4 border-b border-gray-500/30">
                 <button onClick={() => setProfileTab('ARTIFACTS')} className={`pb-2 font-pixel text-xs ${profileTab === 'ARTIFACTS' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50'}`}>АРТЕФАКТЫ</button>
                 <button onClick={() => setProfileTab('COLLECTIONS')} className={`pb-2 font-pixel text-xs ${profileTab === 'COLLECTIONS' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50'}`}>КОЛЛЕКЦИИ</button>
@@ -211,31 +205,63 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 {profileTab === 'COLLECTIONS' && profileCollections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
             </div>
 
-            {/* Social Modal */}
-            {showSocialModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in">
-                    <div className={`w-full max-w-sm rounded-2xl border-2 p-6 ${theme === 'dark' ? 'bg-black border-dark-dim' : 'bg-white border-light-dim'}`}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="font-pixel text-sm uppercase tracking-widest">{showSocialModal === 'followers' ? 'ПОДПИСЧИКИ' : 'ПОДПИСКИ'}</h2>
-                            <button onClick={() => setShowSocialModal(null)}><X size={20}/></button>
-                        </div>
-                        <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
-                            {(showSocialModal === 'followers' ? profileUser.followers : profileUser.following).map(name => (
-                                <div key={name} className="flex items-center justify-between p-2 rounded hover:bg-white/5 transition-all">
-                                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => { onAuthorClick(name); setShowSocialModal(null); }}>
-                                        <img src={getUserAvatar(name)} className="w-8 h-8 rounded-full border border-white/10" />
-                                        <span className="font-pixel text-xs">@{name}</span>
-                                    </div>
-                                    <button onClick={() => { onChat(name); setShowSocialModal(null); }} className="p-2 opacity-50 hover:opacity-100"><MessageSquare size={14}/></button>
+            <div className="pt-8 border-t border-dashed border-gray-500/30">
+                <h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
+                <div className="space-y-4 mb-4">
+                    {guestbook.filter(g => g.targetUser === profileUser.username).map(entry => {
+                        const canModify = user && (user.username === entry.author || isCurrentUser);
+                        const isEditing = editingEntryId === entry.id;
+
+                        return (
+                            <div key={entry.id} className="p-3 border rounded border-gray-500/30 text-xs relative group">
+                                <div className="flex justify-between mb-1">
+                                    <span className="font-bold font-pixel cursor-pointer" onClick={() => onAuthorClick(entry.author)}>@{entry.author}</span>
+                                    <span className="opacity-50">{entry.timestamp}</span>
                                 </div>
-                            ))}
-                            {(showSocialModal === 'followers' ? profileUser.followers : profileUser.following).length === 0 && (
-                                <div className="text-center py-10 opacity-30 font-mono text-xs">ПУСТО</div>
-                            )}
-                        </div>
-                    </div>
+                                
+                                {isEditing ? (
+                                    <div className="flex gap-2 my-2">
+                                        <input 
+                                            value={editEntryText} 
+                                            onChange={(e) => setEditEntryText(e.target.value)} 
+                                            className="flex-1 bg-transparent border-b p-1 font-mono text-xs focus:outline-none"
+                                            autoFocus
+                                        />
+                                        <button onClick={() => handleSaveEntry(entry)} className="text-green-500"><Check size={14}/></button>
+                                        <button onClick={() => setEditingEntryId(null)} className="text-red-500"><X size={14}/></button>
+                                    </div>
+                                ) : (
+                                    <p className="font-mono mb-2">{entry.text}</p>
+                                )}
+
+                                <div className="flex items-center gap-4">
+                                    <button onClick={() => { setGuestbookInput(`@${entry.author} `); guestbookInputRef.current?.focus(); }} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity">
+                                        <Reply size={10} /> ОТВЕТИТЬ
+                                    </button>
+                                    {canModify && !isEditing && (
+                                        <>
+                                            {user.username === entry.author && (
+                                                <button onClick={() => handleEditEntry(entry)} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity hover:Yellow-500">
+                                                    <Edit2 size={10} /> ПРАВКА
+                                                </button>
+                                            )}
+                                            <button onClick={() => handleDeleteEntry(entry.id)} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity hover:text-red-500">
+                                                <Trash2 size={10} /> УДАЛИТЬ
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
-            )}
+                {user && (
+                    <div className="flex gap-2">
+                        <input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className="flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none" />
+                        <button onClick={onGuestbookPost} className="p-2 border rounded hover:bg-white/10"><Send size={16} /></button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
