@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { Heart, Eye } from 'lucide-react';
+import React, { useState } from 'react';
+import { Heart, Eye, Image as ImageIcon } from 'lucide-react';
 import { Exhibit } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
 import { getUserAvatar } from '../services/storageService';
@@ -15,6 +15,7 @@ interface ExhibitCardProps {
 }
 
 const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked, onLike, onAuthorClick }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
   const tier = getArtifactTier(item);
   const config = TIER_CONFIG[tier];
   const Icon = config.icon;
@@ -28,7 +29,22 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
       } ${isCursed ? 'animate-pulse' : ''}`}
     >
       <div className="relative aspect-square overflow-hidden bg-black/20">
-        <img src={item.imageUrls[0]} alt={item.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+        {/* Skeleton / Placeholder */}
+        {!isLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-800 animate-pulse">
+                <ImageIcon size={24} className="text-white/20" />
+            </div>
+        )}
+        
+        {/* Lazy Loaded Image */}
+        <img 
+            src={item.imageUrls[0]} 
+            alt={item.title} 
+            loading="lazy"
+            onLoad={() => setIsLoaded(true)}
+            className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
+        />
+        
         <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-black/60 backdrop-blur-md text-[8px] font-pixel text-white border border-white/10 uppercase">{item.category}</div>
         <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-lg flex items-center gap-1 text-[8px] font-pixel font-bold shadow-xl border border-white/10 ${config.badge}`}>
             <Icon size={10} /> {config.name}

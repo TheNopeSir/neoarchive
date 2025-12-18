@@ -20,7 +20,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState('');
-  const [tagline, setTagline] = useState('');
+  // Tagline removed from state for registration as it's not required
   const [rememberMe, setRememberMe] = useState(true);
   const telegramWrapperRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
@@ -53,7 +53,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
       }
   }, [step]);
 
-  const resetForm = () => { setError(''); setInfoMessage(''); setShowRecoverOption(false); setPassword(''); setUsername(''); setTagline(''); setShowPassword(false); };
+  const resetForm = () => { setError(''); setInfoMessage(''); setShowRecoverOption(false); setPassword(''); setUsername(''); setShowPassword(false); };
   const generateSecurePassword = () => {
       const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
       let pass = "";
@@ -63,16 +63,30 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
       e.preventDefault(); setIsLoading(true); setError(''); setInfoMessage('');
-      try { const user = await db.loginUser(email, password); onLogin(user, rememberMe); } 
+      try { const user = await db.loginUser(email.toLowerCase(), password); onLogin(user, rememberMe); } 
       catch (err: any) { setError(err.message || 'ОШИБКА АВТОРИЗАЦИИ'); setIsLoading(false); }
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || !username) { setError('ЗАПОЛНИТЕ ОБЯЗАТЕЛЬНЫЕ ПОЛЯ'); return; }
+    if (!email || !password || !username) { setError('ЗАПОЛНИТЕ ВСЕ ПОЛЯ'); return; }
+    
     setIsLoading(true); setError(''); setShowRecoverOption(false);
-    try { await db.registerUser(username, password, tagline || 'User', email); setInfoMessage('ПИСЬМО ОТПРАВЛЕНО'); setStep('LOGIN'); setPassword(''); } 
-    catch (err: any) { setError(err.message || "ОШИБКА РЕГИСТРАЦИИ"); if (err.message?.includes('заняты')) { setShowRecoverOption(true); setInfoMessage("Email занят"); } } 
+    
+    // Always lowercase email for consistency
+    const cleanEmail = email.toLowerCase();
+    const defaultTagline = 'Новый пользователь';
+
+    try { 
+        await db.registerUser(username, password, defaultTagline, cleanEmail); 
+        setInfoMessage('ПИСЬМО ОТПРАВЛЕНО'); 
+        setStep('LOGIN'); 
+        setPassword(''); 
+    } 
+    catch (err: any) { 
+        setError(err.message || "ОШИБКА РЕГИСТРАЦИИ"); 
+        if (err.message?.includes('заняты')) { setShowRecoverOption(true); setInfoMessage("Email или Никнейм занят"); } 
+    } 
     finally { setIsLoading(false); }
   };
 
@@ -81,7 +95,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     if (!email) { setError('УКАЖИТЕ EMAIL'); return; }
     setIsLoading(true); setError(''); setInfoMessage('');
     try {
-        await db.recoverPassword(email);
+        await db.recoverPassword(email.toLowerCase());
         setInfoMessage('НОВЫЙ ПАРОЛЬ ОТПРАВЛЕН НА EMAIL');
         setStep('LOGIN');
     } catch (err: any) {
@@ -127,7 +141,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
             <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4 w-full">
                  {infoMessage && <div className="text-green-500 text-[10px] font-mono text-center mb-2">{infoMessage}</div>}
                  <div className="flex items-center gap-2 border-b p-3 border-white/20">
-                    <User size={16} className="text-white/50" /><input value={email} onChange={e => setEmail(e.target.value)} type="text" className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="LOGIN / EMAIL" required />
+                    <User size={16} className="text-white/50" /><input value={email} onChange={e => setEmail(e.target.value)} type="text" className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="EMAIL" required />
                  </div>
                  <div className="flex items-center gap-2 border-b p-3 border-white/20">
                     <Lock size={16} className="text-white/50" />
@@ -151,13 +165,17 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
         return (
             <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-4 w-full">
                 <div className="flex items-center gap-2 border-b p-2 border-white/20"><Mail size={16} className="text-white/50"/><input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="EMAIL" required /></div>
+                
+                <div className="flex items-center gap-2 border-b p-2 border-white/20"><User size={16} className="text-white/50"/><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="NICKNAME" required /></div>
+
                 <div className="flex items-center gap-2 border-b p-2 border-white/20">
                     <Lock size={16} className="text-white/50" />
                     <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="PASS" required />
                     <button type="button" onClick={generateSecurePassword} className="opacity-50 hover:opacity-100 text-white"><Wand2 size={14} /></button>
                 </div>
-                <div className="flex items-center gap-2 border-b p-2 border-white/20"><User size={16} className="text-white/50"/><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="ID" required /></div>
+                
                 {error && <div className="text-red-500 text-[10px] font-mono text-center">{error}</div>}
+                
                 <button type="submit" disabled={isLoading} className="mt-2 py-3 font-bold font-pixel text-xs uppercase bg-white text-black hover:bg-gray-200">{isLoading ? '...' : 'СОЗДАТЬ'}</button>
                 <div className="flex justify-between items-center">
                     <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-[10px] font-mono opacity-50 hover:underline text-white">НАЗАД</button>

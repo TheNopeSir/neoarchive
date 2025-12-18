@@ -217,16 +217,16 @@ const sendConfirmationEmail = async (email, username, confirmationLink) => {
 
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
-
+    // Ensure email match is case insensitive
     try {
         let result = await query(
-            `SELECT * FROM users WHERE (data->>'email' = $1 OR username = $1) AND data->>'password' = $2`, 
+            `SELECT * FROM users WHERE (LOWER(data->>'email') = LOWER($1) OR username = $1) AND data->>'password' = $2`, 
             [email, password]
         );
 
         if (result.rows.length === 0) {
             const pendingCheck = await query(
-                `SELECT * FROM pending_users WHERE email = $1 OR username = $1`,
+                `SELECT * FROM pending_users WHERE LOWER(email) = LOWER($1) OR username = $1`,
                 [email]
             );
             
@@ -280,6 +280,7 @@ app.post('/api/auth/telegram', async (req, res) => {
             avatarUrl: photo_url || `https://ui-avatars.com/api/?name=${first_name}&background=0088cc&color=fff`,
             joinedDate: new Date().toLocaleString('ru-RU'),
             following: [],
+            followers: [], // Ensure followers array exists
             achievements: ['HELLO_WORLD'],
             isAdmin: false,
             telegram: username,
@@ -299,7 +300,7 @@ app.post('/api/auth/telegram', async (req, res) => {
 app.post('/api/auth/recover', async (req, res) => {
     const { email } = req.body;
     try {
-        const result = await query(`SELECT * FROM users WHERE data->>'email' = $1`, [email]);
+        const result = await query(`SELECT * FROM users WHERE LOWER(data->>'email') = LOWER($1)`, [email]);
         if (result.rows.length === 0) {
             await new Promise(r => setTimeout(r, 1000));
             return res.json({ success: true, message: "Если email существует, инструкции отправлены." });
@@ -322,31 +323,35 @@ app.post('/api/auth/recover', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
     const { username, email, password, data } = req.body;
     const token = crypto.randomBytes(32).toString('hex');
-
+    const cleanEmail = email.toLowerCase();
+    
     try {
-        // 1. Check existing USERS
+        // 1. Check existing USERS (Case Insensitive Email)
         const check = await query(
-            `SELECT 1 FROM users WHERE data->>'username' = $1 OR data->>'email' = $2`,
-            [username, email]
+            `SELECT 1 FROM users WHERE username = $1 OR LOWER(data->>'email') = $2`,
+            [username, cleanEmail]
         );
         if (check.rows.length > 0) {
             return res.status(400).json({ success: false, error: "Пользователь или Email уже заняты" });
         }
 
         // 2. Save to PENDING table
+        // Ensure data includes array initialization
+        const userData = { ...data, followers: [], following: [] };
+
         await query(
             `INSERT INTO pending_users (token, username, email, data, created_at) VALUES ($1, $2, $3, $4, NOW())`,
-            [token, username, email, data]
+            [token, username, cleanEmail, userData]
         );
 
-        console.log(`[Register] Pending user created: ${username} (${email}).`);
+        console.log(`[Register] Pending user created: ${username} (${cleanEmail}).`);
 
         // 3. Send Email
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const confirmationLink = `${baseUrl}/api/auth/verify?token=${token}`;
         
         try {
-            await sendConfirmationEmail(email, username, confirmationLink);
+            await sendConfirmationEmail(cleanEmail, username, confirmationLink);
         } catch (mailError) {
              console.error("❌ Registration Failed: SMTP Error", mailError);
              await query(`DELETE FROM pending_users WHERE token = $1`, [token]);

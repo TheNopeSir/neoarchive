@@ -237,19 +237,30 @@ export const registerUser = async (username: string, password: string, tagline: 
 
 export const toggleFollow = async (currentUsername: string, targetUsername: string) => {
     const current = cache.users.find(u => u.username === currentUsername);
-    const target = cache.users.find(u => u.username === targetUsername);
+    let target = cache.users.find(u => u.username === targetUsername);
+
+    // If target isn't found in cache, we might need to fetch them specifically, 
+    // but for now, rely on cache. If target isn't found, we can't update them.
     if (!current || !target) return;
+
+    // Ensure arrays exist
+    if (!current.following) current.following = [];
+    if (!target.followers) target.followers = [];
+
     const isFollowing = current.following.includes(targetUsername);
+    
     if (isFollowing) {
         current.following = current.following.filter(u => u !== targetUsername);
-        target.followers = (target.followers || []).filter(u => u !== currentUsername);
+        target.followers = target.followers.filter(u => u !== currentUsername);
     } else {
         current.following = [...current.following, targetUsername];
-        target.followers = [...(target.followers || []), currentUsername];
+        target.followers = [...target.followers, currentUsername];
     }
+
     await saveToLocalCache();
-    apiCall('/users/update', 'POST', current).catch(()=>{});
-    apiCall('/users/update', 'POST', target).catch(()=>{});
+    // Sync both user profiles to server
+    apiCall('/users/update', 'POST', current).catch((e) => console.warn('Sync follow current failed', e));
+    apiCall('/users/update', 'POST', target).catch((e) => console.warn('Sync follow target failed', e));
 };
 
 export const updateUserProfile = async (user: UserProfile) => {

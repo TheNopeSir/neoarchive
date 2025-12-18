@@ -67,14 +67,24 @@ export default function App() {
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
   // --- SWIPE LOGIC ---
+  // Flow: USER_PROFILE <-> ACTIVITY <-> FEED <-> MY_COLLECTION
   const swipeHandlers = useSwipe({
     onSwipeLeft: () => {
-      if (view === 'MY_COLLECTION') setView('FEED');
-      else if (view === 'FEED') setView('ACTIVITY');
+      // Moving Right in flow
+      if (view === 'USER_PROFILE') setView('ACTIVITY');
+      else if (view === 'ACTIVITY') setView('FEED');
+      else if (view === 'FEED') setView('MY_COLLECTION');
     },
     onSwipeRight: () => {
-      if (view === 'ACTIVITY') setView('FEED');
-      else if (view === 'FEED') setView('MY_COLLECTION');
+       // Moving Left in flow
+      if (view === 'MY_COLLECTION') setView('FEED');
+      else if (view === 'FEED') setView('ACTIVITY');
+      else if (view === 'ACTIVITY') {
+          if (user) {
+              setViewedProfileUsername(user.username);
+              setView('USER_PROFILE');
+          }
+      }
     },
   });
 
@@ -246,7 +256,9 @@ export default function App() {
     );
   }
 
-  const swipeProps = (view === 'FEED' || view === 'MY_COLLECTION' || view === 'ACTIVITY') ? swipeHandlers : {};
+  // Enable swipes on main views, disable on "modal-like" views
+  const isMainView = ['FEED', 'MY_COLLECTION', 'ACTIVITY', 'USER_PROFILE'].includes(view);
+  const swipeProps = isMainView ? swipeHandlers : {};
 
   return (
     <div 
