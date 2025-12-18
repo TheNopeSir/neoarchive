@@ -1,7 +1,6 @@
 
-import { Exhibit, UserProfile, Collection, Notification, Message, TierType } from './types';
+import { Exhibit, TierType } from './types';
 import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle, Ghost, Terminal, Upload, Star, MessageSquare, Layers } from 'lucide-react';
-import React from 'react';
 
 export const DefaultCategory = {
   PHONES: 'ТЕЛЕФОНЫ',
@@ -48,7 +47,6 @@ export const BADGE_CONFIG = {
     'COLLECTOR': { label: 'ARCHIVIST', desc: 'Создано коллекций', color: 'bg-orange-500', icon: Layers, target: 3 }
 };
 
-// Added alias for BADGE_CONFIG to fix imports in other components
 export const BADGES = BADGE_CONFIG;
 
 export const STATUS_OPTIONS = {

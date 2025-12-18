@@ -1,9 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft,
-  MessageSquare, Send, Image as ImageIcon, Plus, Trash2, Edit3, ChevronRight, BookmarkPlus, Camera, Layers, Archive, History,
-  Check, Wand2, Eye, EyeOff, Shield, Settings, Info, Trophy, Save
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -21,20 +19,12 @@ import SEO from './components/SEO';
 import HallOfFame from './components/HallOfFame';
 import CollectionDetailPage from './components/CollectionDetailPage';
 import DirectChat from './components/DirectChat';
+import CreateArtifactView from './components/CreateArtifactView';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry } from './types';
-import { DefaultCategory, calculateArtifactScore, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS } from './constants';
-
-const SkeletonCard = () => (
-    <div className="bg-white/5 border border-white/5 rounded-2xl overflow-hidden animate-pulse">
-        <div className="aspect-square bg-white/10" />
-        <div className="p-4 space-y-3">
-            <div className="h-4 w-3/4 bg-white/10 rounded" />
-            <div className="h-3 w-1/2 bg-white/10 rounded" />
-        </div>
-    </div>
-);
+import { DefaultCategory, calculateArtifactScore } from './constants';
+import useSwipe from './hooks/useSwipe';
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -63,9 +53,6 @@ export default function App() {
 
   // Social/Edit State
   const [socialListType, setSocialListType] = useState<'followers' | 'following'>('followers');
-  const [newArtifact, setNewArtifact] = useState<Partial<Exhibit>>({ title: '', description: '', category: DefaultCategory.PHONES, specs: {}, imageUrls: [] });
-  const [newCollection, setNewCollection] = useState<Partial<Collection>>({ title: '', description: '', exhibitIds: [] });
-  const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
   const [isAddingToCollection, setIsAddingToCollection] = useState<string | null>(null);
 
   // Profile states
@@ -77,6 +64,18 @@ export default function App() {
   const [profileTab, setProfileTab] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
   const [guestbookInput, setGuestbookInput] = useState('');
   const guestbookInputRef = useRef<HTMLInputElement>(null);
+
+  // --- SWIPE LOGIC ---
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => {
+      if (view === 'MY_COLLECTION') setView('FEED');
+      else if (view === 'FEED') setView('ACTIVITY');
+    },
+    onSwipeRight: () => {
+      if (view === 'ACTIVITY') setView('FEED');
+      else if (view === 'FEED') setView('MY_COLLECTION');
+    },
+  });
 
   const refreshData = useCallback(() => {
     const data = db.getFullDatabase();
@@ -96,12 +95,17 @@ export default function App() {
     const init = async () => {
       try {
           const activeUser = await db.initializeDatabase();
-          if (activeUser) { setUser(activeUser); setView('FEED'); } 
+          if (activeUser) { 
+              setUser(activeUser); 
+              setView('FEED'); 
+              refreshData();
+          } 
           else { setView('AUTH'); }
-      } catch (e) { setView('AUTH'); } 
+      } catch (e) { 
+          setView('AUTH'); 
+      } 
       finally { 
           clearTimeout(safetyTimer); 
-          refreshData();
           setIsInitializing(false); 
           setTimeout(() => setShowSplash(false), 300); 
       }
@@ -113,8 +117,8 @@ export default function App() {
       if (isLoadingMore || !hasMore || feedMode !== 'ARTIFACTS') return;
       setIsLoadingMore(true);
       const nextPage = feedPage + 1;
-      const items = await db.loadFeedBatch(nextPage, 10);
-      if (items.length < 10) setHasMore(false);
+      const items = await db.loadFeedBatch(nextPage, 12);
+      if (items.length < 12) setHasMore(false);
       setFeedPage(nextPage);
       refreshData();
       setIsLoadingMore(false);
@@ -122,7 +126,7 @@ export default function App() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 800) {
         loadMore();
       }
     };
@@ -161,7 +165,7 @@ export default function App() {
   };
 
   const filteredExhibits = exhibits.filter(e => {
-      if (e.isDraft) return false;
+      if (e.isDraft && e.owner !== user?.username) return false;
       if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
       if (searchQuery && !e.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
@@ -170,41 +174,43 @@ export default function App() {
   const followingExhibits = user ? filteredExhibits.filter(e => user.following.includes(e.owner)) : [];
   const recommendedExhibits = filteredExhibits.sort((a,b) => calculateArtifactScore(b, user?.preferences) - calculateArtifactScore(a, user?.preferences));
 
-  const handleSaveArtifact = async (asDraft: boolean = false) => {
-      if (!user || !newArtifact.title) return;
-      const ex: Exhibit = { id: crypto.randomUUID(), title: newArtifact.title, description: newArtifact.description || '', category: newArtifact.category || DefaultCategory.MISC, subcategory: newArtifact.subcategory, imageUrls: newArtifact.imageUrls || [], owner: user.username, timestamp: new Date().toLocaleString(), likes: 0, likedBy: [], views: 0, specs: newArtifact.specs || {}, comments: [], isDraft: asDraft, quality: 'MINT' };
+  const handleSaveArtifact = async (artifactData: Partial<Exhibit>) => {
+      if (!user || !artifactData.title) return;
+      const ex: Exhibit = { 
+        id: crypto.randomUUID(), 
+        title: artifactData.title, 
+        description: artifactData.description || '', 
+        category: artifactData.category || DefaultCategory.MISC, 
+        subcategory: artifactData.subcategory, 
+        imageUrls: artifactData.imageUrls || [], 
+        owner: user.username, 
+        timestamp: new Date().toISOString(), 
+        likes: 0, 
+        likedBy: [], 
+        views: 0, 
+        specs: artifactData.specs || {}, 
+        comments: [], 
+        isDraft: artifactData.isDraft, 
+        quality: 'MINT' 
+      };
       await db.saveExhibit(ex);
-      setNewArtifact({ title: '', description: '', category: DefaultCategory.PHONES, specs: {}, imageUrls: [] });
       setView('FEED');
       refreshData();
   };
 
-  const handleSaveCollection = async () => {
-    if (!user || !newCollection.title) return;
-    const c: Collection = { id: crypto.randomUUID(), title: newCollection.title, description: newCollection.description || '', owner: user.username, coverImage: newCollection.coverImage || 'https://images.unsplash.com/photo-1516245834210-c4c142787335?auto=format&fit=crop&w=800&q=80', exhibitIds: newCollection.exhibitIds || [], timestamp: new Date().toLocaleString() };
-    await db.saveCollection(c);
-    setNewCollection({ title: '', description: '', exhibitIds: [] });
-    setView('FEED');
-    refreshData();
-  };
-
-  const handleUpdateCollection = async () => {
-      if (!user || !editingCollection) return;
-      await db.updateCollection(editingCollection);
-      setEditingCollection(null);
-      setView('FEED');
+  const handleSendMessage = async (text: string) => {
+      if (!user || !viewedProfileUsername || !text.trim()) return;
+      const msg: Message = { 
+          id: crypto.randomUUID(), 
+          sender: user.username, 
+          receiver: viewedProfileUsername, 
+          text, 
+          timestamp: new Date().toISOString(), 
+          isRead: false 
+      };
+      setMessages(prev => [...prev, msg].sort((a,b) => a.timestamp.localeCompare(b.timestamp)));
+      await db.saveMessage(msg);
       refreshData();
-  };
-
-  const handleAddToCollection = async (colId: string) => {
-    if (!isAddingToCollection) return;
-    const col = collections.find(c => c.id === colId);
-    if (col && !col.exhibitIds.includes(isAddingToCollection)) {
-        const updated = { ...col, exhibitIds: [...col.exhibitIds, isAddingToCollection] };
-        await db.updateCollection(updated);
-        refreshData();
-    }
-    setIsAddingToCollection(null);
   };
 
   if (showSplash) {
@@ -220,8 +226,13 @@ export default function App() {
     );
   }
 
+  const swipeProps = (view === 'FEED' || view === 'MY_COLLECTION' || view === 'ACTIVITY') ? swipeHandlers : {};
+
   return (
-    <div className={`min-h-screen transition-colors duration-500 font-sans ${theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-900'} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}>
+    <div 
+        {...swipeProps}
+        className={`min-h-screen transition-colors duration-500 font-sans ${theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-900'} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}
+    >
         <SEO title="NeoArchive | Цифровая полка коллекционера" />
         <MatrixRain theme={theme} />
         <PixelSnow theme={theme} />
@@ -314,114 +325,29 @@ export default function App() {
                 </div>
             )}
 
+            {view === 'CREATE_ARTIFACT' && (
+              <CreateArtifactView theme={theme} onBack={() => setView('FEED')} onSave={handleSaveArtifact} />
+            )}
+
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
-                    exhibit={selectedExhibit} theme={theme} onBack={() => setView('FEED')} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toLocaleString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onFollow={handleFollow} onMessage={(u) => { setViewedProfileUsername(u); setView('DIRECT_CHAT'); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false} onAddToCollection={(id) => setIsAddingToCollection(id)}
+                    exhibit={selectedExhibit} theme={theme} onBack={() => setView('FEED')} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toISOString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onFollow={handleFollow} onMessage={(u) => { setViewedProfileUsername(u); setView('DIRECT_CHAT'); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false} onAddToCollection={(id) => setIsAddingToCollection(id)}
                 />
             )}
 
-            {view === 'CREATE_HUB' && (
-                <div className="max-w-xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
-                    <h2 className="text-2xl font-pixel font-bold mb-8 flex items-center gap-4"><PlusCircle size={32} className="text-green-500" /> СОЗДАНИЕ</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                         <div onClick={() => { setView('CREATE_ARTIFACT'); setNewArtifact({ title: '', description: '', category: DefaultCategory.PHONES, specs: {}, imageUrls: [] }); }} className="p-8 border-2 border-white/10 rounded-3xl bg-white/5 hover:border-green-500 hover:bg-green-500/5 transition-all cursor-pointer group flex flex-col items-center text-center">
-                             <ImageIcon size={48} className="mb-4 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all text-green-500" />
-                             <h3 className="font-pixel text-sm mb-2">АРТЕФАКТ</h3>
-                             <p className="font-mono text-[10px] opacity-40">ОДИНОЧНЫЙ ЭКСПОНАТ В БАЗЕ</p>
-                         </div>
-                         <div onClick={() => { setView('CREATE_COLLECTION'); setNewCollection({ title: '', description: '', exhibitIds: [] }); }} className="p-8 border-2 border-white/10 rounded-3xl bg-white/5 hover:border-blue-500 hover:bg-blue-500/5 transition-all cursor-pointer group flex flex-col items-center text-center">
-                             <FolderPlus size={48} className="mb-4 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all text-blue-500" />
-                             <h3 className="font-pixel text-sm mb-2">КОЛЛЕКЦИЯ</h3>
-                             <p className="font-mono text-[10px] opacity-40">ТЕМАТИЧЕСКАЯ ГРУППА АРТЕФАКТОВ</p>
-                         </div>
-                    </div>
-                </div>
-            )}
-
-            {view === 'CREATE_ARTIFACT' && (
-                <div className="max-w-xl mx-auto space-y-8 pb-20">
-                    <button onClick={() => setView('CREATE_HUB')} className="flex items-center gap-2 opacity-50 font-pixel text-[10px] uppercase hover:opacity-100"><ArrowLeft size={14}/> НАЗАД</button>
-                    <div className="flex items-center gap-4"><div className="w-12 h-12 bg-green-500/10 text-green-500 flex items-center justify-center rounded-2xl"><ImageIcon size={24}/></div><div><h2 className="font-pixel text-lg font-black uppercase">НОВЫЙ АРТЕФАКТ</h2><p className="text-[10px] font-mono opacity-40">ЗАГРУЗКА ДАННЫХ В СЕТЬ</p></div></div>
-                    <div className="space-y-6">
-                        <div className="group relative border-2 border-dashed border-white/10 rounded-3xl p-10 flex flex-col items-center justify-center bg-white/5 hover:border-green-500 transition-all cursor-pointer">
-                            <input type="file" multiple accept="image/*" onChange={async (e) => { if(e.target.files && user) { const b64s = await Promise.all(Array.from(e.target.files).map(f => db.fileToBase64(f))); setNewArtifact(p => ({ ...p, imageUrls: [...(p.imageUrls || []), ...b64s] })); } }} className="absolute inset-0 opacity-0 cursor-pointer" />
-                            <Camera size={40} className="mb-4 opacity-20 group-hover:opacity-100 transition-all text-green-500" />
-                            <p className="font-pixel text-[10px] tracking-widest opacity-50 uppercase">ЗАГРУЗИТЬ ИЗОБРАЖЕНИЯ</p>
-                        </div>
-                        <input value={newArtifact.title} onChange={e => setNewArtifact(p => ({ ...p, title: e.target.value }))} placeholder="НАЗВАНИЕ ЭКСПОНАТА" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 font-pixel text-xs focus:border-green-500 outline-none" />
-                        <textarea value={newArtifact.description} onChange={e => setNewArtifact(p => ({ ...p, description: e.target.value }))} placeholder="ПОДРОБНОЕ ОПИСАНИЕ..." rows={4} className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 font-mono text-sm focus:border-green-500 outline-none resize-none" />
-                        <div className="grid grid-cols-2 gap-4">
-                            <select value={newArtifact.category} onChange={e => setNewArtifact(p => ({ ...p, category: e.target.value }))} className="bg-white/5 border border-white/10 rounded-2xl px-6 py-4 font-pixel text-[10px] outline-none">
-                                {Object.values(DefaultCategory).map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                            </select>
-                            <select value={newArtifact.condition} onChange={e => setNewArtifact(p => ({ ...p, condition: e.target.value }))} className="bg-white/5 border border-white/10 rounded-2xl px-6 py-4 font-pixel text-[10px] outline-none">
-                                <option value="">СОСТОЯНИЕ</option>
-                                {(CATEGORY_CONDITIONS[newArtifact.category || DefaultCategory.MISC] || ['НОВЫЙ', 'БУ']).map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        <div className="flex gap-4">
-                            <button onClick={() => handleSaveArtifact(true)} className="flex-1 py-4 border border-white/10 rounded-2xl font-pixel text-[10px] uppercase hover:bg-white/5 transition-all">В ЧЕРНОВИК</button>
-                            <button onClick={() => handleSaveArtifact(false)} className="flex-[2] py-4 bg-green-500 text-black rounded-2xl font-pixel text-[10px] uppercase font-black">ОПУБЛИКОВАТЬ</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {view === 'EDIT_COLLECTION' && editingCollection && (
-                <div className="max-w-xl mx-auto space-y-8 pb-20">
-                    <button onClick={() => setView('COLLECTION_DETAIL')} className="flex items-center gap-2 opacity-50 font-pixel text-[10px] uppercase hover:opacity-100"><ArrowLeft size={14}/> ОТМЕНА</button>
-                    <div className="flex items-center gap-4"><div className="w-12 h-12 bg-purple-500/10 text-purple-500 flex items-center justify-center rounded-2xl"><Edit3 size={24}/></div><div><h2 className="font-pixel text-lg font-black uppercase">РЕДАКТОР КОЛЛЕКЦИИ</h2><p className="text-[10px] font-mono opacity-40">ОБНОВЛЕНИЕ ДАННЫХ УЗЛА</p></div></div>
-                    <div className="space-y-6">
-                        <input value={editingCollection.title} onChange={e => setEditingCollection(p => p ? ({ ...p, title: e.target.value }) : null)} placeholder="ЗАГОЛОВОК КОЛЛЕКЦИИ" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 font-pixel text-xs focus:border-purple-500 outline-none" />
-                        <textarea value={editingCollection.description} onChange={e => setEditingCollection(p => p ? ({ ...p, description: e.target.value }) : null)} placeholder="ОПИСАНИЕ..." rows={3} className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 font-mono text-sm focus:border-purple-500 outline-none resize-none" />
-                        <div>
-                            <h3 className="font-pixel text-[10px] opacity-40 mb-4 uppercase">ВЫБЕРИТЕ ВАШИ АРТЕФАКТЫ</h3>
-                            <div className="grid grid-cols-3 gap-3">
-                                {exhibits.filter(e => e.owner === user?.username && !e.isDraft).map(ex => (
-                                    <div key={ex.id} onClick={() => setEditingCollection(p => p ? ({ ...p, exhibitIds: p.exhibitIds.includes(ex.id) ? p.exhibitIds.filter(id => id !== ex.id) : [...p.exhibitIds, ex.id] }) : null)} className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${editingCollection.exhibitIds.includes(ex.id) ? 'border-purple-500 scale-95 shadow-lg' : 'border-white/5 opacity-50'}`}>
-                                        <img src={ex.imageUrls[0]} className="w-full h-full object-cover" />
-                                        {editingCollection.exhibitIds.includes(ex.id) && <div className="absolute inset-0 bg-purple-500/20 flex items-center justify-center"><Check size={32} className="text-white" /></div>}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <button onClick={handleUpdateCollection} className="w-full py-5 bg-purple-500 text-white rounded-2xl font-pixel text-[10px] uppercase font-black">ОБНОВИТЬ КОЛЛЕКЦИЮ</button>
-                    </div>
-                </div>
-            )}
-
-            {view === 'COLLECTION_DETAIL' && selectedCollection && (
-                <CollectionDetailPage collection={selectedCollection} artifacts={exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id))} theme={theme} onBack={() => setView('FEED')} onExhibitClick={handleExhibitClick} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} currentUser={user?.username || ''} onEdit={() => { setEditingCollection(selectedCollection); setView('EDIT_COLLECTION'); }} />
+            {view === 'DIRECT_CHAT' && user && viewedProfileUsername && (
+                <DirectChat 
+                    theme={theme} 
+                    currentUser={user} 
+                    partnerUsername={viewedProfileUsername} 
+                    messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} 
+                    onBack={() => setView('ACTIVITY')} 
+                    onSendMessage={handleSendMessage} 
+                />
             )}
 
             {view === 'USER_PROFILE' && user && (
                 <UserProfileView user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={() => setView('FEED')} onLogout={() => { db.logoutUser(); setUser(null); setView('AUTH'); }} onFollow={handleFollow} onChat={(u) => { setViewedProfileUsername(u); setView('DIRECT_CHAT'); }} onExhibitClick={handleExhibitClick} onLike={handleLike} onAuthorClick={(a) => setViewedProfileUsername(a)} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onShareCollection={() => {}} onViewHallOfFame={() => setView('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab} onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); setView('SOCIAL_LIST'); }} />
-            )}
-
-            {view === 'SOCIAL_LIST' && viewedProfileUsername && (
-                <div className="max-w-xl mx-auto animate-in fade-in pb-20 pt-4">
-                    <div className="flex items-center gap-4 mb-8">
-                        <button onClick={() => setView('USER_PROFILE')} className="p-2 hover:bg-white/10 rounded-full"><ArrowLeft size={20}/></button>
-                        <div>
-                            <h1 className="font-pixel text-lg font-bold uppercase tracking-widest">{socialListType === 'followers' ? 'ПОДПИСЧИКИ' : 'ПОДПИСКИ'}</h1>
-                            <p className="text-[10px] font-mono opacity-50">@{viewedProfileUsername}</p>
-                        </div>
-                    </div>
-                    <div className="space-y-4">
-                        {(socialListType === 'followers' 
-                            ? db.getFullDatabase().users.find(u => u.username === viewedProfileUsername)?.followers || []
-                            : db.getFullDatabase().users.find(u => u.username === viewedProfileUsername)?.following || []
-                        ).map(name => (
-                            <div key={name} className={`p-4 rounded-2xl border transition-all flex items-center justify-between ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-black/10 hover:shadow-lg'}`}>
-                                <div className="flex items-center gap-4 cursor-pointer" onClick={() => { setViewedProfileUsername(name); setView('USER_PROFILE'); }}>
-                                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-green-500/20"><img src={db.getUserAvatar(name)} className="w-full h-full object-cover" /></div>
-                                    <div className="font-pixel text-xs font-bold">@{name}</div>
-                                </div>
-                                <button onClick={() => { setViewedProfileUsername(name); setView('DIRECT_CHAT'); }} className="p-3 bg-green-500/10 text-green-500 rounded-xl hover:bg-green-500 hover:text-black transition-all"><MessageSquare size={18} /></button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
             )}
 
             {view === 'ACTIVITY' && user && (
@@ -432,34 +358,13 @@ export default function App() {
                 <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => setView('FEED')} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onLike={handleLike} />
             )}
 
-            {view === 'DIRECT_CHAT' && user && viewedProfileUsername && (
-                <DirectChat theme={theme} currentUser={user} partnerUsername={viewedProfileUsername} messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} onBack={() => setView('FEED')} onSendMessage={async (text) => { const msg: Message = { id: crypto.randomUUID(), sender: user.username, receiver: viewedProfileUsername, text, timestamp: new Date().toLocaleString(), isRead: false }; await db.saveMessage(msg); refreshData(); }} />
-            )}
-
         </main>
-
-        {isAddingToCollection && user && (
-            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className={`w-full max-w-md p-6 rounded-3xl border ${theme === 'dark' ? 'bg-dark-surface border-white/10' : 'bg-white border-black/10'}`}>
-                    <div className="flex justify-between items-center mb-6"><h3 className="font-pixel text-sm uppercase">ДОБАВИТЬ В КОЛЛЕКЦИЮ</h3><button onClick={() => setIsAddingToCollection(null)} className="p-2 opacity-50"><X size={20}/></button></div>
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar">
-                        {collections.filter(c => c.owner === user.username).map(col => (
-                            <button key={col.id} onClick={() => handleAddToCollection(col.id)} className={`w-full p-4 rounded-2xl border text-left flex items-center gap-4 transition-all hover:scale-[1.02] ${theme === 'dark' ? 'border-white/5 bg-white/5 hover:bg-white/10' : 'border-black/5 bg-gray-50'}`}>
-                                <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0"><img src={col.coverImage} className="w-full h-full object-cover" /></div>
-                                <div className="flex-1"><div className="font-pixel text-[10px] font-bold uppercase">{col.title}</div><div className="text-[9px] font-mono opacity-40">{col.exhibitIds.length} ITEMS</div></div>
-                                <Plus size={20} className="text-green-500" />
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        )}
         
         {view !== 'AUTH' && (
           <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">
               <button onClick={() => setView('FEED')} className={`p-2 transition-all ${view === 'FEED' ? 'text-green-500 scale-125' : 'opacity-40'}`}><LayoutGrid size={24} /></button>
               <button onClick={() => setView('MY_COLLECTION')} className={`p-2 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500 scale-125' : 'opacity-40'}`}><Package size={24} /></button>
-              <div className="relative -top-5"><button onClick={() => setView('CREATE_HUB')} className="bg-green-500 text-black w-14 h-14 rounded-full shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black flex items-center justify-center transition-all"><PlusCircle size={32} /></button></div>
+              <div className="relative -top-5"><button onClick={() => setView('CREATE_ARTIFACT')} className="bg-green-500 text-black w-14 h-14 rounded-full shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black flex items-center justify-center transition-all"><PlusCircle size={32} /></button></div>
               <button onClick={() => setView('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? 'text-green-500 scale-125' : 'opacity-40'} relative`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black" />}</button>
               <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? 'text-green-500 scale-125' : 'opacity-40'}`}><User size={24} /></button>
           </nav>

@@ -30,22 +30,20 @@ const pool = new Pool({
     ssl: {
         rejectUnauthorized: false
     },
-    max: 10, // Reduced to prevent connection limits on shared hosting
+    max: 15, // Slightly increased for concurrent sync queries
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 10000,
 });
 
 // Handle unexpected pool errors
 pool.on('error', (err, client) => {
     console.error('❌ [Database] Unexpected error on idle client', err);
-    // Do not exit process immediately to allow recovery
 });
 
 // ==========================================
 // 📧 НАСТРОЙКА ПОЧТЫ (TIMEWEB SMTP)
 // ==========================================
 
-// ⚠️ ВАЖНО: УКАЖИТЕ ЗДЕСЬ РЕАЛЬНЫЕ ДАННЫЕ ОТ ПОЧТЫ TIMEWEB
 const SMTP_EMAIL = process.env.SMTP_EMAIL || 'morpheus@neoarch.ru'; 
 const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'tntgz9o3e9'; 
 
@@ -67,9 +65,6 @@ const transporter = nodemailer.createTransport({
 transporter.verify(function (error, success) {
     if (error) {
         console.error("⚠️ [Mail] SMTP Config Error:", error.message);
-        if (error.code === 'EAUTH') {
-            console.error("👉 Проверьте логин и пароль в server.js (переменные SMTP_EMAIL и SMTP_PASSWORD)");
-        }
     } else {
         console.log(`✅ [Mail] SMTP Server is ready. User: ${SMTP_EMAIL}`);
     }
@@ -224,14 +219,12 @@ app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        // 1. Check Active Users
         let result = await query(
             `SELECT * FROM users WHERE (data->>'email' = $1 OR username = $1) AND data->>'password' = $2`, 
             [email, password]
         );
 
         if (result.rows.length === 0) {
-            // 2. Check Pending Users (Helpful Error Message)
             const pendingCheck = await query(
                 `SELECT * FROM pending_users WHERE email = $1 OR username = $1`,
                 [email]
@@ -243,13 +236,6 @@ app.post('/api/auth/login', async (req, res) => {
                      error: "Аккаунт не активирован. Проверьте почту для подтверждения регистрации." 
                  });
             }
-
-            // 3. Check for Wrong Password
-            const userCheck = await query(`SELECT * FROM users WHERE data->>'email' = $1 OR username = $1`, [email]);
-            if (userCheck.rows.length > 0) {
-                 console.log(`[Login Failed] User found '${userCheck.rows[0].username}' but password mismatch.`);
-            }
-            
             return res.status(401).json({ success: false, error: "Неверный логин или пароль" });
         }
 
@@ -348,13 +334,12 @@ app.post('/api/auth/register', async (req, res) => {
         }
 
         // 2. Save to PENDING table
-        // We explicitly use 'data' object here. pg will serialize it to JSONB.
         await query(
             `INSERT INTO pending_users (token, username, email, data, created_at) VALUES ($1, $2, $3, $4, NOW())`,
             [token, username, email, data]
         );
 
-        console.log(`[Register] Pending user created: ${username} (${email}). Token: ${token.substring(0,8)}...`);
+        console.log(`[Register] Pending user created: ${username} (${email}).`);
 
         // 3. Send Email
         const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -365,17 +350,9 @@ app.post('/api/auth/register', async (req, res) => {
         } catch (mailError) {
              console.error("❌ Registration Failed: SMTP Error", mailError);
              await query(`DELETE FROM pending_users WHERE token = $1`, [token]);
-             
-             if (mailError.responseCode === 535) {
-                 return res.status(500).json({ 
-                     success: false, 
-                     error: "Ошибка сервера: Неверные настройки почты (SMTP Auth)." 
-                 });
-             }
              return res.status(500).json({ success: false, error: "Ошибка отправки письма: " + mailError.message });
         }
 
-        // 4. Respond Success
         res.json({ success: true, message: "Письмо подтверждения отправлено" });
 
     } catch (e) {
@@ -384,7 +361,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-// VERIFY EMAIL ENDPOINT (PURE SQL MOVE)
+// VERIFY EMAIL ENDPOINT
 app.get('/api/auth/verify', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).send("Token required");
@@ -393,17 +370,12 @@ app.get('/api/auth/verify', async (req, res) => {
 
     try {
         await client.query('BEGIN'); 
-
-        // 1. Check existence
         const check = await client.query(`SELECT 1 FROM pending_users WHERE token = $1`, [token]);
         if (check.rows.length === 0) {
             await client.query('ROLLBACK');
-            return res.send(`<h1 style="color:red; font-family:monospace; padding:20px;">ОШИБКА: Ссылка недействительна (возможно, аккаунт уже активирован).</h1>`);
+            return res.send(`<h1 style="color:red; font-family:monospace; padding:20px;">ОШИБКА: Ссылка недействительна.</h1>`);
         }
 
-        // 2. ATOMIC MOVE (INSERT ... SELECT)
-        // This avoids any JSON serialization/deserialization issues in Node.js
-        // We copy 'username' and 'data' directly from pending_users to users.
         await client.query(`
             INSERT INTO users (username, data, updated_at)
             SELECT username, data, NOW()
@@ -412,13 +384,10 @@ app.get('/api/auth/verify', async (req, res) => {
             ON CONFLICT (username) DO NOTHING
         `, [token]);
 
-        // 3. Delete from pending
         await client.query(`DELETE FROM pending_users WHERE token = $1`, [token]);
 
         await client.query('COMMIT'); 
-        console.log(`[Verify] Token processed: ${token.substring(0,8)}`);
-
-        // 4. Success Page
+        
         const html = `
         <!DOCTYPE html>
         <html lang="ru">
@@ -429,18 +398,11 @@ app.get('/api/auth/verify', async (req, res) => {
             <meta http-equiv="refresh" content="3;url=/?verified=true" />
             <style>
                 body { background-color: #000; color: #4ade80; font-family: 'Courier New', monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-                h1 { border-bottom: 2px dashed #4ade80; padding-bottom: 10px; }
-                .loader { width: 50px; height: 50px; border: 4px solid #4ade80; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
-                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                a { color: white; text-decoration: underline; margin-top: 20px; display: block; }
             </style>
         </head>
         <body>
-            <div class="loader"></div>
             <h1>ДОСТУП РАЗРЕШЕН</h1>
-            <p>Учетная запись активирована.</p>
             <p>Перенаправление в систему...</p>
-            <a href="/?verified=true">Нажмите, если не перенаправляет</a>
         </body>
         </html>
         `;
@@ -449,66 +411,67 @@ app.get('/api/auth/verify', async (req, res) => {
     } catch (e) {
         await client.query('ROLLBACK');
         console.error("Verification Error:", e);
-        // Duplicate key usually means user clicked twice or username taken.
-        if (e.code === '23505') { // Unique violation
-             res.send(`<h1 style="color:yellow; background:black; font-family:monospace; padding:20px;">Аккаунт уже активирован. Попробуйте войти.</h1>`);
-        } else {
-             res.status(500).send(`<h1 style="color:red; font-family:monospace; padding:20px;">CRITICAL ERROR: ${e.message}</h1>`);
-        }
+        res.status(500).send(`<h1 style="color:red;">ERROR: ${e.message}</h1>`);
     } finally {
         client.release();
     }
 });
 
-// 2. OPTIMIZED SYNC & FEED (No changes here)
+// 2. OPTIMIZED SYNC & FEED (ROBUST)
 app.get('/api/sync', async (req, res) => {
     const { username } = req.query;
-    try {
-        let exhibitQuery = `
+    
+    let exhibitQuery = `
+        SELECT data FROM exhibits 
+        WHERE id IN (
+            (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 50)
+            UNION
+            (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 10)
+        )
+        ORDER BY updated_at DESC
+    `;
+    
+    let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 20`;
+    
+    if (username) {
+        exhibitQuery = `
             SELECT data FROM exhibits 
-            WHERE id IN (
+            WHERE data->>'owner' = '${username}' 
+            OR id IN (
                 (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 50)
                 UNION
                 (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 10)
             )
-            ORDER BY updated_at DESC
         `;
-        
-        let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 20`;
-        
-        if (username) {
-            exhibitQuery = `
-                SELECT data FROM exhibits 
-                WHERE data->>'owner' = '${username}' 
-                OR id IN (
-                    (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 50)
-                    UNION
-                    (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 10)
-                )
-            `;
-            collectionQuery = `SELECT data FROM collections WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM collections ORDER BY updated_at DESC LIMIT 20)`;
-        }
+        collectionQuery = `SELECT data FROM collections WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM collections ORDER BY updated_at DESC LIMIT 20)`;
+    }
 
+    // Helper to prevent entire Sync from failing if one table errors
+    const run = async (q) => {
+        try {
+            const res = await query(q);
+            return res.rows.map(r => r.data);
+        } catch (e) {
+            console.error("Sync Sub-query Error:", e.message);
+            return []; // Return empty array on failure so client still loads something
+        }
+    }
+
+    try {
+        // Run parallel queries with safety
         const [users, exhibits, collections, notifications, messages, guestbook] = await Promise.all([
-            query('SELECT data FROM users'),
-            query(exhibitQuery),
-            query(collectionQuery),
-            query('SELECT data FROM notifications ORDER BY updated_at DESC LIMIT 100'),
-            query('SELECT data FROM messages ORDER BY updated_at DESC LIMIT 200'),
-            query('SELECT data FROM guestbook ORDER BY updated_at DESC LIMIT 200')
+            run('SELECT data FROM users'),
+            run(exhibitQuery),
+            run(collectionQuery),
+            run('SELECT data FROM notifications ORDER BY updated_at DESC LIMIT 100'),
+            run('SELECT data FROM messages ORDER BY updated_at DESC LIMIT 200'),
+            run('SELECT data FROM guestbook ORDER BY updated_at DESC LIMIT 200')
         ]);
         
-        res.json({
-            users: users.rows.map(r => r.data),
-            exhibits: exhibits.rows.map(r => r.data),
-            collections: collections.rows.map(r => r.data),
-            notifications: notifications.rows.map(r => r.data),
-            messages: messages.rows.map(r => r.data),
-            guestbook: guestbook.rows.map(r => r.data),
-        });
+        res.json({ users, exhibits, collections, notifications, messages, guestbook });
     } catch (e) {
-        console.error("Sync Error:", e.message);
-        res.status(500).json({ error: "Sync failed" });
+        console.error("Sync Fatal Error:", e.message);
+        res.status(500).json({ error: "Sync failed completely" });
     }
 });
 
@@ -527,7 +490,7 @@ app.get('/api/users/:username', async (req, res) => {
 
 app.get('/api/feed', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
-    const limit = 20;
+    const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
     try {

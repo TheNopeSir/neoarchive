@@ -90,7 +90,7 @@ const loadFromCache = async (): Promise<boolean> => {
 
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
         const options: RequestInit = { 
             method, 
@@ -168,10 +168,7 @@ const performCloudSync = async () => {
 };
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
-    // 1. Load from IndexedDB first for instant UI
     await loadFromCache();
-    
-    // 2. Trigger cloud sync in background
     performCloudSync();
     
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
@@ -184,7 +181,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
 export const forceSync = performCloudSync;
 export const getFullDatabase = () => ({ ...cache });
 
-// --- AUTH & SOCIAL ---
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
     const res = await apiCall('/auth/login', 'POST', { email, password });
     if (res.success && res.user) {
@@ -246,7 +242,6 @@ export const updateUserProfile = async (user: UserProfile) => {
     await apiCall('/users/update', 'POST', user);
 };
 
-// --- CRUD ---
 const syncItem = async (endpoint: string, item: any) => apiCall(endpoint, 'POST', item).catch((e) => {
     console.warn(`Sync failed for ${endpoint}:`, e.message);
 });
@@ -277,13 +272,10 @@ export const updateCollection = async (c: Collection) => {
 };
 
 export const saveMessage = async (msg: Message) => {
-    // Check if message already exists locally
     if (!cache.messages.some(m => m.id === msg.id)) {
         cache.messages.push(msg);
-        // Ensure sorting for display
         cache.messages.sort((a,b) => a.timestamp.localeCompare(b.timestamp));
         await saveToLocalCache();
-        // Fire and forget sync
         syncItem('/messages', msg);
     }
 };
