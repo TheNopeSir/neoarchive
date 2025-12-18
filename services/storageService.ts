@@ -15,9 +15,9 @@ let cache = {
 
 const DB_NAME = 'NeoArchiveDB';
 const STORE_NAME = 'client_cache';
-const CACHE_KEY = 'neo_archive_v1';
+const CACHE_KEY = 'neo_archive_v2'; // Bumped version
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '4.2.1-InfiniteScroll'; 
+const CACHE_VERSION = '5.0.0-Optimized'; 
 
 let isOfflineMode = false;
 const API_BASE = '/api';
@@ -25,7 +25,7 @@ const API_BASE = '/api';
 const idb = {
     open: (): Promise<IDBDatabase> => {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, 2);
+            const request = indexedDB.open(DB_NAME, 3);
             request.onupgradeneeded = (e) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
@@ -90,9 +90,13 @@ const loadFromCache = async (): Promise<boolean> => {
 
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
-        const options: RequestInit = { method, headers: { 'Content-Type': 'application/json' }, signal: controller.signal };
+        const options: RequestInit = { 
+            method, 
+            headers: { 'Content-Type': 'application/json' }, 
+            signal: controller.signal 
+        };
         if (body) options.body = JSON.stringify(body);
         const res = await fetch(`${API_BASE}${endpoint}`, options);
         clearTimeout(timeoutId);
@@ -104,49 +108,72 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
     }
 };
 
-// --- PAGINATION ---
+// --- PAGINATION & OPTIMIZED LOADING ---
 export const loadFeedBatch = async (page: number, limit: number = 10): Promise<Exhibit[]> => {
     try {
         const items: Exhibit[] = await apiCall(`/feed?page=${page}&limit=${limit}`);
         if (items && items.length > 0) {
             const currentIds = new Set(cache.exhibits.map(e => e.id));
             const newItems = items.filter(item => !currentIds.has(item.id));
-            cache.exhibits = [...cache.exhibits, ...newItems].sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+            // Keep exhibits sorted by timestamp
+            cache.exhibits = [...cache.exhibits, ...newItems].sort((a,b) => {
+                return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+            });
             await saveToLocalCache();
             return items;
         }
         return [];
     } catch (e) {
-        console.error("Feed Load Error", e);
+        console.warn("Feed Load Error, using local only", e);
         return [];
     }
 };
 
+/**
+ * Optimized Sync: First fetch critical user-specific data, then the rest.
+ */
 const performCloudSync = async () => {
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
     try {
-        const data = await apiCall(activeUser ? `/sync?username=${activeUser}` : '/sync');
-        if (data.users) cache.users = data.users;
-        if (data.exhibits) {
-            const serverMap = new Map((data.exhibits as Exhibit[]).map(e => [e.id, e]));
-            cache.exhibits.forEach(e => { if(!serverMap.has(e.id)) serverMap.set(e.id, e); });
-            cache.deletedIds.forEach(id => serverMap.delete(id));
-            cache.exhibits = Array.from(serverMap.values()).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+        // Priority 1: User Profile, Notifications, Messages (The "Social" pulse)
+        const initData = await apiCall(activeUser ? `/sync?username=${activeUser}&priority=high` : '/sync?priority=high');
+        
+        if (initData.users) cache.users = initData.users;
+        if (initData.notifications) cache.notifications = initData.notifications;
+        if (initData.messages) {
+            // Merge messages to avoid duplicates
+            const msgMap = new Map(cache.messages.map(m => [m.id, m]));
+            (initData.messages as Message[]).forEach(m => msgMap.set(m.id, m));
+            cache.messages = Array.from(msgMap.values()).sort((a,b) => a.timestamp.localeCompare(b.timestamp));
         }
-        if (data.collections) cache.collections = data.collections;
-        if (data.notifications) cache.notifications = data.notifications;
-        if (data.messages) cache.messages = data.messages;
-        if (data.guestbook) cache.guestbook = data.guestbook;
+        
+        // Priority 2: Initial Feed & Collections
+        if (initData.exhibits) {
+            const serverMap = new Map((initData.exhibits as Exhibit[]).map(e => [e.id, e]));
+            // Only keep what's not deleted locally
+            cache.exhibits.forEach(e => { if(!serverMap.has(e.id) && !cache.deletedIds.includes(e.id)) serverMap.set(e.id, e); });
+            cache.exhibits = Array.from(serverMap.values()).sort((a,b) => {
+                return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+            });
+        }
+        if (initData.collections) cache.collections = initData.collections;
+        if (initData.guestbook) cache.guestbook = initData.guestbook;
+
         await saveToLocalCache();
+        isOfflineMode = false;
     } catch (e) {
-        console.warn("Sync failed, using cached data");
+        console.warn("Sync slow or failed, staying in local mode");
         isOfflineMode = true;
     }
 };
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
+    // 1. Load from IndexedDB first for instant UI
     await loadFromCache();
-    performCloudSync(); // Sync in background
+    
+    // 2. Trigger cloud sync in background
+    performCloudSync();
+    
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
     if (localActiveUser) {
         return cache.users.find(u => u.username === localActiveUser) || null;
@@ -170,7 +197,12 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
     throw new Error(res.error || "Login failed");
 };
 
-// Fix: Added loginViaTelegram to handle Telegram authentication protocol
+export const recoverPassword = async (email: string): Promise<any> => {
+    const res = await apiCall('/auth/recover', 'POST', { email });
+    if (res.success) return res;
+    throw new Error(res.error || "Recovery failed");
+};
+
 export const loginViaTelegram = async (user: any): Promise<UserProfile> => {
     const res = await apiCall('/auth/telegram', 'POST', user);
     if (res.success && res.user) {
@@ -215,7 +247,9 @@ export const updateUserProfile = async (user: UserProfile) => {
 };
 
 // --- CRUD ---
-const syncItem = async (endpoint: string, item: any) => apiCall(endpoint, 'POST', item).catch(() => {});
+const syncItem = async (endpoint: string, item: any) => apiCall(endpoint, 'POST', item).catch((e) => {
+    console.warn(`Sync failed for ${endpoint}:`, e.message);
+});
 
 export const saveExhibit = async (ex: Exhibit) => { 
     ex.slug = `${slugify(ex.title)}-${Date.now().toString().slice(-4)}`;
@@ -241,19 +275,26 @@ export const updateCollection = async (c: Collection) => {
     await saveToLocalCache();
     await syncItem('/collections', c);
 };
+
 export const saveMessage = async (msg: Message) => {
+    // Check if message already exists locally
     if (!cache.messages.some(m => m.id === msg.id)) {
         cache.messages.push(msg);
+        // Ensure sorting for display
+        cache.messages.sort((a,b) => a.timestamp.localeCompare(b.timestamp));
         await saveToLocalCache();
-        await syncItem('/messages', msg);
+        // Fire and forget sync
+        syncItem('/messages', msg);
     }
 };
+
 export const saveGuestbookEntry = async (e: GuestbookEntry) => { cache.guestbook.push(e); await saveToLocalCache(); await syncItem('/guestbook', e); };
 export const updateGuestbookEntry = async (e: GuestbookEntry) => { const idx = cache.guestbook.findIndex(g => g.id === e.id); if (idx !== -1) cache.guestbook[idx] = e; await saveToLocalCache(); await syncItem('/guestbook', e); };
 export const deleteGuestbookEntry = async (id: string) => { cache.guestbook = cache.guestbook.filter(g => g.id !== id); await saveToLocalCache(); apiCall(`/guestbook/${id}`, 'DELETE').catch(()=>{}); };
 
 export const logoutUser = () => { localStorage.removeItem(SESSION_USER_KEY); };
 export const clearLocalCache = async () => { localStorage.removeItem(SESSION_USER_KEY); await idb.clear(); window.location.reload(); };
+
 export const fileToBase64 = async (file: File): Promise<string> => {
     return new Promise((resolve) => {
         const reader = new FileReader();
@@ -264,15 +305,16 @@ export const fileToBase64 = async (file: File): Promise<string> => {
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 let { width, height } = img;
-                if (width > 1080 || height > 1080) {
-                    if (width > height) { height *= 1080 / width; width = 1080; } 
-                    else { width *= 1080 / height; height = 1080; }
+                if (width > 1200 || height > 1200) {
+                    if (width > height) { height *= 1200 / width; width = 1200; } 
+                    else { width *= 1200 / height; height = 1200; }
                 }
                 canvas.width = width; canvas.height = height;
                 canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
-                resolve(canvas.toDataURL('image/jpeg', 0.7));
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
             };
         };
     });
 };
+
 export const getStorageEstimate = async () => { if (navigator.storage?.estimate) return await navigator.storage.estimate(); return null; };

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Bell, MessageCircle, ChevronDown, ChevronUp, User, Heart, MessageSquare, UserPlus, BookOpen } from 'lucide-react';
 import { Notification, Message, UserProfile, Exhibit } from '../types';
@@ -124,7 +123,7 @@ const ActivityView: React.FC<ActivityViewProps> = ({
          const partner = m.sender === currentUser.username ? m.receiver : m.sender;
          if (!acc[partner] || new Date(m.timestamp) > new Date(acc[partner].timestamp)) acc[partner] = m;
          return acc;
-    }, {} as Record<string, Message>));
+    }, {} as Record<string, Message>)) as [string, Message][];
 
     return (
         <div className="max-w-2xl mx-auto animate-in fade-in pb-20">
@@ -153,7 +152,7 @@ const ActivityView: React.FC<ActivityViewProps> = ({
                         {Object.keys(groupedNotifs).length === 0 ? (
                             <div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ СОБЫТИЙ</div>
                         ) : (
-                            Object.entries(groupedNotifs)
+                            (Object.entries(groupedNotifs) as [string, Notification[]][])
                                 .sort(([,a], [,b]) => b[0].timestamp.localeCompare(a[0].timestamp))
                                 .map(([key, group]) => renderNotificationGroup(key, group))
                         )}

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, Lock, UserPlus, User, AlertCircle, CheckSquare, Square, Send, Wand2, Eye, EyeOff, Terminal } from 'lucide-react';
+import { Mail, Lock, UserPlus, User, AlertCircle, CheckSquare, Square, Send, Wand2, Eye, EyeOff, Terminal, RefreshCw } from 'lucide-react';
 import { UserProfile } from '../types';
 import * as db from '../services/storageService';
 
@@ -76,6 +76,21 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
     finally { setIsLoading(false); }
   };
 
+  const handleRecoverySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) { setError('УКАЖИТЕ EMAIL'); return; }
+    setIsLoading(true); setError(''); setInfoMessage('');
+    try {
+        await db.recoverPassword(email);
+        setInfoMessage('НОВЫЙ ПАРОЛЬ ОТПРАВЛЕН НА EMAIL');
+        setStep('LOGIN');
+    } catch (err: any) {
+        setError(err.message || "ОШИБКА ВОССТАНОВЛЕНИЯ");
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
   const renderContent = () => {
     if (step === 'ENTRY') {
         return (
@@ -123,6 +138,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                      <div onClick={() => setRememberMe(!rememberMe)} className="flex items-center gap-2 cursor-pointer opacity-70 hover:opacity-100 select-none text-white">
                          {rememberMe ? <CheckSquare size={14} /> : <Square size={14} />}<span className="text-[10px] font-mono uppercase">СОХРАНИТЬ</span>
                      </div>
+                     <button type="button" onClick={() => { setStep('RECOVERY'); setError(''); }} className="text-[10px] font-mono text-white/50 hover:text-white hover:underline uppercase">Забыли пароль?</button>
                  </div>
                  {error && <div className="flex items-center gap-2 text-red-500 text-[10px] font-mono justify-center"><AlertCircle size={14}/> {error}</div>}
                  <button type="submit" disabled={isLoading} className="mt-2 py-3 font-bold font-pixel text-xs uppercase bg-white text-black hover:bg-gray-200">{isLoading ? '...' : 'ВОЙТИ'}</button>
@@ -143,7 +159,32 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
                 <div className="flex items-center gap-2 border-b p-2 border-white/20"><User size={16} className="text-white/50"/><input value={username} onChange={e => setUsername(e.target.value)} className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="ID" required /></div>
                 {error && <div className="text-red-500 text-[10px] font-mono text-center">{error}</div>}
                 <button type="submit" disabled={isLoading} className="mt-2 py-3 font-bold font-pixel text-xs uppercase bg-white text-black hover:bg-gray-200">{isLoading ? '...' : 'СОЗДАТЬ'}</button>
-                <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-[10px] font-mono opacity-50 hover:underline text-center text-white">НАЗАД</button>
+                <div className="flex justify-between items-center">
+                    <button type="button" onClick={() => { setStep('ENTRY'); resetForm(); }} className="text-[10px] font-mono opacity-50 hover:underline text-white">НАЗАД</button>
+                    {showRecoverOption && (
+                        <button type="button" onClick={() => setStep('RECOVERY')} className="text-[10px] font-mono text-yellow-500 hover:underline">ВОССТАНОВИТЬ?</button>
+                    )}
+                </div>
+            </form>
+        )
+    }
+
+    if (step === 'RECOVERY') {
+        return (
+            <form onSubmit={handleRecoverySubmit} className="flex flex-col gap-4 w-full animate-in fade-in">
+                <h3 className="text-white font-pixel text-xs text-center mb-2">ВОССТАНОВЛЕНИЕ ДОСТУПА</h3>
+                <div className="flex items-center gap-2 border-b p-3 border-white/20">
+                   <Mail size={16} className="text-white/50" />
+                   <input value={email} onChange={e => setEmail(e.target.value)} type="email" className="bg-transparent w-full focus:outline-none font-mono text-sm text-white placeholder-white/30" placeholder="ВАШ EMAIL" required />
+                </div>
+                <p className="text-[10px] font-mono text-white/50 text-center">Система сгенерирует новый пароль и отправит его на указанную почту.</p>
+                
+                {error && <div className="flex items-center gap-2 text-red-500 text-[10px] font-mono justify-center"><AlertCircle size={14}/> {error}</div>}
+                
+                <button type="submit" disabled={isLoading} className="mt-2 py-3 font-bold font-pixel text-xs uppercase bg-white text-black hover:bg-gray-200 flex items-center justify-center gap-2">
+                    {isLoading ? '...' : <><RefreshCw size={14}/> СБРОСИТЬ</>}
+                </button>
+                <button type="button" onClick={() => { setStep('LOGIN'); resetForm(); }} className="text-[10px] font-mono opacity-50 hover:underline text-center text-white">ОТМЕНА</button>
             </form>
         )
     }
@@ -151,7 +192,7 @@ const MatrixLogin: React.FC<MatrixLoginProps> = ({ theme, onLogin }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-black">
-      <div className="w-full max-w-sm p-8 bg-black border border-white/10 rounded-lg">
+      <div className="w-full max-w-sm p-8 bg-black border border-white/10 rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.5)]">
          {renderContent()}
       </div>
     </div>
