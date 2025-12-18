@@ -55,12 +55,9 @@ const MyCollection: React.FC<MyCollectionProps> = ({
                                 <ExhibitCard 
                                     item={item} 
                                     theme={theme}
-                                    similarExhibits={[]}
                                     onClick={onExhibitClick}
                                     isLiked={false}
-                                    isFavorited={false}
                                     onLike={(e) => onLike(item.id, e)}
-                                    onFavorite={() => {}}
                                     onAuthorClick={() => {}}
                                 />
                             </div>
@@ -85,12 +82,9 @@ const MyCollection: React.FC<MyCollectionProps> = ({
                                 key={item.id} 
                                 item={item} 
                                 theme={theme}
-                                similarExhibits={[]}
                                 onClick={onExhibitClick}
                                 isLiked={item.likedBy?.includes(user.username) || false}
-                                isFavorited={false}
                                 onLike={(e) => onLike(item.id, e)}
-                                onFavorite={() => {}}
                                 onAuthorClick={() => {}}
                             />
                         ))}

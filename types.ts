@@ -4,52 +4,53 @@ export interface Comment {
   author: string;
   text: string;
   timestamp: string;
-  likes: number; // Added
-  likedBy: string[]; // Added
+  likes: number;
+  likedBy: string[];
 }
+
+export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'CURSED';
 
 export interface Exhibit {
   id: string;
-  slug?: string; // SEO Friendly URL
+  slug?: string;
   title: string;
   description: string;
   imageUrls: string[];
   videoUrl?: string; 
   category: string; 
-  subcategory?: string; // Added
+  subcategory?: string;
   owner: string;
   timestamp: string;
   likes: number;
-  likedBy?: string[]; // List of users who liked this
+  likedBy: string[]; // Made mandatory
   views: number;
-  // rating removed
   condition?: string;
   quality: string;
   specs: Record<string, string>;
   comments: Comment[];
-  isDraft?: boolean; // Added
+  isDraft?: boolean;
 }
 
 export interface Collection {
   id: string;
-  slug?: string; // SEO Friendly URL
+  slug?: string;
   title: string;
   description: string;
   owner: string;
   coverImage: string;
-  exhibitIds: string[]; // IDs of exhibits in this collection
+  exhibitIds: string[];
   timestamp: string;
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT'; // Added LIKE_COMMENT
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT';
 
 export interface Notification {
   id: string;
   type: NotificationType;
-  actor: string; // Username who triggered it
-  recipient: string; // Username who receives it
-  targetId?: string; // ID of exhibit (if applicable)
-  targetPreview?: string; // Text preview
+  actor: string;
+  recipient: string;
+  targetId?: string;
+  targetPreview?: string;
   timestamp: string;
   isRead: boolean;
 }
@@ -74,22 +75,27 @@ export interface GuestbookEntry {
 
 export type UserStatus = 'ONLINE' | 'AWAY' | 'DND' | 'INVISIBLE' | 'FREE_FOR_CHAT';
 
+export interface AchievementProgress {
+  id: string;
+  current: number;
+  target: number;
+  unlocked: boolean;
+}
+
 export interface UserProfile {
   username: string;
-  email: string; // Required for Auth
+  email: string;
   tagline: string;
   status?: UserStatus;
   avatarUrl: string;
   joinedDate: string;
-  following: string[]; // List of usernames
-  achievements?: string[]; // List of Badge IDs
-  preferences?: Record<string, number>; // RECOMMENDATION ENGINE WEIGHTS
-  // Auth simulation fields
+  following: string[];
+  followers: string[]; // Added
+  achievements: AchievementProgress[]; // Updated
+  preferences?: Record<string, number>;
   password?: string;
   isAdmin?: boolean;
   telegram?: string;
 }
 
-// Consolidated Views: 
-// FEED (Global + Subs), PROFILE (My Items + Favorites), ACTIVITY (Notifs + Messages), SEARCH, CREATE_HUB, MY_COLLECTION
 export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'MY_COLLECTION';

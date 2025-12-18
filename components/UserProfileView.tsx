@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff } from 'lucide-react';
 import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus } from '../types';
-import { STATUS_OPTIONS, BADGES } from '../constants';
+import { STATUS_OPTIONS, BADGE_CONFIG } from '../constants';
 import * as db from '../services/storageService';
 import { getUserAvatar } from '../services/storageService';
 import ExhibitCard from './ExhibitCard';
@@ -202,10 +202,11 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
             </div>
             {profileUser.achievements && profileUser.achievements.length > 0 && (
                 <div className="flex gap-2 flex-wrap justify-center md:justify-start">
-                    {profileUser.achievements.map(badgeId => { 
-                        const b = BADGES[badgeId as keyof typeof BADGES]; 
+                    {profileUser.achievements.map(achievement => { 
+                        if (!achievement.unlocked) return null;
+                        const b = BADGE_CONFIG[achievement.id as keyof typeof BADGE_CONFIG]; 
                         if(!b) return null; 
-                        return (<div key={badgeId} className={`px-2 py-1 rounded text-[10px] font-bold text-white ${b.color} flex items-center gap-1`} title={b.desc}>{b.label}</div>) 
+                        return (<div key={achievement.id} className={`px-2 py-1 rounded text-[10px] font-bold text-white ${b.color} flex items-center gap-1`} title={b.desc}>{b.label}</div>) 
                     })}
                 </div>
             )}
@@ -218,7 +219,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {profileTab === 'ARTIFACTS' && profileArtifacts.map(item => (
-                    <ExhibitCard key={item.id} item={item} theme={theme} similarExhibits={[]} onClick={onExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} isFavorited={false} onLike={(e) => onLike(item.id, e)} onFavorite={(e) => onFavorite(item.id, e)} onAuthorClick={() => {}} />
+                    <ExhibitCard key={item.id} item={item} theme={theme} onClick={onExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} onLike={(e) => onLike(item.id, e)} onAuthorClick={() => {}} />
                 ))}
                 {profileTab === 'COLLECTIONS' && profileCollections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
             </div>
