@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Database, AlertTriangle, Trash2 } from 'lucide-react';
 import { getStorageEstimate, clearLocalCache } from '../services/storageService';
@@ -9,8 +10,19 @@ interface StorageMonitorProps {
 const StorageMonitor: React.FC<StorageMonitorProps> = ({ theme }) => {
     const [stats, setStats] = useState<{usage: number, quota: number, percentage: number} | null>(null);
 
+    // Fix: Explicitly handle StorageEstimate object and calculate percentage manually to match required state type
     useEffect(() => {
-        getStorageEstimate().then(setStats);
+        getStorageEstimate().then((estimate) => {
+            if (estimate) {
+                const usage = estimate.usage || 0;
+                const quota = estimate.quota || 1;
+                setStats({
+                    usage,
+                    quota,
+                    percentage: (usage / quota) * 100
+                });
+            }
+        });
     }, []);
 
     if (!stats) return null;

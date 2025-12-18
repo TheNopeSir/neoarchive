@@ -17,461 +17,262 @@ const DB_NAME = 'NeoArchiveDB';
 const STORE_NAME = 'client_cache';
 const CACHE_KEY = 'neo_archive_v1';
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '4.2.0-Update'; 
+const CACHE_VERSION = '4.2.1-InfiniteScroll'; 
 
 let isOfflineMode = false;
-
-// Base API URL
 const API_BASE = '/api';
 
-// --- INDEXEDDB WRAPPER ---
 const idb = {
     open: (): Promise<IDBDatabase> => {
         return new Promise((resolve, reject) => {
-            if (typeof indexedDB === 'undefined') {
-                reject(new Error("IndexedDB not supported"));
-                return;
-            }
             const request = indexedDB.open(DB_NAME, 2);
-            request.onupgradeneeded = (event) => {
-                const db = (event.target as IDBOpenDBRequest).result;
-                if (!db.objectStoreNames.contains(STORE_NAME)) {
-                    db.createObjectStore(STORE_NAME);
-                }
+            request.onupgradeneeded = (e) => {
+                const db = (e.target as IDBOpenDBRequest).result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
             };
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
     },
     put: async (key: string, value: any) => {
-        try {
-            const db = await idb.open();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(STORE_NAME, 'readwrite');
-                const store = tx.objectStore(STORE_NAME);
-                const req = store.put(value, key);
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            });
-        } catch (e) {
-            console.error("IDB Put Error", e);
-        }
+        const db = await idb.open();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).put(value, key);
+            tx.oncomplete = () => resolve(true);
+        });
     },
     get: async (key: string) => {
-        try {
-            const db = await idb.open();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(STORE_NAME, 'readonly');
-                const store = tx.objectStore(STORE_NAME);
-                const req = store.get(key);
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            });
-        } catch (e) {
-            return null;
-        }
+        const db = await idb.open();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const req = tx.objectStore(STORE_NAME).get(key);
+            req.onsuccess = () => resolve(req.result);
+        });
     },
     clear: async () => {
-        try {
-            const db = await idb.open();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(STORE_NAME, 'readwrite');
-                const store = tx.objectStore(STORE_NAME);
-                const req = store.clear();
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            });
-        } catch (e) {
-            console.error("IDB Clear Error", e);
-        }
+        const db = await idb.open();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).clear();
     }
 };
 
-// --- EXPORTS ---
 export const isOffline = () => isOfflineMode;
 
 export const getUserAvatar = (username: string): string => {
     const user = cache.users.find(u => u.username === username);
-    if (user && user.avatarUrl && !user.avatarUrl.includes('ui-avatars.com')) {
-        return user.avatarUrl;
-    }
+    if (user?.avatarUrl && !user.avatarUrl.includes('ui-avatars.com')) return user.avatarUrl;
     let hash = 0;
-    for (let i = 0; i < username.length; i++) {
-        hash = username.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-    const color = "00000".substring(0, 6 - c.length) + c;
+    for (let i = 0; i < username.length; i++) hash = username.charCodeAt(i) + ((hash << 5) - hash);
+    const color = (hash & 0x00FFFFFF).toString(16).toUpperCase().padStart(6, '0');
     return `https://ui-avatars.com/api/?name=${username}&background=${color}&color=fff&bold=true`;
 };
 
-const slugify = (text: string): string => {
-    return text.toString().toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').replace(/-+$/, '');
-};
-
-const prepareCacheForStorage = (currentCache: typeof cache) => {
-    const activeUser = localStorage.getItem(SESSION_USER_KEY);
-    return {
-        ...currentCache,
-        isLoaded: true
-    };
-};
+const slugify = (text: string): string => text.toString().toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').replace(/-+$/, '');
 
 const saveToLocalCache = async () => {
     try {
-        const optimizedCache = prepareCacheForStorage(cache);
-        const payload = {
-            version: CACHE_VERSION,
-            data: optimizedCache
-        };
-        await idb.put(CACHE_KEY, payload);
-    } catch (e) { 
-        console.error("Cache Save Error", e);
-    }
+        await idb.put(CACHE_KEY, { version: CACHE_VERSION, data: cache });
+    } catch (e) { console.error("Cache Save Error", e); }
 };
 
 const loadFromCache = async (): Promise<boolean> => {
     try {
         const stored: any = await idb.get(CACHE_KEY);
-        if (stored) {
-            const data = stored.data || stored; 
-            cache = {
-                exhibits: data.exhibits || [],
-                collections: data.collections || [],
-                notifications: data.notifications || [],
-                messages: data.messages || [],
-                users: data.users || [],
-                guestbook: data.guestbook || [],
-                deletedIds: data.deletedIds || [],
-                isLoaded: true
-            };
+        if (stored && (stored.version === CACHE_VERSION || stored.data)) {
+            const data = stored.data || stored;
+            cache = { ...cache, ...data, isLoaded: true };
             return true;
         }
-    } catch (e) { 
-        return false; 
-    }
+    } catch (e) { return false; }
     return false;
 };
 
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); 
-
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
-        const options: RequestInit = {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal
-        };
+        const options: RequestInit = { method, headers: { 'Content-Type': 'application/json' }, signal: controller.signal };
         if (body) options.body = JSON.stringify(body);
-        
         const res = await fetch(`${API_BASE}${endpoint}`, options);
         clearTimeout(timeoutId);
-
-        if (!res.ok) {
-            let errorMsg = res.statusText;
-            try {
-                const errBody = await res.json();
-                if (errBody.error) errorMsg = errBody.error;
-            } catch (e) {}
-            throw new Error(`API Error ${res.status}: ${errorMsg}`);
-        }
+        if (!res.ok) throw new Error(`API Error ${res.status}`);
         return await res.json();
-    } catch (error: any) {
+    } catch (error) {
         clearTimeout(timeoutId);
         throw error;
     }
 };
 
+// --- PAGINATION ---
+export const loadFeedBatch = async (page: number, limit: number = 10): Promise<Exhibit[]> => {
+    try {
+        const items: Exhibit[] = await apiCall(`/feed?page=${page}&limit=${limit}`);
+        if (items && items.length > 0) {
+            const currentIds = new Set(cache.exhibits.map(e => e.id));
+            const newItems = items.filter(item => !currentIds.has(item.id));
+            cache.exhibits = [...cache.exhibits, ...newItems].sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+            await saveToLocalCache();
+            return items;
+        }
+        return [];
+    } catch (e) {
+        console.error("Feed Load Error", e);
+        return [];
+    }
+};
+
 const performCloudSync = async () => {
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
-    const endpoint = activeUser ? `/sync?username=${activeUser}` : '/sync';
-    
-    const data = await apiCall(endpoint);
-    
-    if (data.users) cache.users = data.users;
-    
-    if (data.exhibits) {
-        const serverMap = new Map((data.exhibits as Exhibit[]).map(e => [e.id, e]));
-        const localMap = new Map(cache.exhibits.map(e => [e.id, e]));
-        serverMap.forEach((val, key) => localMap.set(key, val));
-        cache.deletedIds.forEach(id => localMap.delete(id));
-        cache.exhibits = Array.from(localMap.values()).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+    try {
+        const data = await apiCall(activeUser ? `/sync?username=${activeUser}` : '/sync');
+        if (data.users) cache.users = data.users;
+        if (data.exhibits) {
+            const serverMap = new Map((data.exhibits as Exhibit[]).map(e => [e.id, e]));
+            cache.exhibits.forEach(e => { if(!serverMap.has(e.id)) serverMap.set(e.id, e); });
+            cache.deletedIds.forEach(id => serverMap.delete(id));
+            cache.exhibits = Array.from(serverMap.values()).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+        }
+        if (data.collections) cache.collections = data.collections;
+        if (data.notifications) cache.notifications = data.notifications;
+        if (data.messages) cache.messages = data.messages;
+        if (data.guestbook) cache.guestbook = data.guestbook;
+        await saveToLocalCache();
+    } catch (e) {
+        console.warn("Sync failed, using cached data");
+        isOfflineMode = true;
     }
-
-    if (data.collections) cache.collections = data.collections;
-    if (data.notifications) cache.notifications = data.notifications;
-    if (data.messages) cache.messages = data.messages;
-    if (data.guestbook) cache.guestbook = data.guestbook;
-
-    await saveToLocalCache();
 };
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
     await loadFromCache();
-    
-    try {
-        await Promise.race([
-            performCloudSync(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 4000))
-        ]).catch(() => console.warn("Sync slow, using local data"));
-        
-        isOfflineMode = false;
-        cache.isLoaded = true;
-    } catch (e: any) {
-        isOfflineMode = true;
-    }
-
+    performCloudSync(); // Sync in background
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
     if (localActiveUser) {
-        let cachedUser = cache.users.find(u => u.username === localActiveUser);
-        if (cachedUser) return cachedUser;
+        return cache.users.find(u => u.username === localActiveUser) || null;
     }
     return null;
 };
 
-export const forceSync = async (): Promise<void> => {
-    await performCloudSync();
-};
+export const forceSync = performCloudSync;
+export const getFullDatabase = () => ({ ...cache });
 
-export const getFullDatabase = () => ({ ...cache, timestamp: new Date().toISOString() });
-
-// --- AUTH ---
-
-export const registerUser = async (username: string, password: string, tagline: string, email: string, telegram?: string, avatarUrl?: string): Promise<UserProfile> => {
-    const userProfile: UserProfile = {
-        username, email, tagline,
-        avatarUrl: avatarUrl || getUserAvatar(username),
-        joinedDate: new Date().toLocaleString('ru-RU'),
-        following: [],
-        followers: [],
-        achievements: [{ id: 'HELLO_WORLD', current: 1, target: 1, unlocked: true }],
-        isAdmin: false,
-        telegram,
-        preferences: {},
-        password
-    };
-    const res = await apiCall('/auth/register', 'POST', { username, email, password, data: userProfile });
-    if (res.success) {
-        cache.users.push(userProfile);
-        await saveToLocalCache();
-        return userProfile;
-    } else {
-        throw new Error(res.error || "Registration failed");
-    }
-};
-
+// --- AUTH & SOCIAL ---
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
     const res = await apiCall('/auth/login', 'POST', { email, password });
     if (res.success && res.user) {
-        const userProfile = res.user;
-        const idx = cache.users.findIndex(u => u.username === userProfile.username);
-        if (idx !== -1) cache.users[idx] = userProfile;
-        else cache.users.push(userProfile);
-        localStorage.setItem(SESSION_USER_KEY, userProfile.username);
+        localStorage.setItem(SESSION_USER_KEY, res.user.username);
+        const idx = cache.users.findIndex(u => u.username === res.user.username);
+        if (idx !== -1) cache.users[idx] = res.user; else cache.users.push(res.user);
         await saveToLocalCache();
-        return userProfile;
+        return res.user;
     }
     throw new Error(res.error || "Login failed");
 };
 
-export const loginViaTelegram = async (telegramUser: any): Promise<UserProfile> => {
-    const res = await apiCall('/auth/telegram', 'POST', telegramUser);
+// Fix: Added loginViaTelegram to handle Telegram authentication protocol
+export const loginViaTelegram = async (user: any): Promise<UserProfile> => {
+    const res = await apiCall('/auth/telegram', 'POST', user);
     if (res.success && res.user) {
-        const userProfile = res.user;
-        const idx = cache.users.findIndex(u => u.username === userProfile.username);
-        if (idx !== -1) cache.users[idx] = userProfile;
-        else cache.users.push(userProfile);
-        localStorage.setItem(SESSION_USER_KEY, userProfile.username);
+        localStorage.setItem(SESSION_USER_KEY, res.user.username);
+        const idx = cache.users.findIndex(u => u.username === res.user.username);
+        if (idx !== -1) cache.users[idx] = res.user; else cache.users.push(res.user);
         await saveToLocalCache();
-        return userProfile;
+        return res.user;
     }
-    throw new Error(res.error || "Telegram Auth Failed");
+    throw new Error(res.error || "Telegram login failed");
 };
 
-export const logoutUser = async () => {
-    localStorage.removeItem(SESSION_USER_KEY);
+export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
+    const profile = { username, email, tagline, avatarUrl: getUserAvatar(username), joinedDate: new Date().toLocaleString(), following: [], followers: [], achievements: [{id:'HELLO_WORLD', current:1, target:1, unlocked:true}], password };
+    const res = await apiCall('/auth/register', 'POST', { username, email, password, data: profile });
+    if (res.success) return profile;
+    throw new Error(res.error || "Registration failed");
+};
+
+export const toggleFollow = async (currentUsername: string, targetUsername: string) => {
+    const current = cache.users.find(u => u.username === currentUsername);
+    const target = cache.users.find(u => u.username === targetUsername);
+    if (!current || !target) return;
+    const isFollowing = current.following.includes(targetUsername);
+    if (isFollowing) {
+        current.following = current.following.filter(u => u !== targetUsername);
+        target.followers = (target.followers || []).filter(u => u !== currentUsername);
+    } else {
+        current.following = [...current.following, targetUsername];
+        target.followers = [...(target.followers || []), currentUsername];
+    }
+    await saveToLocalCache();
+    apiCall('/users/update', 'POST', current).catch(()=>{});
+    apiCall('/users/update', 'POST', target).catch(()=>{});
 };
 
 export const updateUserProfile = async (user: UserProfile) => {
     const idx = cache.users.findIndex(u => u.username === user.username);
     if (idx !== -1) cache.users[idx] = user;
-    else cache.users.push(user);
     await saveToLocalCache();
     await apiCall('/users/update', 'POST', user);
 };
 
-export const toggleFollow = async (currentUsername: string, targetUsername: string) => {
-    const currentUserIdx = cache.users.findIndex(u => u.username === currentUsername);
-    const targetUserIdx = cache.users.findIndex(u => u.username === targetUsername);
-    
-    if (currentUserIdx === -1 || targetUserIdx === -1) return;
-    
-    const currentUser = { ...cache.users[currentUserIdx] };
-    const targetUser = { ...cache.users[targetUserIdx] };
-    
-    const isFollowing = currentUser.following.includes(targetUsername);
-    
-    if (isFollowing) {
-        currentUser.following = currentUser.following.filter(u => u !== targetUsername);
-        targetUser.followers = (targetUser.followers || []).filter(u => u !== currentUsername);
-    } else {
-        currentUser.following = [...currentUser.following, targetUsername];
-        targetUser.followers = [...(targetUser.followers || []), currentUsername];
-    }
-    
-    cache.users[currentUserIdx] = currentUser;
-    cache.users[targetUserIdx] = targetUser;
-    
-    await saveToLocalCache();
-    await apiCall('/users/update', 'POST', currentUser);
-    await apiCall('/users/update', 'POST', targetUser);
-};
+// --- CRUD ---
+const syncItem = async (endpoint: string, item: any) => apiCall(endpoint, 'POST', item).catch(() => {});
 
-const syncItem = async (endpoint: string, item: any) => {
-    try { 
-        await apiCall(endpoint, 'POST', item); 
-    } catch(e) { 
-        console.error("Cloud sync failed, data local only");
-    }
+export const saveExhibit = async (ex: Exhibit) => { 
+    ex.slug = `${slugify(ex.title)}-${Date.now().toString().slice(-4)}`;
+    cache.exhibits.unshift(ex); 
+    await saveToLocalCache(); 
+    await syncItem('/exhibits', ex); 
 };
-const deleteItem = async (endpoint: string, id: string) => {
-    try { await apiCall(`${endpoint}/${id}`, 'DELETE'); } catch(e) {}
-};
-
-// Exhibits
-export const getExhibits = (): Exhibit[] => cache.exhibits;
-export const saveExhibit = async (exhibit: Exhibit) => {
-  exhibit.slug = `${slugify(exhibit.title)}-${Date.now().toString().slice(-4)}`;
-  await syncItem('/exhibits', exhibit);
-  const existingIdx = cache.exhibits.findIndex(e => e.id === exhibit.id);
-  if (existingIdx !== -1) cache.exhibits[existingIdx] = exhibit;
-  else cache.exhibits.unshift(exhibit);
-  await saveToLocalCache();
-};
-export const updateExhibit = async (updatedExhibit: Exhibit) => {
-  await syncItem('/exhibits', updatedExhibit);
-  const index = cache.exhibits.findIndex(e => e.id === updatedExhibit.id);
-  if (index !== -1) {
-    cache.exhibits[index] = updatedExhibit;
+export const updateExhibit = async (ex: Exhibit) => {
+    const idx = cache.exhibits.findIndex(e => e.id === ex.id);
+    if (idx !== -1) cache.exhibits[idx] = ex;
     await saveToLocalCache();
-  }
+    await syncItem('/exhibits', ex);
 };
-export const deleteExhibit = async (id: string) => {
-  await deleteItem('/exhibits', id);
-  cache.exhibits = cache.exhibits.filter(e => e.id !== id);
-  cache.deletedIds.push(id); 
-  await saveToLocalCache();
-};
-
-// Collections
-export const getCollections = (): Collection[] => cache.collections;
-export const saveCollection = async (collection: Collection) => {
-    collection.slug = `${slugify(collection.title)}-${Date.now().toString().slice(-4)}`;
-    await syncItem('/collections', collection);
-    cache.collections.unshift(collection);
+export const saveCollection = async (c: Collection) => {
+    c.slug = `${slugify(c.title)}-${Date.now().toString().slice(-4)}`;
+    cache.collections.unshift(c);
     await saveToLocalCache();
+    await syncItem('/collections', c);
 };
-export const updateCollection = async (updatedCollection: Collection) => {
-    await syncItem('/collections', updatedCollection);
-    const index = cache.collections.findIndex(c => c.id === updatedCollection.id);
-    if (index !== -1) {
-        cache.collections[index] = updatedCollection;
-        await saveToLocalCache();
-    }
-};
-export const deleteCollection = async (id: string) => {
-    await deleteItem('/collections', id);
-    cache.collections = cache.collections.filter(c => c.id !== id);
-    cache.deletedIds.push(id);
+export const updateCollection = async (c: Collection) => {
+    const idx = cache.collections.findIndex(col => col.id === c.id);
+    if (idx !== -1) cache.collections[idx] = c;
     await saveToLocalCache();
+    await syncItem('/collections', c);
 };
-
-// Messaging
-export const getMessages = (): Message[] => cache.messages;
 export const saveMessage = async (msg: Message) => {
-    await syncItem('/messages', msg);
-    const exists = cache.messages.some(m => m.id === msg.id);
-    if (!exists) {
+    if (!cache.messages.some(m => m.id === msg.id)) {
         cache.messages.push(msg);
         await saveToLocalCache();
+        await syncItem('/messages', msg);
     }
 };
-export const markMessagesRead = async (sender: string, receiver: string) => {
-    let changed = false;
-    cache.messages.forEach(m => {
-        if (m.sender === sender && m.receiver === receiver && !m.isRead) {
-            m.isRead = true;
-            changed = true;
-            apiCall('/messages', 'POST', m).catch(() => {});
-        }
-    });
-    if (changed) await saveToLocalCache();
-};
+export const saveGuestbookEntry = async (e: GuestbookEntry) => { cache.guestbook.push(e); await saveToLocalCache(); await syncItem('/guestbook', e); };
+export const updateGuestbookEntry = async (e: GuestbookEntry) => { const idx = cache.guestbook.findIndex(g => g.id === e.id); if (idx !== -1) cache.guestbook[idx] = e; await saveToLocalCache(); await syncItem('/guestbook', e); };
+export const deleteGuestbookEntry = async (id: string) => { cache.guestbook = cache.guestbook.filter(g => g.id !== id); await saveToLocalCache(); apiCall(`/guestbook/${id}`, 'DELETE').catch(()=>{}); };
 
-// Generic storage accessors
-export const getNotifications = (): Notification[] => cache.notifications;
-export const getGuestbook = (): GuestbookEntry[] => cache.guestbook;
-export const saveGuestbookEntry = async (entry: GuestbookEntry) => {
-    await syncItem('/guestbook', entry);
-    cache.guestbook.push(entry);
-    await saveToLocalCache();
-};
-export const updateGuestbookEntry = async (entry: GuestbookEntry) => {
-    await syncItem('/guestbook', entry);
-    const idx = cache.guestbook.findIndex(g => g.id === entry.id);
-    if (idx !== -1) {
-        cache.guestbook[idx] = entry;
-        await saveToLocalCache();
-    }
-};
-export const deleteGuestbookEntry = async (id: string) => {
-    await deleteItem('/guestbook', id);
-    cache.guestbook = cache.guestbook.filter(g => g.id !== id);
-    await saveToLocalCache();
-};
-
-export const getStorageEstimate = async () => {
-  if (navigator.storage && navigator.storage.estimate) {
-    try {
-      const { usage, quota } = await navigator.storage.estimate();
-      if (usage !== undefined && quota !== undefined) {
-        return { usage, quota, percentage: (usage / quota) * 100 };
-      }
-    } catch (e) {}
-  }
-  return null;
-};
-export const clearLocalCache = async () => {
-    try {
-        localStorage.removeItem(SESSION_USER_KEY);
-        await idb.clear();
-        window.location.reload();
-    } catch(e) {}
-};
-export const compressImage = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
+export const logoutUser = () => { localStorage.removeItem(SESSION_USER_KEY); };
+export const clearLocalCache = async () => { localStorage.removeItem(SESSION_USER_KEY); await idb.clear(); window.location.reload(); };
+export const fileToBase64 = async (file: File): Promise<string> => {
+    return new Promise((resolve) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
-        reader.onload = (event) => {
+        reader.onload = (e) => {
             const img = new Image();
-            img.src = event.target?.result as string;
+            img.src = e.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 1080;
-                const MAX_HEIGHT = 1080;
-                let width = img.width;
-                let height = img.height;
-                if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
-                else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx?.drawImage(img, 0, 0, width, height);
+                let { width, height } = img;
+                if (width > 1080 || height > 1080) {
+                    if (width > height) { height *= 1080 / width; width = 1080; } 
+                    else { width *= 1080 / height; height = 1080; }
+                }
+                canvas.width = width; canvas.height = height;
+                canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
                 resolve(canvas.toDataURL('image/jpeg', 0.7));
             };
-            img.onerror = (err) => reject(err);
         };
-        reader.onerror = (error) => reject(error);
     });
 };
-export const fileToBase64 = compressImage;
+export const getStorageEstimate = async () => { if (navigator.storage?.estimate) return await navigator.storage.estimate(); return null; };

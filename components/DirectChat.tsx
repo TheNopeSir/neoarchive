@@ -19,9 +19,9 @@ const DirectChat: React.FC<DirectChatProps> = ({
     const [input, setInput] = useState('');
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Filter and sort uniquely to prevent double rendering if refreshData overlaps with local update
+    // CRITICAL: Filter and sort uniquely to prevent double rendering
     const uniqueMessages = useMemo(() => {
-        const map = new Map();
+        const map = new Map<string, Message>();
         messages.forEach(m => map.set(m.id, m));
         return Array.from(map.values()).sort((a,b) => a.timestamp.localeCompare(b.timestamp));
     }, [messages]);
