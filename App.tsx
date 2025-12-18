@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft,
+  MessageSquare, Send, Image as ImageIcon, Plus, Trash2, Edit3, ChevronRight, BookmarkPlus, Camera, Layers, Archive, History
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -20,7 +21,7 @@ import HallOfFame from './components/HallOfFame';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry } from './types';
-import { DefaultCategory, calculateArtifactScore } from './constants';
+import { DefaultCategory, calculateArtifactScore, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES, CATEGORY_CONDITIONS } from './constants';
 
 const SkeletonCard = () => (
     <div className="bg-white/5 border border-white/5 rounded-2xl overflow-hidden animate-pulse">
@@ -28,10 +29,6 @@ const SkeletonCard = () => (
         <div className="p-4 space-y-3">
             <div className="h-4 w-3/4 bg-white/10 rounded" />
             <div className="h-3 w-1/2 bg-white/10 rounded" />
-            <div className="flex justify-between pt-4 border-t border-white/5">
-                <div className="h-4 w-12 bg-white/10 rounded" />
-                <div className="h-4 w-8 bg-white/10 rounded" />
-            </div>
         </div>
     </div>
 );
@@ -57,6 +54,13 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
 
+  // Social list state
+  const [socialListType, setSocialListType] = useState<'followers' | 'following'>('followers');
+
+  // New Item States (Artifact/Collection Creation)
+  const [newArtifact, setNewArtifact] = useState<Partial<Exhibit>>({ category: DefaultCategory.PHONES, specs: {}, imageUrls: [] });
+  const [newCollection, setNewCollection] = useState<Partial<Collection>>({ exhibitIds: [] });
+
   // Profile management state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editTagline, setEditTagline] = useState('');
@@ -65,7 +69,7 @@ export default function App() {
   const [editPassword, setEditPassword] = useState('');
   const [profileTab, setProfileTab] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
   const [guestbookInput, setGuestbookInput] = useState('');
-  const guestbookInputRef = React.useRef<HTMLInputElement>(null);
+  const guestbookInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const safetyTimer = setTimeout(() => { setIsInitializing(false); setTimeout(() => setShowSplash(false), 500); }, 3000);
@@ -79,11 +83,6 @@ export default function App() {
     };
     init();
   }, []);
-
-  useEffect(() => {
-    if (view === 'AUTH') document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = 'auto';
-  }, [view]);
 
   const refreshData = () => {
     const data = db.getFullDatabase();
@@ -127,12 +126,31 @@ export default function App() {
     await db.updateExhibit(updated);
   };
 
-  const displayExhibits = exhibits.filter(e => {
+  // Restore Dual Section Feed Logic
+  const filteredExhibits = exhibits.filter(e => {
       if (e.isDraft) return false;
       if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
       if (searchQuery && !e.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
-  }).sort((a,b) => calculateArtifactScore(b, user?.preferences) || 0 - calculateArtifactScore(a, user?.preferences) || 0);
+  });
+
+  let followingExhibits: Exhibit[] = [];
+  let recommendedExhibits: Exhibit[] = [];
+
+  if (user && !searchQuery && selectedCategory === 'ВСЕ') {
+      followingExhibits = filteredExhibits.filter(e => user.following.includes(e.owner));
+      recommendedExhibits = filteredExhibits.filter(e => !user.following.includes(e.owner));
+      recommendedExhibits.sort((a,b) => calculateArtifactScore(b, user.preferences) - calculateArtifactScore(a, user.preferences));
+      followingExhibits.sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+  } else {
+      recommendedExhibits = filteredExhibits.sort((a,b) => calculateArtifactScore(b, user?.preferences) - calculateArtifactScore(a, user?.preferences));
+  }
+
+  const handleOpenSocial = (username: string, type: 'followers' | 'following') => {
+      setViewedProfileUsername(username);
+      setSocialListType(type);
+      setView('SOCIAL_LIST');
+  };
 
   if (showSplash) {
     return (
@@ -214,10 +232,30 @@ export default function App() {
                             {Array.from({length: 8}).map((_, i) => <SkeletonCard key={i}/>)}
                         </div>
                     ) : feedMode === 'ARTIFACTS' ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
-                            {displayExhibits.map(item => (
-                                <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => { setViewedProfileUsername(author); setView('USER_PROFILE'); }} />
-                            ))}
+                        <div className="space-y-10">
+                            {followingExhibits.length > 0 && (
+                                <div>
+                                    <h2 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase">
+                                        <Zap size={14} className="text-yellow-500" /> ПОДПИСКИ
+                                    </h2>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
+                                        {followingExhibits.map(item => (
+                                            <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => { setViewedProfileUsername(author); setView('USER_PROFILE'); }} />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <h2 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase">
+                                    <Grid size={14} className="text-green-500" /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}
+                                </h2>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
+                                    {recommendedExhibits.map(item => (
+                                        <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => { setViewedProfileUsername(author); setView('USER_PROFILE'); }} />
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -233,18 +271,56 @@ export default function App() {
                 />
             )}
 
+            {view === 'CREATE_HUB' && (
+                <div className="max-w-xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
+                    <h2 className="text-2xl font-pixel font-bold mb-8 flex items-center gap-4"><PlusCircle size={32} className="text-green-500" /> СОЗДАНИЕ</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                         <div onClick={() => { setView('CREATE_ARTIFACT'); setNewArtifact({ category: DefaultCategory.PHONES, specs: {}, imageUrls: [] }); }} className="p-8 border-2 border-white/10 rounded-3xl bg-white/5 hover:border-green-500 hover:bg-green-500/5 transition-all cursor-pointer group flex flex-col items-center text-center">
+                             <ImageIcon size={48} className="mb-4 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all text-green-500" />
+                             <h3 className="font-pixel text-sm mb-2">АРТЕФАКТ</h3>
+                             <p className="font-mono text-[10px] opacity-40">ОДИНОЧНЫЙ ЭКСПОНАТ В БАЗЕ</p>
+                         </div>
+                         <div onClick={() => { setView('CREATE_COLLECTION'); setNewCollection({ exhibitIds: [] }); }} className="p-8 border-2 border-white/10 rounded-3xl bg-white/5 hover:border-blue-500 hover:bg-blue-500/5 transition-all cursor-pointer group flex flex-col items-center text-center">
+                             <FolderPlus size={48} className="mb-4 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all text-blue-500" />
+                             <h3 className="font-pixel text-sm mb-2">КОЛЛЕКЦИЯ</h3>
+                             <p className="font-mono text-[10px] opacity-40">ТЕМАТИЧЕСКАЯ ГРУППА АРТЕФАКТОВ</p>
+                         </div>
+                    </div>
+                </div>
+            )}
+
             {view === 'USER_PROFILE' && user && (
                 <UserProfileView 
-                    user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={() => setView('FEED')} onLogout={() => { db.logoutUser(); setUser(null); setView('AUTH'); }} onFollow={async (u) => { const following = user.following.includes(u) ? user.following.filter(x => x !== u) : [...user.following, u]; const updated = { ...user, following }; setUser(updated); await db.updateUserProfile(updated); }} onChat={(u) => setView('DIRECT_CHAT')} onExhibitClick={handleExhibitClick} onLike={handleLike} onFavorite={() => {}} onAuthorClick={(a) => setViewedProfileUsername(a)} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onShareCollection={() => {}} onViewHallOfFame={() => setView('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab}
+                    user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={() => setView('FEED')} onLogout={() => { db.logoutUser(); setUser(null); setView('AUTH'); }} onFollow={async (u) => { const following = user.following.includes(u) ? user.following.filter(x => x !== u) : [...user.following, u]; const updated = { ...user, following }; setUser(updated); await db.updateUserProfile(updated); }} onChat={(u) => setView('DIRECT_CHAT')} onExhibitClick={handleExhibitClick} onLike={handleLike} onAuthorClick={(a) => setViewedProfileUsername(a)} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onShareCollection={() => {}} onViewHallOfFame={() => setView('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab}
+                    onOpenSocialList={handleOpenSocial}
                 />
             )}
 
-            {view === 'HALL_OF_FAME' && user && (
-                <HallOfFame theme={theme} achievements={user.achievements} onBack={() => setView('USER_PROFILE')} />
-            )}
-            
-            {view === 'MY_COLLECTION' && user && (
-                <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => setView('FEED')} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onLike={handleLike} />
+            {view === 'SOCIAL_LIST' && viewedProfileUsername && (
+                <div className="max-w-xl mx-auto animate-in fade-in pb-20 pt-4">
+                    <div className="flex items-center gap-4 mb-8">
+                        <button onClick={() => setView('USER_PROFILE')} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ArrowLeft size={20}/></button>
+                        <div>
+                            <h1 className="font-pixel text-lg font-bold uppercase tracking-widest">{socialListType === 'followers' ? 'ПОДПИСЧИКИ' : 'ПОДПИСКИ'}</h1>
+                            <p className="text-[10px] font-mono opacity-50">@{viewedProfileUsername}</p>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        {(socialListType === 'followers' 
+                            ? db.getFullDatabase().users.find(u => u.username === viewedProfileUsername)?.followers || []
+                            : db.getFullDatabase().users.find(u => u.username === viewedProfileUsername)?.following || []
+                        ).map(name => (
+                            <div key={name} className={`p-4 rounded-2xl border transition-all flex items-center justify-between ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-black/10 hover:shadow-lg'}`}>
+                                <div className="flex items-center gap-4 cursor-pointer" onClick={() => { setViewedProfileUsername(name); setView('USER_PROFILE'); }}>
+                                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-green-500/20"><img src={db.getUserAvatar(name)} className="w-full h-full object-cover" /></div>
+                                    <div><div className="font-pixel text-xs font-bold">@{name}</div><div className="text-[9px] font-mono opacity-40 uppercase">NODE ACTIVE</div></div>
+                                </div>
+                                <button onClick={() => { setViewedProfileUsername(name); setView('DIRECT_CHAT'); }} className="p-3 bg-green-500/10 text-green-500 rounded-xl hover:bg-green-500 hover:text-black transition-all"><MessageSquare size={18} /></button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             )}
 
             {view === 'ACTIVITY' && user && (
@@ -253,13 +329,20 @@ export default function App() {
 
         </main>
         
+        {/* Fixed Mobile Navigation - Restored UI with no labels */}
         {view !== 'AUTH' && (
-          <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4">
-              <button onClick={() => setView('FEED')} className={`flex flex-col items-center gap-1 transition-all ${view === 'FEED' ? 'text-green-500' : 'opacity-40'}`}><LayoutGrid size={24} /><span className="text-[8px] font-pixel">FEED</span></button>
-              <button onClick={() => setView('MY_COLLECTION')} className={`flex flex-col items-center gap-1 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500' : 'opacity-40'}`}><Package size={24} /><span className="text-[8px] font-pixel">SHELF</span></button>
-              <button onClick={() => setView('CREATE_HUB')} className="bg-green-500 text-black p-4 rounded-3xl -mt-10 shadow-lg active:scale-90 transition-all"><PlusCircle size={28} /></button>
-              <button onClick={() => setView('ACTIVITY')} className={`flex flex-col items-center gap-1 transition-all ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-40'} relative`}><Bell size={24} /><span className="text-[8px] font-pixel">LOGS</span>{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />}</button>
-              <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`flex flex-col items-center gap-1 transition-all ${view === 'USER_PROFILE' ? 'text-green-500' : 'opacity-40'}`}><User size={24} /><span className="text-[8px] font-pixel">NODE</span></button>
+          <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">
+              <button onClick={() => setView('FEED')} className={`p-2 transition-all ${view === 'FEED' ? 'text-green-500 scale-125' : 'opacity-40'}`}><LayoutGrid size={24} /></button>
+              <button onClick={() => setView('MY_COLLECTION')} className={`p-2 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500 scale-125' : 'opacity-40'}`}><Package size={24} /></button>
+              
+              <div className="relative -top-5">
+                  <button onClick={() => setView('CREATE_HUB')} className="bg-green-500 text-black w-14 h-14 rounded-full shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black flex items-center justify-center active:scale-90 transition-all">
+                      <PlusCircle size={32} />
+                  </button>
+              </div>
+
+              <button onClick={() => setView('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? 'text-green-500 scale-125' : 'opacity-40'} relative`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black" />}</button>
+              <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? 'text-green-500 scale-125' : 'opacity-40'}`}><User size={24} /></button>
           </nav>
         )}
     </div>

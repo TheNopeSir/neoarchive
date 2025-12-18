@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Heart, Eye, Bookmark, Ghost, User, Award, Flame, Zap } from 'lucide-react';
+import React from 'react';
+import { Heart, Eye } from 'lucide-react';
 import { Exhibit } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
 import { getUserAvatar } from '../services/storageService';
@@ -37,9 +37,8 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
 
       <div className="p-4 flex flex-col flex-1">
         <h3 className={`text-sm font-bold font-pixel mb-1 line-clamp-2 leading-tight ${isCursed ? 'text-red-500' : ''}`}>{item.title}</h3>
-        <div className="mt-1 font-mono text-[10px] opacity-60 flex justify-between items-center">
-            <span className="truncate max-w-[100px] uppercase">{item.condition || item.quality}</span>
-            <span className="text-[8px] font-pixel">ID: {item.id.slice(0,6)}</span>
+        <div className="mt-1 font-mono text-[10px] opacity-60">
+            <span className="truncate uppercase">{item.condition || item.quality}</span>
         </div>
         
         <div className="mt-auto pt-4 flex items-center justify-between border-t border-dashed border-white/10">
