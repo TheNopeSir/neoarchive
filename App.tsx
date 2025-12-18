@@ -64,6 +64,9 @@ export default function App() {
   const [newArtifact, setNewArtifact] = useState<Partial<Exhibit>>({ title: '', description: '', category: DefaultCategory.PHONES, specs: {}, imageUrls: [] });
   const [newCollection, setNewCollection] = useState<Partial<Collection>>({ title: '', description: '', exhibitIds: [] });
 
+  // Add to collection state
+  const [isAddingToCollection, setIsAddingToCollection] = useState<string | null>(null);
+
   // Profile management state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editTagline, setEditTagline] = useState('');
@@ -135,10 +138,7 @@ export default function App() {
 
   const handleFollow = async (username: string) => {
       if(!user) return;
-      const following = user.following.includes(username) ? user.following.filter(x => x !== username) : [...user.following, username];
-      const updated = { ...user, following };
-      setUser(updated);
-      await db.updateUserProfile(updated);
+      await db.toggleFollow(user.username, username);
       refreshData();
   };
 
@@ -207,6 +207,17 @@ export default function App() {
     setNewCollection({ title: '', description: '', exhibitIds: [] });
     setView('FEED');
     refreshData();
+  };
+
+  const handleAddToCollection = async (collectionId: string) => {
+    if (!isAddingToCollection) return;
+    const collection = collections.find(c => c.id === collectionId);
+    if (collection && !collection.exhibitIds.includes(isAddingToCollection)) {
+        const updated = { ...collection, exhibitIds: [...collection.exhibitIds, isAddingToCollection] };
+        await db.updateCollection(updated);
+        refreshData();
+    }
+    setIsAddingToCollection(null);
   };
 
   if (showSplash) {
@@ -325,6 +336,7 @@ export default function App() {
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
                     exhibit={selectedExhibit} theme={theme} onBack={() => setView('FEED')} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toLocaleString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onFollow={handleFollow} onMessage={(u) => { setViewedProfileUsername(u); setView('DIRECT_CHAT'); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false}
+                    onAddToCollection={(id) => setIsAddingToCollection(id)}
                 />
             )}
 
@@ -465,6 +477,38 @@ export default function App() {
             )}
 
         </main>
+
+        {/* Collection Selector Modal */}
+        {isAddingToCollection && user && (
+            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className={`w-full max-w-md p-6 rounded-3xl border ${theme === 'dark' ? 'bg-dark-surface border-white/10' : 'bg-white border-black/10'}`}>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-pixel text-sm uppercase">ДОБАВИТЬ В КОЛЛЕКЦИЮ</h3>
+                        <button onClick={() => setIsAddingToCollection(null)} className="p-2 opacity-50 hover:opacity-100"><X size={20}/></button>
+                    </div>
+                    <div className="space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar">
+                        {collections.filter(c => c.owner === user.username).length === 0 ? (
+                            <p className="text-center font-mono text-xs opacity-50 py-10">У ВАС НЕТ КОЛЛЕКЦИЙ</p>
+                        ) : (
+                            collections.filter(c => c.owner === user.username).map(col => (
+                                <button 
+                                    key={col.id} 
+                                    onClick={() => handleAddToCollection(col.id)}
+                                    className={`w-full p-4 rounded-2xl border text-left flex items-center gap-4 transition-all hover:scale-[1.02] ${theme === 'dark' ? 'border-white/5 bg-white/5 hover:bg-white/10' : 'border-black/5 bg-gray-50 hover:bg-gray-100'}`}
+                                >
+                                    <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0"><img src={col.coverImage} className="w-full h-full object-cover" /></div>
+                                    <div className="flex-1">
+                                        <div className="font-pixel text-[10px] font-bold truncate uppercase">{col.title}</div>
+                                        <div className="text-[9px] font-mono opacity-40">{col.exhibitIds.length} ITEMS</div>
+                                    </div>
+                                    <Plus size={20} className="text-green-500" />
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
         
         {view !== 'AUTH' && (
           <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">

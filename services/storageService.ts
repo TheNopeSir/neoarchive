@@ -368,6 +368,27 @@ export const updateUserProfile = async (user: UserProfile) => {
     await apiCall('/users/update', 'POST', user);
 };
 
+export const toggleFollow = async (currentUsername: string, targetUsername: string) => {
+    const currentUser = cache.users.find(u => u.username === currentUsername);
+    const targetUser = cache.users.find(u => u.username === targetUsername);
+    
+    if (!currentUser || !targetUser) return;
+    
+    const isFollowing = currentUser.following.includes(targetUsername);
+    
+    if (isFollowing) {
+        currentUser.following = currentUser.following.filter(u => u !== targetUsername);
+        targetUser.followers = (targetUser.followers || []).filter(u => u !== currentUsername);
+    } else {
+        currentUser.following = [...currentUser.following, targetUsername];
+        targetUser.followers = [...(targetUser.followers || []), currentUsername];
+    }
+    
+    await saveToLocalCache();
+    await apiCall('/users/update', 'POST', currentUser);
+    await apiCall('/users/update', 'POST', targetUser);
+};
+
 const syncItem = async (endpoint: string, item: any) => {
     try { 
         await apiCall(endpoint, 'POST', item); 

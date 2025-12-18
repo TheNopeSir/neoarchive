@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ArrowLeft, Send, Terminal, Shield, MessageSquare } from 'lucide-react';
 import { UserProfile, Message } from '../types';
 import { getUserAvatar } from '../services/storageService';
@@ -19,11 +19,18 @@ const DirectChat: React.FC<DirectChatProps> = ({
     const [input, setInput] = useState('');
     const scrollRef = useRef<HTMLDivElement>(null);
 
+    // Filter and sort uniquely to prevent double rendering if refreshData overlaps with local update
+    const uniqueMessages = useMemo(() => {
+        const map = new Map();
+        messages.forEach(m => map.set(m.id, m));
+        return Array.from(map.values()).sort((a,b) => a.timestamp.localeCompare(b.timestamp));
+    }, [messages]);
+
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [messages]);
+    }, [uniqueMessages]);
 
     const handleSend = (e: React.FormEvent) => {
         e.preventDefault();
@@ -50,13 +57,13 @@ const DirectChat: React.FC<DirectChatProps> = ({
             </div>
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide no-scrollbar">
-                {messages.length === 0 ? (
+                {uniqueMessages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center opacity-20 space-y-4">
                         <MessageSquare size={48} />
                         <p className="font-pixel text-[10px] tracking-widest uppercase">НАЧНИТЕ ДИАЛОГ В СЕТИ</p>
                     </div>
                 ) : (
-                    messages.sort((a,b) => a.timestamp.localeCompare(b.timestamp)).map((msg) => {
+                    uniqueMessages.map((msg) => {
                         const isMe = msg.sender === currentUser.username;
                         return (
                             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}>
