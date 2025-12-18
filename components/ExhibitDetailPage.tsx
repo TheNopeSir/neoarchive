@@ -117,10 +117,17 @@ export default function ExhibitDetailPage({
                     <Heart size={20} fill={isLiked ? "currentColor" : "none"} />
                     <span className="text-sm font-bold font-mono">{exhibit.likes}</span>
                   </button>
+                  {/* BUTTON ADD TO COLLECTION: STRICTLY RESTRICTED TO OWNER */}
                   {isOwner && (
                       <>
                         <div className="w-[1px] h-6 bg-white/10" />
-                        <button onClick={() => onAddToCollection?.(exhibit.id)} className="p-2 opacity-60 hover:opacity-100 transition-all text-blue-400" title="Добавить в коллекцию"><BookmarkPlus size={20} /></button>
+                        <button 
+                            onClick={() => onAddToCollection?.(exhibit.id)} 
+                            className="p-2 opacity-60 hover:opacity-100 transition-all text-blue-400" 
+                            title="Добавить в коллекцию"
+                        >
+                            <BookmarkPlus size={20} />
+                        </button>
                       </>
                   )}
                   <div className="w-[1px] h-6 bg-white/10" />
