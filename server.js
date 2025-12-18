@@ -30,9 +30,15 @@ const pool = new Pool({
     ssl: {
         rejectUnauthorized: false
     },
-    max: 20,
+    max: 10, // Reduced to prevent connection limits on shared hosting
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
+});
+
+// Handle unexpected pool errors
+pool.on('error', (err, client) => {
+    console.error('❌ [Database] Unexpected error on idle client', err);
+    // Do not exit process immediately to allow recovery
 });
 
 // ==========================================
@@ -117,10 +123,13 @@ const initDB = async () => {
         for (const table of allTables) {
              try {
                  await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`);
+                 await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS data JSONB`); // Ensure data column exists
                  if (table !== 'users') {
                     await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`);
                  }
-             } catch (e) {}
+             } catch (e) {
+                 console.warn(`[Database] Schema warning for ${table}:`, e.message);
+             }
         }
         
         console.log("✅ [Database] Schema initialized.");

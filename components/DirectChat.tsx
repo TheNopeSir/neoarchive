@@ -67,7 +67,7 @@ const DirectChat: React.FC<DirectChatProps> = ({
                         const isMe = msg.sender === currentUser.username;
                         return (
                             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}>
-                                <div className={`max-w-[80%] p-4 rounded-2xl font-mono text-sm leading-relaxed ${isMe ? 'bg-green-500 text-black rounded-tr-none' : 'bg-white/10 text-white rounded-tl-none'}`}>
+                                <div className={`max-w-[80%] p-4 rounded-2xl font-mono text-sm leading-relaxed break-words ${isMe ? 'bg-green-500 text-black rounded-tr-none' : 'bg-white/10 text-white rounded-tl-none'}`}>
                                     {msg.text}
                                     <div className={`text-[9px] mt-2 opacity-50 ${isMe ? 'text-black/60' : 'text-white/40'}`}>
                                         {msg.timestamp.split(',')[1] || msg.timestamp}
