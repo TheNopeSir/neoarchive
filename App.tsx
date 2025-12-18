@@ -60,14 +60,15 @@ export default function App() {
   // Social list state
   const [socialListType, setSocialListType] = useState<'followers' | 'following'>('followers');
 
-  // New Item States
+  // Item States
   const [newArtifact, setNewArtifact] = useState<Partial<Exhibit>>({ title: '', description: '', category: DefaultCategory.PHONES, specs: {}, imageUrls: [] });
   const [newCollection, setNewCollection] = useState<Partial<Collection>>({ title: '', description: '', exhibitIds: [] });
+  const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
 
-  // Add to collection state
+  // Modal states
   const [isAddingToCollection, setIsAddingToCollection] = useState<string | null>(null);
 
-  // Profile management state
+  // Profile states
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editTagline, setEditTagline] = useState('');
   const [editStatus, setEditStatus] = useState<any>('ONLINE');
@@ -78,21 +79,33 @@ export default function App() {
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const safetyTimer = setTimeout(() => { setIsInitializing(false); setTimeout(() => setShowSplash(false), 500); }, 3000);
+    const safetyTimer = setTimeout(() => { setIsInitializing(false); setShowSplash(false); }, 4000);
     const init = async () => {
       try {
           const activeUser = await db.initializeDatabase();
           if (activeUser) { 
             setUser(activeUser); 
             setView('FEED'); 
-            refreshData(); 
           } 
           else { setView('AUTH'); }
       } catch (e) { setView('AUTH'); } 
-      finally { clearTimeout(safetyTimer); setIsInitializing(false); setTimeout(() => setShowSplash(false), 300); }
+      finally { 
+          clearTimeout(safetyTimer); 
+          refreshData();
+          setIsInitializing(false); 
+          setTimeout(() => setShowSplash(false), 300); 
+      }
     };
     init();
   }, []);
+
+  // Poll for data updates when active
+  useEffect(() => {
+    if (view !== 'AUTH' && !isInitializing) {
+        const interval = setInterval(refreshData, 10000);
+        return () => clearInterval(interval);
+    }
+  }, [view, isInitializing]);
 
   const refreshData = () => {
     const data = db.getFullDatabase();
@@ -115,7 +128,7 @@ export default function App() {
   };
 
   const handleExhibitClick = (item: Exhibit) => {
-    const updated = { ...item, views: item.views + 1 };
+    const updated = { ...item, views: (item.views || 0) + 1 };
     db.updateExhibit(updated);
     setSelectedExhibit(updated);
     setView('EXHIBIT');
@@ -129,7 +142,7 @@ export default function App() {
     const updated = { 
         ...ex, 
         likes: isLiked ? Math.max(0, ex.likes - 1) : ex.likes + 1, 
-        likedBy: isLiked ? ex.likedBy.filter(u => u !== user.username) : [...ex.likedBy, user.username] 
+        likedBy: isLiked ? ex.likedBy.filter(u => u !== user.username) : [...(ex.likedBy || []), user.username] 
     };
     setExhibits(prev => prev.map(item => item.id === id ? updated : item));
     if (selectedExhibit?.id === id) setSelectedExhibit(updated);
@@ -207,6 +220,14 @@ export default function App() {
     setNewCollection({ title: '', description: '', exhibitIds: [] });
     setView('FEED');
     refreshData();
+  };
+
+  const handleUpdateCollection = async () => {
+      if (!user || !editingCollection) return;
+      await db.updateCollection(editingCollection);
+      setEditingCollection(null);
+      setView('FEED');
+      refreshData();
   };
 
   const handleAddToCollection = async (collectionId: string) => {
@@ -407,7 +428,7 @@ export default function App() {
                         <div>
                             <h3 className="font-pixel text-[10px] opacity-40 mb-4 uppercase tracking-[0.2em]">ВЫБЕРИТЕ ВАШИ АРТЕФАКТЫ</h3>
                             <div className="grid grid-cols-3 gap-3">
-                                {exhibits.filter(e => e.owner === user?.username).map(ex => (
+                                {exhibits.filter(e => e.owner === user?.username && !e.isDraft).map(ex => (
                                     <div key={ex.id} onClick={() => setNewCollection(p => ({ ...p, exhibitIds: p.exhibitIds?.includes(ex.id) ? p.exhibitIds.filter(id => id !== ex.id) : [...(p.exhibitIds || []), ex.id] }))} className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${newCollection.exhibitIds?.includes(ex.id) ? 'border-blue-500 scale-95 shadow-lg' : 'border-white/5 opacity-50'}`}>
                                         <img src={ex.imageUrls[0]} className="w-full h-full object-cover" />
                                         {newCollection.exhibitIds?.includes(ex.id) && <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center"><Check size={32} className="text-white drop-shadow-md" /></div>}
@@ -420,9 +441,37 @@ export default function App() {
                 </div>
             )}
 
+            {view === 'EDIT_COLLECTION' && editingCollection && (
+                <div className="max-w-xl mx-auto space-y-8 animate-in slide-in-from-bottom-6 pb-20">
+                    <button onClick={() => setView('COLLECTION_DETAIL')} className="flex items-center gap-2 opacity-50 font-pixel text-[10px] tracking-widest uppercase hover:opacity-100 transition-all"><ArrowLeft size={14}/> ОТМЕНА</button>
+                    <div className="flex items-center gap-4"><div className="w-12 h-12 bg-purple-500/10 text-purple-500 flex items-center justify-center rounded-2xl"><Edit3 size={24}/></div><div><h2 className="font-pixel text-lg font-black uppercase">РЕДАКТОР КОЛЛЕКЦИИ</h2><p className="text-[10px] font-mono opacity-40">ОБНОВЛЕНИЕ ДАННЫХ УЗЛА</p></div></div>
+                    <div className="space-y-6">
+                        <input value={editingCollection.title} onChange={e => setEditingCollection(p => p ? ({ ...p, title: e.target.value }) : null)} placeholder="ЗАГОЛОВОК КОЛЛЕКЦИИ" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 font-pixel text-xs tracking-widest focus:border-purple-500 transition-all outline-none" />
+                        <textarea value={editingCollection.description} onChange={e => setEditingCollection(p => p ? ({ ...p, description: e.target.value }) : null)} placeholder="О ЧЕМ ЭТА КОЛЛЕКЦИЯ?" rows={3} className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 font-mono text-sm focus:border-purple-500 transition-all outline-none resize-none" />
+                        <div>
+                            <h3 className="font-pixel text-[10px] opacity-40 mb-4 uppercase tracking-[0.2em]">ВЫБЕРИТЕ ВАШИ АРТЕФАКТЫ</h3>
+                            <div className="grid grid-cols-3 gap-3">
+                                {exhibits.filter(e => e.owner === user?.username && !e.isDraft).map(ex => (
+                                    <div key={ex.id} onClick={() => setEditingCollection(p => {
+                                        if(!p) return null;
+                                        const ids = p.exhibitIds.includes(ex.id) ? p.exhibitIds.filter(id => id !== ex.id) : [...p.exhibitIds, ex.id];
+                                        return { ...p, exhibitIds: ids };
+                                    })} className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${editingCollection.exhibitIds.includes(ex.id) ? 'border-purple-500 scale-95 shadow-lg' : 'border-white/5 opacity-50'}`}>
+                                        <img src={ex.imageUrls[0]} className="w-full h-full object-cover" />
+                                        {editingCollection.exhibitIds.includes(ex.id) && <div className="absolute inset-0 bg-purple-500/20 flex items-center justify-center"><Check size={32} className="text-white drop-shadow-md" /></div>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <button onClick={handleUpdateCollection} className="w-full py-5 bg-purple-500 text-white rounded-2xl font-pixel text-[10px] tracking-widest uppercase font-black shadow-[0_0_20px_rgba(168,85,247,0.4)]">ОБНОВИТЬ КОЛЛЕКЦИЮ</button>
+                    </div>
+                </div>
+            )}
+
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
                 <CollectionDetailPage 
                     collection={selectedCollection} artifacts={exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id))} theme={theme} onBack={() => setView('FEED')} onExhibitClick={handleExhibitClick} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} currentUser={user?.username || ''}
+                    onEdit={() => { setEditingCollection(selectedCollection); setView('EDIT_COLLECTION'); }}
                 />
             )}
 

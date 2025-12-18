@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ArrowLeft, Share2, FolderOpen, Grid, User } from 'lucide-react';
+import { ArrowLeft, Share2, FolderOpen, Grid, User, Edit3 } from 'lucide-react';
 import { Collection, Exhibit } from '../types';
 import ExhibitCard from './ExhibitCard';
 import { getUserAvatar } from '../services/storageService';
@@ -13,10 +13,11 @@ interface CollectionDetailPageProps {
     onExhibitClick: (item: Exhibit) => void;
     onAuthorClick: (author: string) => void;
     currentUser: string;
+    onEdit?: () => void;
 }
 
 const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ 
-    collection, artifacts, theme, onBack, onExhibitClick, onAuthorClick, currentUser 
+    collection, artifacts, theme, onBack, onExhibitClick, onAuthorClick, currentUser, onEdit 
 }) => {
     const isOwner = currentUser === collection.owner;
 
@@ -27,6 +28,11 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                     <ArrowLeft size={14} /> НАЗАД
                 </button>
                 <div className="flex gap-4">
+                    {isOwner && onEdit && (
+                        <button onClick={onEdit} className="text-purple-400 hover:text-purple-300 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase">
+                            <Edit3 size={16} /> РЕДАКТИРОВАТЬ
+                        </button>
+                    )}
                     <button className="opacity-70 hover:opacity-100 transition-all"><Share2 size={18} /></button>
                 </div>
             </div>
@@ -71,12 +77,16 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                             key={item.id} 
                             item={item} 
                             theme={theme} 
+                            // Fixed: changed handleExhibitClick to onExhibitClick
                             onClick={onExhibitClick} 
                             isLiked={item.likedBy?.includes(currentUser)} 
                             onLike={() => {}} 
                             onAuthorClick={onAuthorClick} 
                         />
                     ))}
+                    {artifacts.length === 0 && (
+                         <div className="col-span-full py-12 text-center border-2 border-dashed border-white/5 rounded-2xl opacity-40 font-pixel text-[10px] uppercase">Экспозиция пуста</div>
+                    )}
                 </div>
             </div>
         </div>
