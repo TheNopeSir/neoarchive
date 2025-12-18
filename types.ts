@@ -22,7 +22,7 @@ export interface Exhibit {
   owner: string;
   timestamp: string;
   likes: number;
-  likedBy: string[]; // Made mandatory
+  likedBy: string[]; 
   views: number;
   condition?: string;
   quality: string;
@@ -90,8 +90,8 @@ export interface UserProfile {
   avatarUrl: string;
   joinedDate: string;
   following: string[];
-  followers: string[]; // Added
-  achievements: AchievementProgress[]; // Updated
+  followers: string[]; 
+  achievements: AchievementProgress[]; 
   preferences?: Record<string, number>;
   password?: string;
   isAdmin?: boolean;

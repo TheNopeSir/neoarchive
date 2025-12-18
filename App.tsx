@@ -16,6 +16,7 @@ import CollectionCard from './components/CollectionCard';
 import PixelSnow from './components/PixelSnow';
 import ActivityView from './components/ActivityView';
 import SEO from './components/SEO';
+import HallOfFame from './components/HallOfFame';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry } from './types';
@@ -47,6 +48,7 @@ export default function App() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [guestbook, setGuestbook] = useState<GuestbookEntry[]>([]);
   
   const [selectedExhibit, setSelectedExhibit] = useState<Exhibit | null>(null);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
@@ -54,6 +56,16 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
+
+  // Profile management state
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editTagline, setEditTagline] = useState('');
+  const [editStatus, setEditStatus] = useState<any>('ONLINE');
+  const [editTelegram, setEditTelegram] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [profileTab, setProfileTab] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
+  const [guestbookInput, setGuestbookInput] = useState('');
+  const guestbookInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const safetyTimer = setTimeout(() => { setIsInitializing(false); setTimeout(() => setShowSplash(false), 500); }, 3000);
@@ -68,12 +80,18 @@ export default function App() {
     init();
   }, []);
 
+  useEffect(() => {
+    if (view === 'AUTH') document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = 'auto';
+  }, [view]);
+
   const refreshData = () => {
     const data = db.getFullDatabase();
     setExhibits(data.exhibits);
     setCollections(data.collections);
     setNotifications(data.notifications);
     setMessages(data.messages);
+    setGuestbook(data.guestbook);
     if (user) {
        const updatedUser = data.users.find(u => u.username === user.username);
        if (updatedUser) setUser(updatedUser);
@@ -114,7 +132,7 @@ export default function App() {
       if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
       if (searchQuery && !e.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
-  }).sort((a,b) => calculateArtifactScore(b, user?.preferences) - calculateArtifactScore(a, user?.preferences));
+  }).sort((a,b) => calculateArtifactScore(b, user?.preferences) || 0 - calculateArtifactScore(a, user?.preferences) || 0);
 
   if (showSplash) {
     return (
@@ -177,7 +195,6 @@ export default function App() {
 
             {(view === 'FEED' || view === 'SEARCH') && (
                 <div className="space-y-8 animate-in fade-in zoom-in-95">
-                    {/* Simplified Mobile Header - Fixed Duplicates */}
                     <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide no-scrollbar mask-fade-right">
                          <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]' : 'border-white/10 opacity-50'}`}>ВСЕ</button>
                          {Object.values(DefaultCategory).map(cat => (
@@ -212,21 +229,37 @@ export default function App() {
 
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
-                    exhibit={selectedExhibit} theme={theme} onBack={() => setView('FEED')} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toLocaleString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onFollow={() => {}} onMessage={() => {}} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false}
+                    exhibit={selectedExhibit} theme={theme} onBack={() => setView('FEED')} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toLocaleString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onFollow={async (u) => { if(!user) return; const following = user.following.includes(u) ? user.following.filter(x => x !== u) : [...user.following, u]; const updated = { ...user, following }; setUser(updated); await db.updateUserProfile(updated); }} onMessage={(u) => { setView('DIRECT_CHAT'); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false}
                 />
             )}
 
-            {/* Other views (MY_COLLECTION, ACTIVITY, USER_PROFILE) follow the same redesigned pattern */}
+            {view === 'USER_PROFILE' && user && (
+                <UserProfileView 
+                    user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={() => setView('FEED')} onLogout={() => { db.logoutUser(); setUser(null); setView('AUTH'); }} onFollow={async (u) => { const following = user.following.includes(u) ? user.following.filter(x => x !== u) : [...user.following, u]; const updated = { ...user, following }; setUser(updated); await db.updateUserProfile(updated); }} onChat={(u) => setView('DIRECT_CHAT')} onExhibitClick={handleExhibitClick} onLike={handleLike} onFavorite={() => {}} onAuthorClick={(a) => setViewedProfileUsername(a)} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onShareCollection={() => {}} onViewHallOfFame={() => setView('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab}
+                />
+            )}
+
+            {view === 'HALL_OF_FAME' && user && (
+                <HallOfFame theme={theme} achievements={user.achievements} onBack={() => setView('USER_PROFILE')} />
+            )}
+            
+            {view === 'MY_COLLECTION' && user && (
+                <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => setView('FEED')} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onLike={handleLike} />
+            )}
+
+            {view === 'ACTIVITY' && user && (
+                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => setView('DIRECT_CHAT')} />
+            )}
+
         </main>
         
-        {/* Mobile Navigation Bar - Cleaner and Functional */}
         {view !== 'AUTH' && (
-          <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4">
-              <button onClick={() => setView('FEED')} className={`flex flex-col items-center gap-1 transition-all ${view === 'FEED' ? 'text-green-500 scale-110' : 'opacity-40'}`}><LayoutGrid size={24} /><span className="text-[8px] font-pixel">FEED</span></button>
-              <button onClick={() => setView('MY_COLLECTION')} className={`flex flex-col items-center gap-1 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500 scale-110' : 'opacity-40'}`}><Package size={24} /><span className="text-[8px] font-pixel">SHELF</span></button>
-              <button onClick={() => setView('CREATE_HUB')} className="bg-green-500 text-black p-4 rounded-3xl -mt-10 shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black active:scale-90 transition-all"><PlusCircle size={28} /></button>
-              <button onClick={() => setView('ACTIVITY')} className={`flex flex-col items-center gap-1 transition-all ${view === 'ACTIVITY' ? 'text-green-500 scale-110' : 'opacity-40'} relative`}><Bell size={24} /><span className="text-[8px] font-pixel">LOGS</span>{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black" />}</button>
-              <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`flex flex-col items-center gap-1 transition-all ${view === 'USER_PROFILE' ? 'text-green-500 scale-110' : 'opacity-40'}`}><User size={24} /><span className="text-[8px] font-pixel">NODE</span></button>
+          <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4">
+              <button onClick={() => setView('FEED')} className={`flex flex-col items-center gap-1 transition-all ${view === 'FEED' ? 'text-green-500' : 'opacity-40'}`}><LayoutGrid size={24} /><span className="text-[8px] font-pixel">FEED</span></button>
+              <button onClick={() => setView('MY_COLLECTION')} className={`flex flex-col items-center gap-1 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500' : 'opacity-40'}`}><Package size={24} /><span className="text-[8px] font-pixel">SHELF</span></button>
+              <button onClick={() => setView('CREATE_HUB')} className="bg-green-500 text-black p-4 rounded-3xl -mt-10 shadow-lg active:scale-90 transition-all"><PlusCircle size={28} /></button>
+              <button onClick={() => setView('ACTIVITY')} className={`flex flex-col items-center gap-1 transition-all ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-40'} relative`}><Bell size={24} /><span className="text-[8px] font-pixel">LOGS</span>{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />}</button>
+              <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`flex flex-col items-center gap-1 transition-all ${view === 'USER_PROFILE' ? 'text-green-500' : 'opacity-40'}`}><User size={24} /><span className="text-[8px] font-pixel">NODE</span></button>
           </nav>
         )}
     </div>
