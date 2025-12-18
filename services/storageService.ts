@@ -90,7 +90,8 @@ const loadFromCache = async (): Promise<boolean> => {
 
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    // Increase timeout to 60s for slow operations like SMTP emails
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
     try {
         const options: RequestInit = { 
             method, 
@@ -100,10 +101,24 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
         if (body) options.body = JSON.stringify(body);
         const res = await fetch(`${API_BASE}${endpoint}`, options);
         clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`API Error ${res.status}`);
+        
+        if (!res.ok) {
+            let errorMsg = `API Error ${res.status}`;
+            try {
+                const json = await res.json();
+                if (json.error) errorMsg = json.error;
+            } catch (e) {
+                // Ignore parsing error, keep default status message
+            }
+            throw new Error(errorMsg);
+        }
         return await res.json();
-    } catch (error) {
+    } catch (error: any) {
         clearTimeout(timeoutId);
+        // Handle AbortError specifically for user-friendly message
+        if (error.name === 'AbortError') {
+            throw new Error("Сервер долго не отвечает. Попробуйте позже (Timeout).");
+        }
         throw error;
     }
 };
