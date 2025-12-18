@@ -1,10 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, Wand2, ArrowLeft, Save, X, Trash2, Info, Archive } from 'lucide-react';
+import { Camera, ArrowLeft, Save, X, Info, Archive } from 'lucide-react';
 import { DefaultCategory, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES } from '../constants';
-import { generateArtifactDescription } from '../services/geminiService';
 import { fileToBase64 } from '../services/storageService';
-import RetroLoader from './RetroLoader';
 
 interface CreateArtifactViewProps {
   theme: 'dark' | 'light';
@@ -19,7 +17,6 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
   const [category, setCategory] = useState<string>(DefaultCategory.PHONES);
   const [subcategory, setSubcategory] = useState('');
   const [specs, setSpecs] = useState<Record<string, string>>({});
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -30,27 +27,6 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
         newImages.push(b64);
       }
       setImages(newImages);
-    }
-  };
-
-  const handleAiAnalyze = async () => {
-    if (images.length === 0 && !title) {
-      alert("Загрузите фото или введите название для запуска анализа");
-      return;
-    }
-    setIsAnalyzing(true);
-    try {
-      const result = await generateArtifactDescription(images[0], title);
-      if (result.title) setTitle(result.title);
-      if (result.description) setDescription(result.description);
-      if (result.category) setCategory(result.category);
-      if (result.subcategory) setSubcategory(result.subcategory);
-      if (result.specs) setSpecs(result.specs);
-    } catch (error) {
-      console.error(error);
-      alert("Ошибка нейронного анализа. Проверьте соединение.");
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -103,14 +79,9 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
             </button>
             <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
           </div>
-          
-          <button 
-            onClick={handleAiAnalyze}
-            disabled={isAnalyzing}
-            className={`w-full py-5 rounded-2xl flex items-center justify-center gap-3 font-pixel text-xs tracking-[0.3em] transition-all ${isAnalyzing ? 'bg-white/10 opacity-50 cursor-wait' : 'bg-green-500 text-black hover:shadow-[0_0_30px_rgba(74,222,128,0.5)] active:scale-95'}`}
-          >
-            {isAnalyzing ? <RetroLoader text="NEURAL_ANALYSIS_IN_PROGRESS" /> : <><Wand2 size={20} /> ЗАПУСТИТЬ НЕЙРОННЫЙ АНАЛИЗ</>}
-          </button>
+          <p className="text-[10px] font-mono opacity-40 text-center md:text-left">
+             Загрузите до 5 фотографий вашего артефакта.
+          </p>
         </div>
 
         {/* Basic Metadata */}
@@ -184,7 +155,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                   </div>
                 ))}
                 <p className="text-[9px] font-mono opacity-30 italic mt-2">
-                  * Нейронный модуль автоматически распознает бренд, год выпуска и ключевые параметры при анализе фото.
+                  * Заполните поля вручную для создания точной карточки товара.
                 </p>
               </div>
             </div>

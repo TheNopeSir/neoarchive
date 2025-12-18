@@ -91,7 +91,9 @@ const loadFromCache = async (): Promise<boolean> => {
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
     // Increase timeout to 60s for slow operations like SMTP emails
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    // Pass an explicit error object to abort() to avoid "signal is aborted without reason"
+    const timeoutId = setTimeout(() => controller.abort(new Error("Timeout")), 60000);
+    
     try {
         const options: RequestInit = { 
             method, 
@@ -116,7 +118,7 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
     } catch (error: any) {
         clearTimeout(timeoutId);
         // Handle AbortError specifically for user-friendly message
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || error.message === 'Timeout') {
             throw new Error("Сервер долго не отвечает. Попробуйте позже (Timeout).");
         }
         throw error;
