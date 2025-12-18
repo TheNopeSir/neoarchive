@@ -20,6 +20,7 @@ import HallOfFame from './components/HallOfFame';
 import CollectionDetailPage from './components/CollectionDetailPage';
 import DirectChat from './components/DirectChat';
 import CreateArtifactView from './components/CreateArtifactView';
+import SocialListView from './components/SocialListView';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry } from './types';
@@ -374,6 +375,17 @@ export default function App() {
                     messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} 
                     onBack={() => setView('ACTIVITY')} 
                     onSendMessage={handleSendMessage} 
+                />
+            )}
+
+            {view === 'SOCIAL_LIST' && viewedProfileUsername && (
+                <SocialListView 
+                    type={socialListType} 
+                    username={viewedProfileUsername} 
+                    currentUserUsername={user?.username}
+                    theme={theme} 
+                    onBack={() => setView('USER_PROFILE')} 
+                    onUserClick={(u) => { setViewedProfileUsername(u); setView('USER_PROFILE'); }} 
                 />
             )}
 

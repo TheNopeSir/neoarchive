@@ -421,29 +421,30 @@ app.get('/api/auth/verify', async (req, res) => {
 app.get('/api/sync', async (req, res) => {
     const { username } = req.query;
     
+    // Increased limits to ensure collections and profile views aren't empty
     let exhibitQuery = `
         SELECT data FROM exhibits 
         WHERE id IN (
-            (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 50)
+            (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 200)
             UNION
-            (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 10)
+            (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 50)
         )
         ORDER BY updated_at DESC
     `;
     
-    let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 20`;
+    let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 50`;
     
     if (username) {
         exhibitQuery = `
             SELECT data FROM exhibits 
             WHERE data->>'owner' = '${username}' 
             OR id IN (
-                (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 50)
+                (SELECT id FROM exhibits ORDER BY updated_at DESC LIMIT 200)
                 UNION
-                (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 10)
+                (SELECT id FROM exhibits ORDER BY created_at DESC LIMIT 50)
             )
         `;
-        collectionQuery = `SELECT data FROM collections WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM collections ORDER BY updated_at DESC LIMIT 20)`;
+        collectionQuery = `SELECT data FROM collections WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM collections ORDER BY updated_at DESC LIMIT 50)`;
     }
 
     // Helper to prevent entire Sync from failing if one table errors
