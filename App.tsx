@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -58,6 +58,7 @@ export default function App() {
   // Social/Edit State
   const [socialListType, setSocialListType] = useState<'followers' | 'following'>('followers');
   const [isAddingToCollection, setIsAddingToCollection] = useState<string | null>(null);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
 
   // Profile states
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -498,7 +499,7 @@ export default function App() {
                   <div className="flex items-center gap-2 md:gap-4">
                       {/* CREATE BUTTON FOR DESKTOP */}
                       <button 
-                          onClick={() => navigateTo('CREATE_ARTIFACT')} 
+                          onClick={() => setShowCreateMenu(true)} 
                           className="hidden md:flex items-center gap-2 px-4 py-2 bg-green-500 text-black rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform shadow-[0_0_15px_rgba(74,222,128,0.4)] mr-2"
                       >
                           <PlusCircle size={14} /> ДОБАВИТЬ
@@ -588,17 +589,6 @@ export default function App() {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {/* Create New Collection Card */}
-                            <button 
-                                onClick={() => navigateTo('CREATE_COLLECTION')}
-                                className={`aspect-[4/5] md:aspect-[3/4] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-4 transition-all hover:scale-105 group ${theme === 'dark' ? 'border-white/10 hover:border-green-500/50 hover:bg-white/5' : 'border-black/10 hover:border-green-500/50 hover:bg-black/5'}`}
-                            >
-                                <div className="w-16 h-16 rounded-full bg-green-500 text-black flex items-center justify-center shadow-[0_0_20px_rgba(74,222,128,0.4)] group-hover:scale-110 transition-transform">
-                                    <Plus size={32} />
-                                </div>
-                                <span className="font-pixel text-xs tracking-widest opacity-70 group-hover:opacity-100 group-hover:text-green-500">СОЗДАТЬ КОЛЛЕКЦИЮ</span>
-                            </button>
-
                             {collections.map(col => ( 
                                 <CollectionCard 
                                     key={col.id} 
@@ -716,6 +706,40 @@ export default function App() {
             )}
 
         </main>
+
+        {/* CREATE MENU MODAL */}
+        {showCreateMenu && (
+            <div className="fixed inset-0 z-[3000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowCreateMenu(false)}>
+                <div className={`w-full max-w-sm p-6 rounded-3xl border-2 transform transition-all scale-100 ${theme === 'dark' ? 'bg-[#09090b] border-white/10 shadow-[0_0_50px_rgba(74,222,128,0.2)]' : 'bg-white border-black/10 shadow-2xl'}`} onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-pixel text-sm uppercase tracking-widest flex items-center gap-2"><PlusCircle size={16}/> СОЗДАТЬ НОВУЮ ЗАПИСЬ</h3>
+                        <button onClick={() => setShowCreateMenu(false)} className="opacity-50 hover:opacity-100 hover:rotate-90 transition-all"><X size={20}/></button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <button 
+                            onClick={() => { navigateTo('CREATE_ARTIFACT'); setShowCreateMenu(false); }}
+                            className={`flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-green-500/50 hover:bg-green-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}
+                        >
+                            <div className="w-12 h-12 rounded-full bg-green-500 text-black flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_#4ade80] transition-shadow">
+                                <Package size={24} />
+                            </div>
+                            <span className="font-pixel text-[10px] font-bold tracking-widest">АРТЕФАКТ</span>
+                        </button>
+
+                        <button 
+                            onClick={() => { navigateTo('CREATE_COLLECTION'); setShowCreateMenu(false); }}
+                            className={`flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-blue-500/50 hover:bg-blue-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}
+                        >
+                            <div className="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_#3b82f6] transition-shadow">
+                                <Layers size={24} />
+                            </div>
+                            <span className="font-pixel text-[10px] font-bold tracking-widest">КОЛЛЕКЦИЮ</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
         
         {/* ADD TO COLLECTION MODAL */}
         {isAddingToCollection && user && (
@@ -765,7 +789,7 @@ export default function App() {
           <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">
               <button onClick={() => navigateTo('FEED')} className={`p-2 transition-all ${view === 'FEED' ? 'text-green-500 scale-125' : 'opacity-40'}`}><LayoutGrid size={24} /></button>
               <button onClick={() => navigateTo('MY_COLLECTION')} className={`p-2 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500 scale-125' : 'opacity-40'}`}><Package size={24} /></button>
-              <div className="relative -top-5"><button onClick={() => navigateTo('CREATE_ARTIFACT')} className="bg-green-500 text-black w-14 h-14 rounded-full shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black flex items-center justify-center transition-all"><PlusCircle size={32} /></button></div>
+              <div className="relative -top-5"><button onClick={() => setShowCreateMenu(true)} className="bg-green-500 text-black w-14 h-14 rounded-full shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black flex items-center justify-center transition-all hover:scale-105 active:scale-95"><PlusCircle size={32} /></button></div>
               <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? 'text-green-500 scale-125' : 'opacity-40'} relative`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black" />}</button>
               <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? 'text-green-500 scale-125' : 'opacity-40'}`}><User size={24} /></button>
           </nav>
