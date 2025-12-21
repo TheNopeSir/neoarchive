@@ -256,6 +256,19 @@ export default function App() {
       await db.updateExhibit(updatedEx);
   };
 
+  const handleDeleteComment = async (exhibitId: string, commentId: string) => {
+      if (!user) return;
+      const ex = exhibits.find(e => e.id === exhibitId);
+      if (!ex) return;
+      
+      const updatedComments = ex.comments.filter(c => c.id !== commentId);
+      const updatedEx = { ...ex, comments: updatedComments };
+      
+      await db.updateExhibit(updatedEx);
+      setExhibits(prev => prev.map(e => e.id === exhibitId ? updatedEx : e));
+      if (selectedExhibit?.id === exhibitId) setSelectedExhibit(updatedEx);
+  };
+
   const handlePostComment = async (id: string, text: string, parentId?: string) => {
       if (!user) return;
       const ex = exhibits.find(e => e.id === id);
@@ -336,25 +349,46 @@ export default function App() {
 
   const handleSaveArtifact = async (artifactData: Partial<Exhibit>) => {
       if (!user || !artifactData.title) return;
-      const ex: Exhibit = { 
-        id: crypto.randomUUID(), 
-        title: artifactData.title, 
-        description: artifactData.description || '', 
-        category: artifactData.category || DefaultCategory.MISC, 
-        subcategory: artifactData.subcategory, 
-        imageUrls: artifactData.imageUrls || [], 
-        videoUrl: artifactData.videoUrl, // Add video URL
-        owner: user.username, 
-        timestamp: new Date().toISOString(), 
-        likes: 0, 
-        likedBy: [], 
-        views: 0, 
-        specs: artifactData.specs || {}, 
-        comments: [], 
-        isDraft: artifactData.isDraft, 
-        quality: 'MINT' 
-      };
-      await db.saveExhibit(ex);
+      
+      // Update Existing
+      if (artifactData.id) {
+          const existing = exhibits.find(e => e.id === artifactData.id);
+          if (existing) {
+              const updated: Exhibit = {
+                  ...existing,
+                  ...artifactData,
+                  // Ensure mandatory fields aren't lost if not passed in partial
+                  imageUrls: artifactData.imageUrls || existing.imageUrls,
+                  specs: artifactData.specs || existing.specs,
+                  title: artifactData.title || existing.title,
+                  category: artifactData.category || existing.category
+              };
+              await db.updateExhibit(updated);
+              if (selectedExhibit?.id === updated.id) setSelectedExhibit(updated);
+          }
+      } else {
+          // Create New
+          const ex: Exhibit = { 
+            id: crypto.randomUUID(), 
+            title: artifactData.title, 
+            description: artifactData.description || '', 
+            category: artifactData.category || DefaultCategory.MISC, 
+            subcategory: artifactData.subcategory, 
+            imageUrls: artifactData.imageUrls || [], 
+            videoUrl: artifactData.videoUrl, 
+            owner: user.username, 
+            timestamp: new Date().toISOString(), 
+            likes: 0, 
+            likedBy: [], 
+            views: 0, 
+            specs: artifactData.specs || {}, 
+            comments: [], 
+            isDraft: artifactData.isDraft, 
+            quality: 'MINT' 
+          };
+          await db.saveExhibit(ex);
+      }
+      
       navigateTo('FEED');
       refreshData();
   };
@@ -548,6 +582,10 @@ export default function App() {
               <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} />
             )}
 
+            {view === 'EDIT_ARTIFACT' && selectedExhibit && (
+               <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} initialData={selectedExhibit} />
+            )}
+
             {/* CREATE OR EDIT COLLECTION VIEW */}
             {(view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') && user && (
                 <CreateCollectionView
@@ -572,6 +610,7 @@ export default function App() {
                     isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} 
                     onPostComment={handlePostComment}
                     onCommentLike={handleCommentLike} 
+                    onDeleteComment={handleDeleteComment}
                     onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} 
                     onFollow={handleFollow} 
                     onMessage={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
@@ -579,6 +618,8 @@ export default function App() {
                     isAdmin={user?.isAdmin || false} 
                     isFollowing={user?.following.includes(selectedExhibit.owner) || false} 
                     onAddToCollection={(id) => setIsAddingToCollection(id)}
+                    onEdit={(item) => navigateTo('EDIT_ARTIFACT', { item })}
+                    users={db.getFullDatabase().users}
                 />
             )}
             

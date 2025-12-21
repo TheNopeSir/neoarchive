@@ -1,10 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronLeft, ChevronRight, Heart, Share2, MessageSquare, Trash2, 
-  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight
+  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2
 } from 'lucide-react';
-import { Exhibit, Comment } from '../types';
+import { Exhibit, Comment, UserProfile } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
 import { getUserAvatar } from '../services/storageService';
 
@@ -19,6 +19,7 @@ interface ExhibitDetailPageProps {
   isLiked: boolean;
   onPostComment: (id: string, text: string, parentId?: string) => void;
   onCommentLike: (commentId: string) => void;
+  onDeleteComment: (exhibitId: string, commentId: string) => void;
   onAuthorClick: (author: string) => void;
   onFollow: (username: string) => void;
   onMessage: (username: string) => void;
@@ -28,6 +29,7 @@ interface ExhibitDetailPageProps {
   isFollowing: boolean;
   currentUser: string;
   isAdmin: boolean;
+  users: UserProfile[];
 }
 
 // Helper for video embedding
@@ -59,7 +61,7 @@ const renderTextWithMentions = (text: string, onUserClick: (u: string) => void) 
 };
 
 export default function ExhibitDetailPage({
-  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, isFollowing, currentUser, isAdmin
+  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, isFollowing, currentUser, isAdmin, users
 }: ExhibitDetailPageProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
@@ -67,6 +69,10 @@ export default function ExhibitDetailPage({
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [replyTo, setReplyTo] = useState<{ id: string, author: string } | null>(null);
   
+  // Mentions State
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
+
   const images = Array.isArray(exhibit.imageUrls) ? exhibit.imageUrls : ['https://placehold.co/600x400?text=NO+IMAGE'];
   const specs = exhibit.specs || {};
   const comments = exhibit.comments || [];
@@ -78,6 +84,16 @@ export default function ExhibitDetailPage({
 
   const nonEmptySpecs = Object.entries(specs).filter(([_, val]) => !!val);
   const videoEmbedUrl = exhibit.videoUrl ? getEmbedUrl(exhibit.videoUrl) : null;
+  const isOwner = currentUser === exhibit.owner;
+
+  useEffect(() => {
+      if (mentionQuery !== null) {
+          const query = mentionQuery.toLowerCase();
+          setFilteredUsers(users.filter(u => u.username.toLowerCase().includes(query)).slice(0, 5));
+      } else {
+          setFilteredUsers([]);
+      }
+  }, [mentionQuery, users]);
 
   const handleShare = (platform: string) => {
     const url = encodeURIComponent(window.location.href);
@@ -93,12 +109,29 @@ export default function ExhibitDetailPage({
     setShowShareMenu(false);
   };
 
-  const isOwner = currentUser === exhibit.owner;
-
   const handleReply = (comment: Comment) => {
       setReplyTo({ id: comment.id, author: comment.author });
       setCommentText(`@${comment.author} `);
-      // Focus handled by state binding usually, but refined focus logic would go here
+  };
+
+  const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const text = e.target.value;
+      setCommentText(text);
+
+      const lastWord = text.split(' ').pop();
+      if (lastWord && lastWord.startsWith('@')) {
+          setMentionQuery(lastWord.slice(1));
+      } else {
+          setMentionQuery(null);
+      }
+  };
+
+  const selectMention = (username: string) => {
+      const words = commentText.split(' ');
+      words.pop(); // remove incomplete mention
+      const newText = [...words, `@${username} `].join(' ');
+      setCommentText(newText);
+      setMentionQuery(null);
   };
 
   return (
@@ -106,6 +139,11 @@ export default function ExhibitDetailPage({
       <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/10">
         <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest"><ArrowLeft size={14} /> НАЗАД</button>
         <div className="flex gap-4">
+          {isOwner && onEdit && (
+              <button onClick={() => onEdit(exhibit)} className="text-purple-400 hover:text-purple-300 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase">
+                  <Edit2 size={14} /> ИЗМЕНИТЬ
+              </button>
+          )}
           {isOwner && onDelete && ( <button onClick={() => onDelete(exhibit.id)} className="text-red-500 hover:text-red-400"><Trash2 size={18} /></button> )}
           <div className="relative">
             <button onClick={() => setShowShareMenu(!showShareMenu)} className={`flex items-center gap-2 opacity-70 hover:opacity-100 transition-all ${shareCopied ? 'text-green-500' : ''}`}><Share2 size={18} /></button>
@@ -218,6 +256,7 @@ export default function ExhibitDetailPage({
                   {comments.length === 0 ? ( <div className="text-center py-10 opacity-30 text-xs font-pixel uppercase tracking-widest">ЛОГИ ПУСТЫ</div> ) : ( 
                     comments.map(c => {
                         const isCommentLiked = c.likedBy && c.likedBy.includes(currentUser);
+                        const isAuthor = c.author === currentUser;
                         return ( 
                           <div key={c.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all">
                             <div className="flex justify-between items-start mb-2">
@@ -235,6 +274,11 @@ export default function ExhibitDetailPage({
                                     <button onClick={() => handleReply(c)} className="text-gray-500 hover:text-white transition-colors" title="Ответить">
                                         <CornerDownRight size={14} />
                                     </button>
+                                    {isAuthor && (
+                                        <button onClick={() => onDeleteComment(exhibit.id, c.id)} className="text-gray-500 hover:text-red-500 transition-colors" title="Удалить">
+                                            <Trash2 size={14} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                             <p className="font-mono text-sm opacity-80 pl-8">{renderTextWithMentions(c.text, onAuthorClick)}</p>
@@ -244,7 +288,26 @@ export default function ExhibitDetailPage({
                   )}
                </div>
 
-               <div className="flex flex-col gap-2">
+               <div className="flex flex-col gap-2 relative">
+                  {/* Mention Autocomplete */}
+                  {mentionQuery !== null && filteredUsers.length > 0 && (
+                      <div className="absolute bottom-full mb-2 left-0 w-64 bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50">
+                          {filteredUsers.map(u => (
+                              <button 
+                                key={u.username}
+                                onClick={() => selectMention(u.username)}
+                                className="w-full flex items-center gap-2 p-2 hover:bg-white/10 text-left transition-colors"
+                              >
+                                  <img src={u.avatarUrl} className="w-6 h-6 rounded-full" />
+                                  <div className="flex flex-col">
+                                      <span className="font-bold text-xs">@{u.username}</span>
+                                      <span className="text-[9px] opacity-50 truncate">{u.tagline}</span>
+                                  </div>
+                              </button>
+                          ))}
+                      </div>
+                  )}
+
                   {replyTo && (
                       <div className="flex items-center justify-between text-xs font-mono bg-white/5 p-2 rounded-lg border border-white/10">
                           <span className="opacity-70">Ответ для <span className="text-green-500 font-bold">@{replyTo.author}</span></span>
@@ -255,14 +318,15 @@ export default function ExhibitDetailPage({
                       <input 
                           type="text" 
                           value={commentText} 
-                          onChange={(e) => setCommentText(e.target.value)} 
-                          placeholder={replyTo ? `Ответ @${replyTo.author}...` : "ВВЕСТИ ДАННЫЕ В ПРОТОКОЛ..."}
+                          onChange={handleCommentChange} 
+                          placeholder={replyTo ? `Ответ @${replyTo.author}...` : "ВВЕСТИ ДАННЫЕ В ПРОТОКОЛ... (@ для упоминания)"}
                           className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors" 
                           onKeyDown={(e) => { 
                               if(e.key === 'Enter' && commentText.trim()) { 
                                   onPostComment(exhibit.id, commentText, replyTo?.id); 
                                   setCommentText(''); 
                                   setReplyTo(null);
+                                  setMentionQuery(null);
                               } 
                           }} 
                       />
@@ -272,6 +336,7 @@ export default function ExhibitDetailPage({
                                   onPostComment(exhibit.id, commentText, replyTo?.id); 
                                   setCommentText(''); 
                                   setReplyTo(null);
+                                  setMentionQuery(null);
                               } 
                           }} 
                           className="bg-green-500 text-black p-3 rounded-xl hover:scale-105 active:scale-95 transition-all"

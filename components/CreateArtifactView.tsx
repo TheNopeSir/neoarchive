@@ -3,21 +3,23 @@ import React, { useState, useRef } from 'react';
 import { Camera, ArrowLeft, Save, X, Info, Archive, Video } from 'lucide-react';
 import { DefaultCategory, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES } from '../constants';
 import { fileToBase64 } from '../services/storageService';
+import { Exhibit } from '../types';
 
 interface CreateArtifactViewProps {
   theme: 'dark' | 'light';
   onBack: () => void;
   onSave: (artifact: any) => void;
+  initialData?: Exhibit | null;
 }
 
-const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, onSave }) => {
-  const [images, setImages] = useState<string[]>([]);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<string>(DefaultCategory.PHONES);
-  const [subcategory, setSubcategory] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
-  const [specs, setSpecs] = useState<Record<string, string>>({});
+const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, onSave, initialData }) => {
+  const [images, setImages] = useState<string[]>(initialData?.imageUrls || []);
+  const [title, setTitle] = useState(initialData?.title || '');
+  const [description, setDescription] = useState(initialData?.description || '');
+  const [category, setCategory] = useState<string>(initialData?.category || DefaultCategory.PHONES);
+  const [subcategory, setSubcategory] = useState(initialData?.subcategory || '');
+  const [videoUrl, setVideoUrl] = useState(initialData?.videoUrl || '');
+  const [specs, setSpecs] = useState<Record<string, string>>(initialData?.specs || {});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -37,6 +39,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
       return;
     }
     onSave({
+      id: initialData?.id, // Pass ID if editing
       title,
       description,
       category,
@@ -54,7 +57,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
         <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest">
           <ArrowLeft size={14} /> ОТМЕНА
         </button>
-        <h2 className="font-pixel text-lg">НОВЫЙ_АРТЕФАКТ</h2>
+        <h2 className="font-pixel text-lg">{initialData ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ_АРТЕФАКТ'}</h2>
       </div>
 
       <div className="space-y-6">
