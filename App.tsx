@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -224,6 +224,23 @@ export default function App() {
     if (selectedExhibit?.id === id) setSelectedExhibit(updated);
     await db.updateExhibit(updated);
   };
+
+  // --- NEW: Handle Collection Like ---
+  const handleCollectionLike = async (id: string, e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      const col = collections.find(c => c.id === id);
+      if (!col || !user) return;
+      
+      const isLiked = col.likedBy?.includes(user.username);
+      const updated = {
+          ...col,
+          likes: isLiked ? Math.max(0, (col.likes || 0) - 1) : (col.likes || 0) + 1,
+          likedBy: isLiked ? (col.likedBy || []).filter(u => u !== user.username) : [...(col.likedBy || []), user.username]
+      };
+      
+      setCollections(prev => prev.map(c => c.id === id ? updated : c));
+      await db.updateCollection(updated);
+  };
   
   const handleCommentLike = async (commentId: string) => {
       if (!selectedExhibit || !user) return;
@@ -236,15 +253,6 @@ export default function App() {
                   likes: isLiked ? Math.max(0, c.likes - 1) : c.likes + 1,
                   likedBy: isLiked ? (c.likedBy || []).filter(u => u !== user.username) : [...(c.likedBy || []), user.username]
               };
-              
-              // Notify comment author
-              if (!isLiked && c.author !== user.username) {
-                   // This is simulated, as storageService handles notification saving.
-                   // We rely on the generic updateExhibit to sync data, but for notifications we might need a dedicated endpoint or handle it in updateExhibit via triggers.
-                   // Since we are frontend-only logic mostly here mapping to a simple backend:
-                   // We can manually add a notification if we want, but storageService logic is usually preferred.
-                   // For now, let's assume updateExhibit handles simple data persistence.
-              }
               return updatedComment;
           }
           return c;
@@ -292,8 +300,6 @@ export default function App() {
       if (mentions) {
           mentions.forEach(mention => {
               const username = mention.substring(1);
-              // In a real app, verify user exists. Here we blindly assume valid format.
-              // Logic for notification creation would happen backend side ideally, or we push a notification object here.
           });
       }
 
@@ -413,7 +419,9 @@ export default function App() {
               owner: user.username,
               coverImage: data.coverImage || '',
               exhibitIds: data.exhibitIds || [],
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              likes: 0, // Init likes
+              likedBy: [] // Init likedBy
           };
           await db.saveCollection(newCol);
       }
@@ -565,7 +573,7 @@ export default function App() {
                                 </div>
                             )}
                             
-                            {/* GLOBAL FEED (Instagram style: excludes items from subscriptions) */}
+                            {/* GLOBAL FEED */}
                             <div>
                                 <h2 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Grid size={14} className="text-green-500" /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}</h2>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
@@ -580,7 +588,28 @@ export default function App() {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {collections.map(col => ( <CollectionCard key={col.id} col={col} theme={theme} onClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onShare={() => {}} /> ))}
+                            {/* Create New Collection Card */}
+                            <button 
+                                onClick={() => navigateTo('CREATE_COLLECTION')}
+                                className={`aspect-[4/5] md:aspect-[3/4] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-4 transition-all hover:scale-105 group ${theme === 'dark' ? 'border-white/10 hover:border-green-500/50 hover:bg-white/5' : 'border-black/10 hover:border-green-500/50 hover:bg-black/5'}`}
+                            >
+                                <div className="w-16 h-16 rounded-full bg-green-500 text-black flex items-center justify-center shadow-[0_0_20px_rgba(74,222,128,0.4)] group-hover:scale-110 transition-transform">
+                                    <Plus size={32} />
+                                </div>
+                                <span className="font-pixel text-xs tracking-widest opacity-70 group-hover:opacity-100 group-hover:text-green-500">СОЗДАТЬ КОЛЛЕКЦИЮ</span>
+                            </button>
+
+                            {collections.map(col => ( 
+                                <CollectionCard 
+                                    key={col.id} 
+                                    col={col} 
+                                    theme={theme} 
+                                    onClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} 
+                                    onShare={() => {}}
+                                    isLiked={col.likedBy?.includes(user?.username || '')}
+                                    onLike={(e) => handleCollectionLike(col.id, e)}
+                                /> 
+                            ))}
                         </div>
                     )}
                 </div>

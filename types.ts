@@ -41,6 +41,8 @@ export interface Collection {
   coverImage: string;
   exhibitIds: string[];
   timestamp: string;
+  likes: number;
+  likedBy: string[];
 }
 
 export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION';

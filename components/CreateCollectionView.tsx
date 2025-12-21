@@ -45,7 +45,9 @@ const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
             title,
             description,
             coverImage,
-            exhibitIds: selectedArtifactIds
+            exhibitIds: selectedArtifactIds,
+            likes: initialData?.likes || 0,
+            likedBy: initialData?.likedBy || []
         });
     };
 
