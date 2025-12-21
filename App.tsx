@@ -127,14 +127,18 @@ export default function App() {
   // --- SWIPE LOGIC ---
   const swipeHandlers = useSwipe({
     onSwipeLeft: () => {
-      // Swipe Left (<--) usually means "Go Forward" or "Next Tab"
-      if (view === 'FEED') navigateTo('ACTIVITY');
-      else if (view === 'ACTIVITY') {
+      // Swipe Left (<--) means "Next Tab" in order:
+      // FEED -> MY_COLLECTION -> ACTIVITY -> USER_PROFILE
+      if (view === 'FEED') {
+          navigateTo('MY_COLLECTION');
+      } else if (view === 'MY_COLLECTION') {
+          navigateTo('ACTIVITY');
+      } else if (view === 'ACTIVITY') {
           if (user) navigateTo('USER_PROFILE', { username: user.username });
       }
     },
     onSwipeRight: () => {
-      // Swipe Right (-->) is standard "Back" gesture
+      // Swipe Right (-->) is standard "Back" gesture or "Previous Tab"
       handleBack();
     },
   });
@@ -354,9 +358,8 @@ export default function App() {
     );
   }
 
-  // Swipe logic only active on main views to prevent conflict with inputs/etc
-  const isMainView = ['FEED', 'MY_COLLECTION', 'ACTIVITY', 'USER_PROFILE', 'HALL_OF_FAME'].includes(view);
-  const swipeProps = isMainView ? swipeHandlers : {};
+  // Swipe logic active on ALL authenticated views to allow "Exit Window" behavior
+  const swipeProps = view !== 'AUTH' ? swipeHandlers : {};
 
   return (
     <div 
