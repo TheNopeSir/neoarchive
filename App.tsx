@@ -31,6 +31,8 @@ import useSwipe from './hooks/useSwipe';
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewState>('AUTH');
+  const [navigationStack, setNavigationStack] = useState<ViewState[]>([]);
+  
   const [isInitializing, setIsInitializing] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -67,22 +69,73 @@ export default function App() {
   const [guestbookInput, setGuestbookInput] = useState('');
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
+  // --- NAVIGATION HELPER ---
+  const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection }) => {
+      // 1. Update Data State
+      if (params?.username) setViewedProfileUsername(params.username);
+      if (params?.item) setSelectedExhibit(params.item);
+      if (params?.collection) setSelectedCollection(params.collection);
+
+      // 2. Update Navigation Stack
+      setNavigationStack(prev => [...prev, view]);
+
+      // 3. Update Visual View
+      setView(newView);
+
+      // 4. Update URL (Clean History API)
+      let path = '/';
+      if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
+      else if (newView === 'EXHIBIT') path = `/artifact/${params?.item?.id || selectedExhibit?.id}`;
+      else if (newView === 'COLLECTION_DETAIL') path = `/collection/${params?.collection?.id || selectedCollection?.id}`;
+      else if (newView === 'ACTIVITY') path = '/activity';
+      else if (newView === 'MY_COLLECTION') path = '/my-collection';
+      else if (newView === 'HALL_OF_FAME') path = '/hall-of-fame';
+      else if (newView === 'CREATE_ARTIFACT') path = '/create';
+      else if (newView === 'FEED') path = '/';
+      
+      window.history.pushState({ view: newView }, '', path);
+  };
+
+  const handleBack = () => {
+      if (navigationStack.length > 0) {
+          const prevView = navigationStack[navigationStack.length - 1];
+          setNavigationStack(prev => prev.slice(0, -1));
+          setView(prevView);
+          window.history.back(); // Sync browser back button
+      } else if (view !== 'FEED') {
+          setView('FEED');
+          window.history.pushState({ view: 'FEED' }, '', '/');
+      }
+  };
+
+  // Browser Back Button Handler
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+        if (event.state && event.state.view) {
+            setView(event.state.view);
+            // We don't update navigationStack here closely because it's complex to sync perfectly 
+            // with browser history stack without a router lib, but this handles basic Back button usage.
+        } else {
+            // Fallback to Feed if history state is empty
+            setView('FEED');
+        }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // --- SWIPE LOGIC ---
   const swipeHandlers = useSwipe({
     onSwipeLeft: () => {
-      if (view === 'USER_PROFILE') setView('ACTIVITY');
-      else if (view === 'ACTIVITY') setView('FEED');
-      else if (view === 'FEED') setView('MY_COLLECTION');
+      // Swipe Left (<--) usually means "Go Forward" or "Next Tab"
+      if (view === 'FEED') navigateTo('ACTIVITY');
+      else if (view === 'ACTIVITY') {
+          if (user) navigateTo('USER_PROFILE', { username: user.username });
+      }
     },
     onSwipeRight: () => {
-      if (view === 'MY_COLLECTION') setView('FEED');
-      else if (view === 'FEED') setView('ACTIVITY');
-      else if (view === 'ACTIVITY') {
-          if (user) {
-              setViewedProfileUsername(user.username);
-              setView('USER_PROFILE');
-          }
-      }
+      // Swipe Right (-->) is standard "Back" gesture
+      handleBack();
     },
   });
 
@@ -106,6 +159,7 @@ export default function App() {
           const activeUser = await db.initializeDatabase();
           if (activeUser) { 
               setUser(activeUser); 
+              // Simple URL parsing for initial load could go here
               setView('FEED'); 
               refreshData();
           } 
@@ -148,8 +202,7 @@ export default function App() {
   const handleExhibitClick = (item: Exhibit) => {
     const updated = { ...item, views: (item.views || 0) + 1 };
     db.updateExhibit(updated);
-    setSelectedExhibit(updated);
-    setView('EXHIBIT');
+    navigateTo('EXHIBIT', { item: updated });
   };
 
   const handleLike = async (id: string, e?: React.MouseEvent) => {
@@ -234,7 +287,7 @@ export default function App() {
         quality: 'MINT' 
       };
       await db.saveExhibit(ex);
-      setView('FEED');
+      navigateTo('FEED');
       refreshData();
   };
 
@@ -262,22 +315,15 @@ export default function App() {
           };
           await db.saveCollection(newCol);
       }
-      setView('FEED');
+      navigateTo('FEED');
       refreshData();
   };
 
   const handleDeleteCollection = async (id: string) => {
       if(!user) return;
-      await db.deleteCollection(id); // Need to implement deleteCollection in storageService if not present, but standard CRUD usually implies it. 
-      // Assuming db.deleteCollection exists or handled generically. 
-      // If not, we can simulate or add it. For now, assuming standard syncItem approach supports delete or we add it to storageService in next iterations if missed. 
-      // Actually storageService.ts in previous turn has `deleteGuestbookEntry` but maybe missed `deleteCollection`. 
-      // Let's rely on simple state update + generic DB sync for now, or assume it's there.
-      // Correction: storageService needs delete. I'll stick to updating state for immediate UI feedback.
+      await db.deleteCollection(id); 
       setCollections(prev => prev.filter(c => c.id !== id));
-      setView('FEED');
-      // For safety, let's just use empty exhibits to "empty" it if delete isn't strictly defined, 
-      // but ideally we add `deleteCollection`.
+      navigateTo('FEED');
   };
 
   const handleSendMessage = async (text: string) => {
@@ -308,7 +354,8 @@ export default function App() {
     );
   }
 
-  const isMainView = ['FEED', 'MY_COLLECTION', 'ACTIVITY', 'USER_PROFILE'].includes(view);
+  // Swipe logic only active on main views to prevent conflict with inputs/etc
+  const isMainView = ['FEED', 'MY_COLLECTION', 'ACTIVITY', 'USER_PROFILE', 'HALL_OF_FAME'].includes(view);
   const swipeProps = isMainView ? swipeHandlers : {};
 
   return (
@@ -325,7 +372,7 @@ export default function App() {
           <header className={`fixed top-0 left-0 right-0 z-50 border-b border-white/10 backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'bg-black/60' : 'bg-white/80'}`}>
               <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                   <div className="flex items-center gap-6">
-                      <div className="font-pixel text-lg font-black tracking-widest cursor-pointer group" onClick={() => setView('FEED')}>
+                      <div className="font-pixel text-lg font-black tracking-widest cursor-pointer group" onClick={() => navigateTo('FEED')}>
                           NEO<span className="text-green-500 transition-colors group-hover:text-white">ARCHIVE</span>
                       </div>
                       <div className={`hidden md:flex items-center px-4 py-1.5 rounded-2xl border ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'}`}>
@@ -342,12 +389,12 @@ export default function App() {
                       <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 hover:bg-white/10 rounded-xl">
                           {theme === 'dark' ? <Sun size={20}/> : <Moon size={20}/>}
                       </button>
-                      <button onClick={() => setView('ACTIVITY')} className="relative p-2 hover:bg-white/10 rounded-xl">
+                      <button onClick={() => navigateTo('ACTIVITY')} className="relative p-2 hover:bg-white/10 rounded-xl">
                           <Bell size={20} />
                           {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
                       </button>
                       {user && (
-                          <div className="w-10 h-10 rounded-full border-2 border-green-500/30 p-0.5 cursor-pointer hover:scale-105 transition-all" onClick={() => { setViewedProfileUsername(user.username); setView('USER_PROFILE'); }}>
+                          <div className="w-10 h-10 rounded-full border-2 border-green-500/30 p-0.5 cursor-pointer hover:scale-105 transition-all" onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
                               <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
                           </div>
                       )}
@@ -358,7 +405,7 @@ export default function App() {
 
         <main className={`pt-20 pb-28 px-4 max-w-7xl mx-auto min-h-screen relative z-10 transition-all duration-700 ${!isInitializing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             
-            {view === 'AUTH' && <MatrixLogin theme={theme} onLogin={(u) => { setUser(u); setView('FEED'); refreshData(); }} />}
+            {view === 'AUTH' && <MatrixLogin theme={theme} onLogin={(u) => { setUser(u); navigateTo('FEED'); refreshData(); }} />}
 
             {(view === 'FEED' || view === 'SEARCH') && (
                 <div className="space-y-8 animate-in fade-in zoom-in-95">
@@ -384,7 +431,7 @@ export default function App() {
                                     <h2 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Zap size={14} className="text-yellow-500" /> ПОДПИСКИ</h2>
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
                                         {followingExhibits.map(item => (
-                                            <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => { setViewedProfileUsername(author); setView('USER_PROFILE'); }} />
+                                            <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
                                         ))}
                                     </div>
                                 </div>
@@ -395,7 +442,7 @@ export default function App() {
                                 <h2 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Grid size={14} className="text-green-500" /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}</h2>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
                                     {globalExhibits.map(item => (
-                                        <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => { setViewedProfileUsername(author); setView('USER_PROFILE'); }} />
+                                        <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
                                     ))}
                                 </div>
                             </div>
@@ -405,14 +452,14 @@ export default function App() {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {collections.map(col => ( <CollectionCard key={col.id} col={col} theme={theme} onClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onShare={() => {}} /> ))}
+                            {collections.map(col => ( <CollectionCard key={col.id} col={col} theme={theme} onClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onShare={() => {}} /> ))}
                         </div>
                     )}
                 </div>
             )}
 
             {view === 'CREATE_ARTIFACT' && (
-              <CreateArtifactView theme={theme} onBack={() => setView('FEED')} onSave={handleSaveArtifact} />
+              <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} />
             )}
 
             {/* CREATE OR EDIT COLLECTION VIEW */}
@@ -421,7 +468,7 @@ export default function App() {
                     theme={theme}
                     userArtifacts={exhibits.filter(e => e.owner === user.username && !e.isDraft)}
                     initialData={view === 'EDIT_COLLECTION' ? selectedCollection : null}
-                    onBack={() => setView(view === 'EDIT_COLLECTION' ? 'COLLECTION_DETAIL' : 'FEED')}
+                    onBack={handleBack}
                     onSave={handleSaveCollection}
                     onDelete={handleDeleteCollection}
                 />
@@ -429,7 +476,7 @@ export default function App() {
 
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
-                    exhibit={selectedExhibit} theme={theme} onBack={() => setView('FEED')} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toISOString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onFollow={handleFollow} onMessage={(u) => { setViewedProfileUsername(u); setView('DIRECT_CHAT'); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false} onAddToCollection={(id) => setIsAddingToCollection(id)}
+                    exhibit={selectedExhibit} theme={theme} onBack={handleBack} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toISOString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onFollow={handleFollow} onMessage={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false} onAddToCollection={(id) => setIsAddingToCollection(id)}
                 />
             )}
             
@@ -438,11 +485,11 @@ export default function App() {
                     collection={selectedCollection}
                     artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))}
                     theme={theme}
-                    onBack={() => setView('FEED')}
+                    onBack={handleBack}
                     onExhibitClick={handleExhibitClick}
-                    onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }}
+                    onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
                     currentUser={user?.username || ''}
-                    onEdit={() => setView('EDIT_COLLECTION')}
+                    onEdit={() => navigateTo('EDIT_COLLECTION')}
                 />
             )}
 
@@ -452,7 +499,7 @@ export default function App() {
                     currentUser={user} 
                     partnerUsername={viewedProfileUsername} 
                     messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} 
-                    onBack={() => setView('ACTIVITY')} 
+                    onBack={handleBack} 
                     onSendMessage={handleSendMessage} 
                 />
             )}
@@ -463,21 +510,29 @@ export default function App() {
                     username={viewedProfileUsername} 
                     currentUserUsername={user?.username}
                     theme={theme} 
-                    onBack={() => setView('USER_PROFILE')} 
-                    onUserClick={(u) => { setViewedProfileUsername(u); setView('USER_PROFILE'); }} 
+                    onBack={handleBack} 
+                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} 
                 />
             )}
 
             {view === 'USER_PROFILE' && user && (
-                <UserProfileView user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={() => setView('FEED')} onLogout={() => { db.logoutUser(); setUser(null); setView('AUTH'); }} onFollow={handleFollow} onChat={(u) => { setViewedProfileUsername(u); setView('DIRECT_CHAT'); }} onExhibitClick={handleExhibitClick} onLike={handleLike} onAuthorClick={(a) => setViewedProfileUsername(a)} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onShareCollection={() => {}} onViewHallOfFame={() => setView('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab} onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); setView('SOCIAL_LIST'); }} />
+                <UserProfileView user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={handleBack} onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} onFollow={handleFollow} onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} onExhibitClick={handleExhibitClick} onLike={handleLike} onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onShareCollection={() => {}} onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab} onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} />
+            )}
+
+            {view === 'HALL_OF_FAME' && user && (
+                <HallOfFame 
+                    theme={theme} 
+                    achievements={user.achievements || []} 
+                    onBack={handleBack} 
+                />
             )}
 
             {view === 'ACTIVITY' && user && (
-                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => { setViewedProfileUsername(a); setView('USER_PROFILE'); }} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); setView('DIRECT_CHAT'); }} />
+                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} />
             )}
             
             {view === 'MY_COLLECTION' && user && (
-                <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={() => setView('FEED')} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }} onLike={handleLike} />
+                <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
             )}
 
         </main>
@@ -494,7 +549,7 @@ export default function App() {
                     <div className="space-y-2 max-h-[60vh] overflow-y-auto mb-4 scrollbar-hide">
                         {/* New Collection Button */}
                          <button 
-                            onClick={() => { setIsAddingToCollection(null); setView('CREATE_COLLECTION'); }}
+                            onClick={() => { setIsAddingToCollection(null); navigateTo('CREATE_COLLECTION'); }}
                             className="w-full text-left p-4 rounded-xl border border-dashed border-white/20 hover:bg-white/5 flex items-center justify-center gap-2 mb-4 text-green-500"
                         >
                             <PlusCircle size={16} /> <span className="font-pixel text-xs">СОЗДАТЬ НОВУЮ</span>
@@ -528,11 +583,11 @@ export default function App() {
         
         {view !== 'AUTH' && (
           <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">
-              <button onClick={() => setView('FEED')} className={`p-2 transition-all ${view === 'FEED' ? 'text-green-500 scale-125' : 'opacity-40'}`}><LayoutGrid size={24} /></button>
-              <button onClick={() => setView('MY_COLLECTION')} className={`p-2 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500 scale-125' : 'opacity-40'}`}><Package size={24} /></button>
-              <div className="relative -top-5"><button onClick={() => setView('CREATE_ARTIFACT')} className="bg-green-500 text-black w-14 h-14 rounded-full shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black flex items-center justify-center transition-all"><PlusCircle size={32} /></button></div>
-              <button onClick={() => setView('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? 'text-green-500 scale-125' : 'opacity-40'} relative`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black" />}</button>
-              <button onClick={() => { if(user) { setViewedProfileUsername(user.username); setView('USER_PROFILE'); } }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? 'text-green-500 scale-125' : 'opacity-40'}`}><User size={24} /></button>
+              <button onClick={() => navigateTo('FEED')} className={`p-2 transition-all ${view === 'FEED' ? 'text-green-500 scale-125' : 'opacity-40'}`}><LayoutGrid size={24} /></button>
+              <button onClick={() => navigateTo('MY_COLLECTION')} className={`p-2 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500 scale-125' : 'opacity-40'}`}><Package size={24} /></button>
+              <div className="relative -top-5"><button onClick={() => navigateTo('CREATE_ARTIFACT')} className="bg-green-500 text-black w-14 h-14 rounded-full shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black flex items-center justify-center transition-all"><PlusCircle size={32} /></button></div>
+              <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? 'text-green-500 scale-125' : 'opacity-40'} relative`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black" />}</button>
+              <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? 'text-green-500 scale-125' : 'opacity-40'}`}><User size={24} /></button>
           </nav>
         )}
     </div>

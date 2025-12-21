@@ -18,7 +18,8 @@ const useSwipe = ({ onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown }: SwipeIn
     const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
     const [touchEnd, setTouchEnd] = useState<{ x: number, y: number } | null>(null);
 
-    const minSwipeDistance = 50;
+    // Increased threshold to 75px to prevent accidental swipes while scrolling vertically
+    const minSwipeDistance = 75;
 
     const onTouchStart = (e: TouchEvent<any>) => {
         setTouchEnd(null);

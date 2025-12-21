@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 
 interface SEOProps {
@@ -47,12 +48,7 @@ const SEO: React.FC<SEOProps> = ({ title, description, image, type = 'website', 
         updateOgMeta('og:title', title);
         updateMeta('twitter:title', title);
         
-        if (path) {
-             const url = `https://neoarchive.ru/#${path}`;
-             updateOgMeta('og:url', url);
-             updateMeta('twitter:url', url);
-        }
-
+        // Removed hash-based URL forcing to allow App.tsx to handle History API
     }, [title, description, image, type, path]);
 
     return null;
