@@ -488,6 +488,14 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2 md:gap-4">
+                      {/* CREATE BUTTON FOR DESKTOP */}
+                      <button 
+                          onClick={() => navigateTo('CREATE_ARTIFACT')} 
+                          className="hidden md:flex items-center gap-2 px-4 py-2 bg-green-500 text-black rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform shadow-[0_0_15px_rgba(74,222,128,0.4)] mr-2"
+                      >
+                          <PlusCircle size={14} /> ДОБАВИТЬ
+                      </button>
+
                       <button onClick={async () => { await db.forceSync(); refreshData(); }} className="p-2 hover:bg-white/10 rounded-xl transition-all">
                           <RefreshCw size={18} />
                       </button>
