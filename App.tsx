@@ -22,9 +22,10 @@ import DirectChat from './components/DirectChat';
 import CreateArtifactView from './components/CreateArtifactView';
 import CreateCollectionView from './components/CreateCollectionView';
 import SocialListView from './components/SocialListView';
+import SearchView from './components/SearchView';
 
 import * as db from './services/storageService';
-import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry } from './types';
+import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment } from './types';
 import { DefaultCategory, calculateArtifactScore } from './constants';
 import useSwipe from './hooks/useSwipe';
 
@@ -47,7 +48,6 @@ export default function App() {
   const [selectedExhibit, setSelectedExhibit] = useState<Exhibit | null>(null);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [viewedProfileUsername, setViewedProfileUsername] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
 
@@ -91,6 +91,7 @@ export default function App() {
       else if (newView === 'MY_COLLECTION') path = '/my-collection';
       else if (newView === 'HALL_OF_FAME') path = '/hall-of-fame';
       else if (newView === 'CREATE_ARTIFACT') path = '/create';
+      else if (newView === 'SEARCH') path = '/search';
       else if (newView === 'FEED') path = '/';
       
       window.history.pushState({ view: newView }, '', path);
@@ -223,6 +224,69 @@ export default function App() {
     if (selectedExhibit?.id === id) setSelectedExhibit(updated);
     await db.updateExhibit(updated);
   };
+  
+  const handleCommentLike = async (commentId: string) => {
+      if (!selectedExhibit || !user) return;
+      
+      const updatedComments = selectedExhibit.comments.map(c => {
+          if (c.id === commentId) {
+              const isLiked = c.likedBy?.includes(user.username);
+              const updatedComment = {
+                  ...c,
+                  likes: isLiked ? Math.max(0, c.likes - 1) : c.likes + 1,
+                  likedBy: isLiked ? (c.likedBy || []).filter(u => u !== user.username) : [...(c.likedBy || []), user.username]
+              };
+              
+              // Notify comment author
+              if (!isLiked && c.author !== user.username) {
+                   // This is simulated, as storageService handles notification saving.
+                   // We rely on the generic updateExhibit to sync data, but for notifications we might need a dedicated endpoint or handle it in updateExhibit via triggers.
+                   // Since we are frontend-only logic mostly here mapping to a simple backend:
+                   // We can manually add a notification if we want, but storageService logic is usually preferred.
+                   // For now, let's assume updateExhibit handles simple data persistence.
+              }
+              return updatedComment;
+          }
+          return c;
+      });
+      
+      const updatedEx = { ...selectedExhibit, comments: updatedComments };
+      setSelectedExhibit(updatedEx);
+      setExhibits(prev => prev.map(e => e.id === selectedExhibit.id ? updatedEx : e));
+      await db.updateExhibit(updatedEx);
+  };
+
+  const handlePostComment = async (id: string, text: string, parentId?: string) => {
+      if (!user) return;
+      const ex = exhibits.find(e => e.id === id);
+      if (!ex) return;
+      
+      const newComment: Comment = { 
+          id: crypto.randomUUID(), 
+          author: user.username, 
+          text, 
+          timestamp: new Date().toISOString(), 
+          likes: 0, 
+          likedBy: [],
+          parentId: parentId
+      };
+      
+      const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] };
+      await db.updateExhibit(updatedEx);
+      
+      // Handle Mentions Notification
+      const mentions = text.match(/@(\w+)/g);
+      if (mentions) {
+          mentions.forEach(mention => {
+              const username = mention.substring(1);
+              // In a real app, verify user exists. Here we blindly assume valid format.
+              // Logic for notification creation would happen backend side ideally, or we push a notification object here.
+          });
+      }
+
+      refreshData();
+      if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx);
+  };
 
   const handleFollow = async (username: string) => {
       if(!user) return;
@@ -258,7 +322,6 @@ export default function App() {
   const baseFilteredExhibits = exhibits.filter(e => {
       if (e.isDraft && e.owner !== user?.username) return false;
       if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
-      if (searchQuery && !e.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
   });
 
@@ -280,6 +343,7 @@ export default function App() {
         category: artifactData.category || DefaultCategory.MISC, 
         subcategory: artifactData.subcategory, 
         imageUrls: artifactData.imageUrls || [], 
+        videoUrl: artifactData.videoUrl, // Add video URL
         owner: user.username, 
         timestamp: new Date().toISOString(), 
         likes: 0, 
@@ -378,11 +442,15 @@ export default function App() {
                       <div className="font-pixel text-lg font-black tracking-widest cursor-pointer group" onClick={() => navigateTo('FEED')}>
                           NEO<span className="text-green-500 transition-colors group-hover:text-white">ARCHIVE</span>
                       </div>
-                      <div className={`hidden md:flex items-center px-4 py-1.5 rounded-2xl border ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'}`}>
+                      
+                      {/* NEW SEARCH BUTTON (Mobile & Desktop) */}
+                      <button 
+                        onClick={() => navigateTo('SEARCH')}
+                        className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}
+                      >
                           <Search size={14} className="opacity-40 mr-2" />
-                          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="SEARCH_DATABASE..." className="bg-transparent border-none outline-none text-xs font-mono w-64" />
-                          {searchQuery && <button onClick={() => setSearchQuery('')}><X size={12}/></button>}
-                      </div>
+                          <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК ПО БАЗЕ...</span>
+                      </button>
                   </div>
 
                   <div className="flex items-center gap-2 md:gap-4">
@@ -410,7 +478,22 @@ export default function App() {
             
             {view === 'AUTH' && <MatrixLogin theme={theme} onLogin={(u) => { setUser(u); navigateTo('FEED'); refreshData(); }} />}
 
-            {(view === 'FEED' || view === 'SEARCH') && (
+            {view === 'SEARCH' && (
+                <SearchView 
+                    theme={theme}
+                    exhibits={exhibits}
+                    collections={collections}
+                    users={db.getFullDatabase().users}
+                    onBack={handleBack}
+                    onExhibitClick={handleExhibitClick}
+                    onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })}
+                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                    onLike={handleLike}
+                    currentUser={user}
+                />
+            )}
+
+            {view === 'FEED' && (
                 <div className="space-y-8 animate-in fade-in zoom-in-95">
                     <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
                          <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]' : 'border-white/10 opacity-50'}`}>ВСЕ</button>
@@ -479,7 +562,23 @@ export default function App() {
 
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
-                    exhibit={selectedExhibit} theme={theme} onBack={handleBack} onShare={() => {}} onFavorite={() => {}} onLike={(id) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={async (id, text) => { if (!user) return; const ex = exhibits.find(e => e.id === id); if (!ex) return; const newComment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toISOString(), likes: 0, likedBy: [] }; const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] }; await db.updateExhibit(updatedEx); refreshData(); if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx); }} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onFollow={handleFollow} onMessage={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false} onAddToCollection={(id) => setIsAddingToCollection(id)}
+                    exhibit={selectedExhibit} 
+                    theme={theme} 
+                    onBack={handleBack} 
+                    onShare={() => {}} 
+                    onFavorite={() => {}} 
+                    onLike={(id) => handleLike(id)} 
+                    isFavorited={false} 
+                    isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} 
+                    onPostComment={handlePostComment}
+                    onCommentLike={handleCommentLike} 
+                    onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} 
+                    onFollow={handleFollow} 
+                    onMessage={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
+                    currentUser={user?.username || ''} 
+                    isAdmin={user?.isAdmin || false} 
+                    isFollowing={user?.following.includes(selectedExhibit.owner) || false} 
+                    onAddToCollection={(id) => setIsAddingToCollection(id)}
                 />
             )}
             

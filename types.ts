@@ -1,6 +1,7 @@
 
 export interface Comment {
   id: string;
+  parentId?: string; // For replies
   author: string;
   text: string;
   timestamp: string;
@@ -42,7 +43,7 @@ export interface Collection {
   timestamp: string;
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT';
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION';
 
 export interface Notification {
   id: string;

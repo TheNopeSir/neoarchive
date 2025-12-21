@@ -2,9 +2,9 @@
 import React, { useState } from 'react';
 import { 
   ChevronLeft, ChevronRight, Heart, Share2, MessageSquare, Trash2, 
-  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle
+  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight
 } from 'lucide-react';
-import { Exhibit } from '../types';
+import { Exhibit, Comment } from '../types';
 import { getArtifactTier, TIER_CONFIG } from '../constants';
 import { getUserAvatar } from '../services/storageService';
 
@@ -17,7 +17,8 @@ interface ExhibitDetailPageProps {
   onLike: (id: string) => void;
   isFavorited: boolean;
   isLiked: boolean;
-  onPostComment: (id: string, text: string) => void;
+  onPostComment: (id: string, text: string, parentId?: string) => void;
+  onCommentLike: (commentId: string) => void;
   onAuthorClick: (author: string) => void;
   onFollow: (username: string) => void;
   onMessage: (username: string) => void;
@@ -29,13 +30,42 @@ interface ExhibitDetailPageProps {
   isAdmin: boolean;
 }
 
+// Helper for video embedding
+const getEmbedUrl = (url: string) => {
+    if (!url) return null;
+    let embedUrl = url;
+    try {
+        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+            const videoId = url.split('v=')[1]?.split('&')[0] || url.split('/').pop();
+            embedUrl = `https://www.youtube.com/embed/${videoId}`;
+        } else if (url.includes('rutube.ru')) {
+            const videoId = url.split('/video/')[1]?.split('/')[0];
+            if (videoId) embedUrl = `https://rutube.ru/play/embed/${videoId}`;
+        }
+    } catch (e) { return null; }
+    return embedUrl;
+};
+
+// Helper for parsing text with mentions
+const renderTextWithMentions = (text: string, onUserClick: (u: string) => void) => {
+    const parts = text.split(/(@\w+)/g);
+    return parts.map((part, i) => {
+        if (part.startsWith('@')) {
+            const username = part.slice(1);
+            return <span key={i} onClick={(e) => { e.stopPropagation(); onUserClick(username); }} className="text-blue-400 cursor-pointer hover:underline font-bold">{part}</span>;
+        }
+        return part;
+    });
+};
+
 export default function ExhibitDetailPage({
-  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, isFollowing, currentUser, isAdmin
+  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, isFollowing, currentUser, isAdmin
 }: ExhibitDetailPageProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string, author: string } | null>(null);
   
   const images = Array.isArray(exhibit.imageUrls) ? exhibit.imageUrls : ['https://placehold.co/600x400?text=NO+IMAGE'];
   const specs = exhibit.specs || {};
@@ -47,6 +77,7 @@ export default function ExhibitDetailPage({
   const isCursed = tierKey === 'CURSED';
 
   const nonEmptySpecs = Object.entries(specs).filter(([_, val]) => !!val);
+  const videoEmbedUrl = exhibit.videoUrl ? getEmbedUrl(exhibit.videoUrl) : null;
 
   const handleShare = (platform: string) => {
     const url = encodeURIComponent(window.location.href);
@@ -63,6 +94,12 @@ export default function ExhibitDetailPage({
   };
 
   const isOwner = currentUser === exhibit.owner;
+
+  const handleReply = (comment: Comment) => {
+      setReplyTo({ id: comment.id, author: comment.author });
+      setCommentText(`@${comment.author} `);
+      // Focus handled by state binding usually, but refined focus logic would go here
+  };
 
   return (
     <div className={`w-full min-h-full pb-20 animate-in fade-in duration-300 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -86,6 +123,7 @@ export default function ExhibitDetailPage({
 
       <div className="flex flex-col gap-6">
         <div className="space-y-4">
+          {/* Main Image */}
           <div className={`relative aspect-square md:aspect-video w-full rounded-2xl overflow-hidden border transition-all duration-500 ${theme === 'dark' ? 'border-white/10 bg-black' : 'border-black/10 bg-white'} ${isCursed ? 'shadow-[0_0_30px_red]' : ''}`}>
              <img src={images[currentImageIndex]} alt={exhibit.title} className="w-full h-full object-contain" />
              {images.length > 1 && (
@@ -95,10 +133,19 @@ export default function ExhibitDetailPage({
                </>
              )}
           </div>
+          
+          {/* Thumbnails */}
           {images.length > 1 && (
             <div className="flex gap-3 overflow-x-auto py-2 scrollbar-hide snap-x">
                {images.map((img, idx) => ( <button key={idx} onClick={() => setCurrentImageIndex(idx)} className={`snap-start relative w-20 h-20 flex-shrink-0 border-2 rounded-xl overflow-hidden transition-all ${currentImageIndex === idx ? 'border-green-500 scale-105 shadow-lg' : 'border-transparent opacity-50'}`}><img src={img} className="w-full h-full object-cover" /></button> ))}
             </div>
+          )}
+
+          {/* Video Embed */}
+          {videoEmbedUrl && (
+             <div className="mt-4 rounded-2xl overflow-hidden border border-white/10 aspect-video bg-black">
+                <iframe src={videoEmbedUrl} className="w-full h-full" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+             </div>
           )}
         </div>
 
@@ -117,7 +164,6 @@ export default function ExhibitDetailPage({
                     <Heart size={20} fill={isLiked ? "currentColor" : "none"} />
                     <span className="text-sm font-bold font-mono">{exhibit.likes}</span>
                   </button>
-                  {/* BUTTON ADD TO COLLECTION: STRICTLY RESTRICTED TO OWNER */}
                   {isOwner && (
                       <>
                         <div className="w-[1px] h-6 bg-white/10" />
@@ -167,19 +213,72 @@ export default function ExhibitDetailPage({
 
             <div className="pt-8 border-t border-white/10">
                <h3 className="font-pixel text-sm mb-6 flex items-center gap-2"><MessageSquare size={16} /> ПРОТОКОЛ КОММЕНТАРИЕВ ({comments.length})</h3>
+               
                <div className="space-y-4 mb-8">
                   {comments.length === 0 ? ( <div className="text-center py-10 opacity-30 text-xs font-pixel uppercase tracking-widest">ЛОГИ ПУСТЫ</div> ) : ( 
-                    comments.map(c => ( 
-                      <div key={c.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all">
-                        <div className="flex justify-between items-center mb-2"><span onClick={() => onAuthorClick(c.author)} className="font-bold cursor-pointer text-green-500 font-pixel text-[10px]">@{c.author}</span><span className="text-[9px] opacity-30 font-mono">{c.timestamp}</span></div>
-                        <p className="font-mono text-sm opacity-80">{c.text}</p>
-                      </div> 
-                    )) 
+                    comments.map(c => {
+                        const isCommentLiked = c.likedBy && c.likedBy.includes(currentUser);
+                        return ( 
+                          <div key={c.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center gap-2">
+                                    <img src={getUserAvatar(c.author)} className="w-6 h-6 rounded-full cursor-pointer" onClick={() => onAuthorClick(c.author)} />
+                                    <div>
+                                        <div onClick={() => onAuthorClick(c.author)} className="font-bold cursor-pointer text-green-500 font-pixel text-[10px] leading-none">@{c.author}</div>
+                                        <div className="text-[9px] opacity-30 font-mono leading-none mt-1">{c.timestamp}</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => onCommentLike(c.id)} className={`flex items-center gap-1 text-[10px] transition-colors ${isCommentLiked ? 'text-red-500' : 'text-gray-500 hover:text-red-500'}`}>
+                                        <Heart size={12} fill={isCommentLiked ? "currentColor" : "none"} /> {c.likes > 0 && c.likes}
+                                    </button>
+                                    <button onClick={() => handleReply(c)} className="text-gray-500 hover:text-white transition-colors" title="Ответить">
+                                        <CornerDownRight size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                            <p className="font-mono text-sm opacity-80 pl-8">{renderTextWithMentions(c.text, onAuthorClick)}</p>
+                          </div> 
+                        );
+                    }) 
                   )}
                </div>
-               <div className="flex gap-3">
-                  <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="ВВЕСТИ ДАННЫЕ В ПРОТОКОЛ..." className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors" onKeyDown={(e) => { if(e.key === 'Enter' && commentText.trim()) { onPostComment(exhibit.id, commentText); setCommentText(''); } }} />
-                  <button onClick={() => { if(commentText.trim()) { onPostComment(exhibit.id, commentText); setCommentText(''); } }} className="bg-green-500 text-black p-3 rounded-xl hover:scale-105 active:scale-95 transition-all"><Send size={20} /></button>
+
+               <div className="flex flex-col gap-2">
+                  {replyTo && (
+                      <div className="flex items-center justify-between text-xs font-mono bg-white/5 p-2 rounded-lg border border-white/10">
+                          <span className="opacity-70">Ответ для <span className="text-green-500 font-bold">@{replyTo.author}</span></span>
+                          <button onClick={() => { setReplyTo(null); setCommentText(''); }} className="hover:text-red-500"><Trash2 size={12}/></button>
+                      </div>
+                  )}
+                  <div className="flex gap-3">
+                      <input 
+                          type="text" 
+                          value={commentText} 
+                          onChange={(e) => setCommentText(e.target.value)} 
+                          placeholder={replyTo ? `Ответ @${replyTo.author}...` : "ВВЕСТИ ДАННЫЕ В ПРОТОКОЛ..."}
+                          className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors" 
+                          onKeyDown={(e) => { 
+                              if(e.key === 'Enter' && commentText.trim()) { 
+                                  onPostComment(exhibit.id, commentText, replyTo?.id); 
+                                  setCommentText(''); 
+                                  setReplyTo(null);
+                              } 
+                          }} 
+                      />
+                      <button 
+                          onClick={() => { 
+                              if(commentText.trim()) { 
+                                  onPostComment(exhibit.id, commentText, replyTo?.id); 
+                                  setCommentText(''); 
+                                  setReplyTo(null);
+                              } 
+                          }} 
+                          className="bg-green-500 text-black p-3 rounded-xl hover:scale-105 active:scale-95 transition-all"
+                      >
+                          <Send size={20} />
+                      </button>
+                  </div>
                </div>
             </div>
         </div>

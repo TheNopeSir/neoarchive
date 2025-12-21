@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Camera, ArrowLeft, Save, X, Info, Archive } from 'lucide-react';
+import { Camera, ArrowLeft, Save, X, Info, Archive, Video } from 'lucide-react';
 import { DefaultCategory, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES } from '../constants';
 import { fileToBase64 } from '../services/storageService';
 
@@ -16,6 +16,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<string>(DefaultCategory.PHONES);
   const [subcategory, setSubcategory] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
   const [specs, setSpecs] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,6 +41,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
       description,
       category,
       subcategory,
+      videoUrl,
       imageUrls: images.length > 0 ? images : ['https://placehold.co/600x400?text=NO+IMAGE'],
       specs,
       isDraft: asDraft
@@ -96,6 +98,16 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                   className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none transition-colors" 
                   placeholder="Введите название или модель..."
                 />
+              </div>
+
+              <div>
+                  <label className="text-[10px] font-pixel opacity-50 uppercase tracking-widest mb-2 flex items-center gap-2"><Video size={12}/> Ссылка на видео (YouTube/Rutube)</label>
+                  <input 
+                      value={videoUrl} 
+                      onChange={e => setVideoUrl(e.target.value)} 
+                      className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none transition-colors" 
+                      placeholder="https://youtube.com/watch?v=..."
+                  />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
