@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ArrowLeft, Share2, FolderOpen, Grid, User, Edit3 } from 'lucide-react';
+import { ArrowLeft, Share2, FolderOpen, Grid, User, Edit3, Trash2 } from 'lucide-react';
 import { Collection, Exhibit } from '../types';
 import ExhibitCard from './ExhibitCard';
 import { getUserAvatar } from '../services/storageService';
@@ -14,10 +14,11 @@ interface CollectionDetailPageProps {
     onAuthorClick: (author: string) => void;
     currentUser: string;
     onEdit?: () => void;
+    onDelete?: (id: string) => void;
 }
 
 const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ 
-    collection, artifacts, theme, onBack, onExhibitClick, onAuthorClick, currentUser, onEdit 
+    collection, artifacts, theme, onBack, onExhibitClick, onAuthorClick, currentUser, onEdit, onDelete 
 }) => {
     const isOwner = currentUser === collection.owner;
 
@@ -28,6 +29,14 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                     <ArrowLeft size={14} /> НАЗАД
                 </button>
                 <div className="flex gap-4">
+                    {isOwner && onDelete && (
+                        <button 
+                            onClick={() => { if(confirm('Вы уверены, что хотите удалить эту коллекцию?')) onDelete(collection.id); }} 
+                            className="text-red-500 hover:text-red-400 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase"
+                        >
+                            <Trash2 size={16} /> УДАЛИТЬ
+                        </button>
+                    )}
                     {isOwner && onEdit && (
                         <button onClick={onEdit} className="text-purple-400 hover:text-purple-300 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase">
                             <Edit3 size={16} /> РЕДАКТИРОВАТЬ

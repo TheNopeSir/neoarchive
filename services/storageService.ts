@@ -1,3 +1,4 @@
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
 
 // Internal Cache (In-Memory)
@@ -285,6 +286,13 @@ export const updateExhibit = async (ex: Exhibit) => {
     await saveToLocalCache();
     await syncItem('/exhibits', ex);
 };
+export const deleteExhibit = async (id: string) => {
+    cache.exhibits = cache.exhibits.filter(e => e.id !== id);
+    if (!cache.deletedIds.includes(id)) cache.deletedIds.push(id);
+    await saveToLocalCache();
+    await apiCall(`/exhibits/${id}`, 'DELETE').catch((e) => console.warn(`Delete exhibit ${id} failed`, e));
+};
+
 export const saveCollection = async (c: Collection) => {
     c.slug = `${slugify(c.title)}-${Date.now().toString().slice(-4)}`;
     cache.collections.unshift(c);

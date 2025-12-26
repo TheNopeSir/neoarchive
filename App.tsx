@@ -437,6 +437,23 @@ export default function App() {
       navigateTo('FEED');
   };
 
+  const handleDeleteArtifact = async (id: string) => {
+      if(!user) return;
+      if(confirm('Удалить артефакт безвозвратно?')) {
+          await db.deleteExhibit(id);
+          setExhibits(prev => prev.filter(e => e.id !== id));
+          // Remove from collections locally
+          setCollections(prev => prev.map(c => ({
+              ...c,
+              exhibitIds: c.exhibitIds.filter(eid => eid !== id)
+          })));
+          // If currently viewing deleted item, go back
+          if (selectedExhibit?.id === id) {
+              handleBack();
+          }
+      }
+  };
+
   const handleSendMessage = async (text: string) => {
       if (!user || !viewedProfileUsername || !text.trim()) return;
       const msg: Message = { 
@@ -646,6 +663,7 @@ export default function App() {
                     isFollowing={user?.following.includes(selectedExhibit.owner) || false} 
                     onAddToCollection={(id) => setIsAddingToCollection(id)}
                     onEdit={(item) => navigateTo('EDIT_ARTIFACT', { item })}
+                    onDelete={handleDeleteArtifact}
                     users={db.getFullDatabase().users}
                 />
             )}
@@ -660,6 +678,7 @@ export default function App() {
                     onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
                     currentUser={user?.username || ''}
                     onEdit={() => navigateTo('EDIT_COLLECTION')}
+                    onDelete={handleDeleteCollection}
                 />
             )}
 
