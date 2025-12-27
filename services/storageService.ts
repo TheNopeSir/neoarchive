@@ -91,7 +91,6 @@ const loadFromCache = async (): Promise<boolean> => {
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
     // Increase timeout to 60s for slow operations like SMTP emails
-    // Pass an explicit error object to abort() to avoid "signal is aborted without reason"
     const timeoutId = setTimeout(() => controller.abort(new Error("Timeout")), 60000);
     
     try {
@@ -109,15 +108,12 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
             try {
                 const json = await res.json();
                 if (json.error) errorMsg = json.error;
-            } catch (e) {
-                // Ignore parsing error, keep default status message
-            }
+            } catch (e) { }
             throw new Error(errorMsg);
         }
         return await res.json();
     } catch (error: any) {
         clearTimeout(timeoutId);
-        // Handle AbortError specifically for user-friendly message
         if (error.name === 'AbortError' || error.message === 'Timeout') {
             throw new Error("Сервер долго не отвечает. Попробуйте позже (Timeout).");
         }
@@ -132,7 +128,6 @@ export const loadFeedBatch = async (page: number, limit: number = 10): Promise<E
         if (items && items.length > 0) {
             const currentIds = new Set(cache.exhibits.map(e => e.id));
             const newItems = items.filter(item => !currentIds.has(item.id));
-            // Keep exhibits sorted by timestamp
             cache.exhibits = [...cache.exhibits, ...newItems].sort((a,b) => {
                 return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             });
@@ -148,6 +143,7 @@ export const loadFeedBatch = async (page: number, limit: number = 10): Promise<E
 
 /**
  * Optimized Sync: First fetch critical user-specific data, then the rest.
+ * Filters out items present in `deletedIds` to prevent resurrection of deleted items.
  */
 const performCloudSync = async () => {
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
@@ -158,22 +154,50 @@ const performCloudSync = async () => {
         if (initData.users) cache.users = initData.users;
         if (initData.notifications) cache.notifications = initData.notifications;
         if (initData.messages) {
-            // Merge messages to avoid duplicates
             const msgMap = new Map(cache.messages.map(m => [m.id, m]));
             (initData.messages as Message[]).forEach(m => msgMap.set(m.id, m));
             cache.messages = Array.from(msgMap.values()).sort((a,b) => a.timestamp.localeCompare(b.timestamp));
         }
         
-        // Priority 2: Initial Feed & Collections
+        // Priority 2: Initial Feed
         if (initData.exhibits) {
             const serverMap = new Map((initData.exhibits as Exhibit[]).map(e => [e.id, e]));
-            // Only keep what's not deleted locally
-            cache.exhibits.forEach(e => { if(!serverMap.has(e.id) && !cache.deletedIds.includes(e.id)) serverMap.set(e.id, e); });
+            
+            // Add local items that are not on server yet (drafts or offline created)
+            // But skip if they are marked as deleted locally
+            cache.exhibits.forEach(e => { 
+                if(!serverMap.has(e.id) && !cache.deletedIds.includes(e.id)) {
+                    serverMap.set(e.id, e); 
+                }
+            });
+
+            // Critical: Remove any items from serverMap that are in deletedIds
+            cache.deletedIds.forEach(id => {
+                if(serverMap.has(id)) serverMap.delete(id);
+            });
+
             cache.exhibits = Array.from(serverMap.values()).sort((a,b) => {
                 return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             });
         }
-        if (initData.collections) cache.collections = initData.collections;
+
+        // Priority 3: Collections
+        if (initData.collections) {
+             const colServerMap = new Map((initData.collections as Collection[]).map(c => [c.id, c]));
+             
+             cache.collections.forEach(c => {
+                 if(!colServerMap.has(c.id) && !cache.deletedIds.includes(c.id)) {
+                     colServerMap.set(c.id, c);
+                 }
+             });
+             
+             cache.deletedIds.forEach(id => {
+                 if(colServerMap.has(id)) colServerMap.delete(id);
+             });
+             
+             cache.collections = Array.from(colServerMap.values());
+        }
+
         if (initData.guestbook) cache.guestbook = initData.guestbook;
 
         await saveToLocalCache();
@@ -238,12 +262,8 @@ export const registerUser = async (username: string, password: string, tagline: 
 export const toggleFollow = async (currentUsername: string, targetUsername: string) => {
     const current = cache.users.find(u => u.username === currentUsername);
     let target = cache.users.find(u => u.username === targetUsername);
-
-    // If target isn't found in cache, we might need to fetch them specifically, 
-    // but for now, rely on cache. If target isn't found, we can't update them.
     if (!current || !target) return;
 
-    // Ensure arrays exist
     if (!current.following) current.following = [];
     if (!target.followers) target.followers = [];
 
@@ -258,7 +278,6 @@ export const toggleFollow = async (currentUsername: string, targetUsername: stri
     }
 
     await saveToLocalCache();
-    // Sync both user profiles to server
     apiCall('/users/update', 'POST', current).catch((e) => console.warn('Sync follow current failed', e));
     apiCall('/users/update', 'POST', target).catch((e) => console.warn('Sync follow target failed', e));
 };

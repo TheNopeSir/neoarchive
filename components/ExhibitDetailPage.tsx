@@ -144,7 +144,14 @@ export default function ExhibitDetailPage({
                   <Edit2 size={14} /> ИЗМЕНИТЬ
               </button>
           )}
-          {isOwner && onDelete && ( <button onClick={() => onDelete(exhibit.id)} className="text-red-500 hover:text-red-400"><Trash2 size={18} /></button> )}
+          {isOwner && onDelete && ( 
+              <button 
+                onClick={() => onDelete(exhibit.id)} 
+                className="text-red-500 hover:text-red-400 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase"
+              >
+                  <Trash2 size={14} /> УДАЛИТЬ
+              </button>
+          )}
           <div className="relative">
             <button onClick={() => setShowShareMenu(!showShareMenu)} className={`flex items-center gap-2 opacity-70 hover:opacity-100 transition-all ${shareCopied ? 'text-green-500' : ''}`}><Share2 size={18} /></button>
             {showShareMenu && (
