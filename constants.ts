@@ -1,6 +1,6 @@
 
-import { Exhibit, TierType, TradeStatus } from './types';
-import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle, Ghost, Terminal, Upload, Star, MessageSquare, Layers, Search, RefreshCw, DollarSign, Gift, Lock } from 'lucide-react';
+import { Exhibit, TierType, TradeStatus, WishlistPriority } from './types';
+import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle, Ghost, Terminal, Upload, Star, MessageSquare, Layers, Search, RefreshCw, DollarSign, Gift, Lock, Crown } from 'lucide-react';
 
 export const DefaultCategory = {
   PHONES: 'ТЕЛЕФОНЫ',
@@ -40,11 +40,17 @@ export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
 
 export const TRADE_STATUS_CONFIG: Record<TradeStatus, any> = {
     'NONE': { label: '', color: '', icon: null },
-    'LOOKING_FOR': { label: 'ИЩУ (WISHLIST)', color: 'text-purple-400 border-purple-400 bg-purple-400/10', icon: Search, badge: 'WISHLIST' },
     'FOR_TRADE': { label: 'ОБМЕН', color: 'text-blue-400 border-blue-400 bg-blue-400/10', icon: RefreshCw, badge: 'TRADE' },
     'FOR_SALE': { label: 'ПРОДАЖА', color: 'text-green-400 border-green-400 bg-green-400/10', icon: DollarSign, badge: 'SALE' },
     'GIFT': { label: 'ДАРЮ', color: 'text-pink-400 border-pink-400 bg-pink-400/10', icon: Gift, badge: 'FREE' },
     'NOT_FOR_SALE': { label: 'НЕ ПРОДАЕТСЯ', color: 'text-red-400 border-red-400 bg-red-400/10', icon: Lock, badge: 'KEEPER' },
+};
+
+export const WISHLIST_PRIORITY_CONFIG: Record<WishlistPriority, any> = {
+    'LOW': { label: 'Интересно', color: 'text-gray-400 border-gray-500', icon: Circle },
+    'MEDIUM': { label: 'Нужно', color: 'text-blue-400 border-blue-500', icon: Star },
+    'HIGH': { label: 'Очень нужно', color: 'text-orange-400 border-orange-500', icon: Flame },
+    'GRAIL': { label: 'GRAIL (Святой Грааль)', color: 'text-yellow-400 border-yellow-500 bg-yellow-500/10 animate-pulse', icon: Crown, glow: true },
 };
 
 export const BADGE_CONFIG = {
@@ -98,35 +104,53 @@ export const calculateArtifactScore = (item: Exhibit, userPreferences?: Record<s
     return likeScore + viewScore + prefBoost;
 };
 
-// --- SIMILARITY ALGORITHM ---
+// --- SMART SIMILARITY ALGORITHM ---
 export const getSimilarArtifacts = (current: Exhibit, all: Exhibit[], limit: number = 4): Exhibit[] => {
     if (!current || !all) return [];
     
-    // Normalize and tokenize current title (remove short words)
-    const currentTokens = current.title.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    // 1. Tokenize current title (remove junk)
+    const stopWords = ['the', 'and', 'for', 'with', 'edition', 'version', 'новый', 'продам', 'купил'];
+    const currentTokens = current.title.toLowerCase()
+        .replace(/[^\w\sа-яё]/gi, '') // remove special chars
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !stopWords.includes(w));
     
     return all
-        .filter(item => item.id !== current.id) // Exclude self
+        .filter(item => item.id !== current.id && !item.isDraft) // Exclude self and drafts
         .map(item => {
             let score = 0;
-            // 1. Exact Category Match (+5)
-            if (item.category === current.category) score += 5;
             
-            // 2. Exact Subcategory Match (+15) - High weight
-            if (item.subcategory && item.subcategory === current.subcategory) score += 15;
+            // 1. Category Match (Base weight: 10)
+            if (item.category === current.category) score += 10;
             
-            // 3. Title Token Overlap (+10 per matched word)
+            // 2. Subcategory Match (High weight: 25)
+            if (item.subcategory && item.subcategory === current.subcategory) score += 25;
+            
+            // 3. Smart Title Matching (Weight: 15 per match)
             const itemTokens = item.title.toLowerCase().split(/\s+/);
+            let matches = 0;
             currentTokens.forEach(token => {
-                if (itemTokens.some(t => t.includes(token) || token.includes(t))) score += 10;
+                if (itemTokens.some(t => t.includes(token) || token.includes(t))) {
+                    matches++;
+                }
             });
+            score += (matches * 15);
 
-            // 4. Same Owner bonus (+2 - encourage browsing same user)
-            if (item.owner === current.owner) score += 2;
+            // 4. Linked item bonus (if user manually linked them elsewhere)
+            if (current.relatedIds?.includes(item.id)) score += 100;
+
+            // 5. Specs overlap (Advanced)
+            if (item.specs && current.specs) {
+                const brandA = Object.values(current.specs).find(v => ['sony', 'nintendo', 'sega', 'apple', 'nokia'].includes(v.toLowerCase()));
+                const brandB = Object.values(item.specs).find(v => ['sony', 'nintendo', 'sega', 'apple', 'nokia'].includes(v.toLowerCase()));
+                if (brandA && brandB && brandA.toLowerCase() === brandB.toLowerCase()) {
+                    score += 20; // Same Major Brand
+                }
+            }
 
             return { item, score };
         })
-        .filter(x => x.score > 0) // Must have at least some relevance
+        .filter(x => x.score > 5) // Must have at least minimal relevance
         .sort((a, b) => b.score - a.score)
         .slice(0, limit)
         .map(x => x.item);

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Heart, Eye, Image as ImageIcon } from 'lucide-react';
 import { Exhibit } from '../types';
@@ -24,7 +23,6 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
   // Trade Status Logic
   const tradeStatus = item.tradeStatus || 'NONE';
   const tradeConfig = TRADE_STATUS_CONFIG[tradeStatus];
-  const isWishlist = tradeStatus === 'LOOKING_FOR';
 
   const isXP = theme === 'xp';
 
@@ -36,8 +34,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
           ? 'rounded-t-lg shadow-lg border-2 border-[#0058EE] bg-white' 
           : `rounded-2xl overflow-hidden border-2 ${theme === 'dark' ? `bg-dark-surface border-white/10 hover:border-green-500/50 ${config.shadow}` : 'bg-white border-black/5 hover:border-black/20 shadow-lg'}`
         } 
-        ${isCursed ? 'animate-pulse' : ''}
-        ${isWishlist ? 'border-dashed opacity-80 hover:opacity-100' : ''}`
+        ${isCursed ? 'animate-pulse' : ''}`
       }
     >
       {/* XP Window Header */}
@@ -64,7 +61,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
             alt={item.title} 
             loading="lazy"
             onLoad={() => setIsLoaded(true)}
-            className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${isLoaded ? 'opacity-100' : 'opacity-0'} ${isWishlist ? 'grayscale contrast-125' : ''}`} 
+            className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
         />
         
         {!isXP && <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-black/60 backdrop-blur-md text-[8px] font-pixel text-white border border-white/10 uppercase">{item.category}</div>}

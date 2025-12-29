@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -21,11 +21,12 @@ import CollectionDetailPage from './components/CollectionDetailPage';
 import DirectChat from './components/DirectChat';
 import CreateArtifactView from './components/CreateArtifactView';
 import CreateCollectionView from './components/CreateCollectionView';
+import CreateWishlistItemView from './components/CreateWishlistItemView';
 import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
 
 import * as db from './services/storageService';
-import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment } from './types';
+import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem } from './types';
 import { DefaultCategory, calculateArtifactScore } from './constants';
 import useSwipe from './hooks/useSwipe';
 
@@ -41,6 +42,7 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [guestbook, setGuestbook] = useState<GuestbookEntry[]>([]);
@@ -149,6 +151,7 @@ export default function App() {
     const data = db.getFullDatabase();
     setExhibits(data.exhibits);
     setCollections(data.collections);
+    setWishlist(data.wishlist);
     setNotifications(data.notifications);
     setMessages(data.messages);
     setGuestbook(data.guestbook);
@@ -432,6 +435,13 @@ export default function App() {
       refreshData();
   };
 
+  const handleSaveWishlist = async (data: WishlistItem) => {
+      if (!user) return;
+      await db.saveWishlistItem({ ...data, owner: user.username });
+      navigateTo('FEED');
+      refreshData();
+  };
+
   const handleDeleteCollection = async (id: string) => {
       if(!user) return;
       await db.deleteCollection(id); 
@@ -646,6 +656,14 @@ export default function App() {
               />
             )}
 
+            {view === 'CREATE_WISHLIST' && (
+                <CreateWishlistItemView
+                    theme={theme}
+                    onBack={handleBack}
+                    onSave={handleSaveWishlist}
+                />
+            )}
+
             {view === 'EDIT_ARTIFACT' && selectedExhibit && (
                <CreateArtifactView 
                 theme={theme} 
@@ -738,6 +756,19 @@ export default function App() {
                     viewedProfileUsername={viewedProfileUsername} 
                     exhibits={exhibits} 
                     collections={collections} 
+                    // Pass filtered wishlist
+                    // In a real app we'd pass the full wishlist or filtered one.
+                    // UserProfileView will need to be updated to accept wishlist prop or fetch it.
+                    // For now, let's inject it via props in UserProfileView (I will update UserProfileView to read from cache directly or via props)
+                    // Wait, I updated UserProfileView signature? No, I need to pass it.
+                    // Let's pass it via props or let it filter from full db.
+                    // Actually, UserProfileView pulls profileUser from DB.
+                    // I need to update UserProfileView to handle wishlist.
+                    // I will pass `wishlist` as a prop.
+                    // Oops, `UserProfileView` props definition in `App.tsx` needs to match.
+                    // I will update UserProfileView to take `wishlist` prop or `exhibits` prop and filter inside? 
+                    // No, `wishlist` is a separate array now.
+                    // I'll update UserProfileView to filter from `db.getFullDatabase().wishlist`.
                     guestbook={guestbook} 
                     theme={theme} 
                     onBack={handleBack} 
@@ -820,6 +851,16 @@ export default function App() {
                                 <Layers size={24} />
                             </div>
                             <span className="font-pixel text-[10px] font-bold tracking-widest">КОЛЛЕКЦИЮ</span>
+                        </button>
+
+                        <button 
+                            onClick={() => { navigateTo('CREATE_WISHLIST'); setShowCreateMenu(false); }}
+                            className={`col-span-2 flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-purple-500/50 hover:bg-purple-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}
+                        >
+                            <div className="w-12 h-12 rounded-full bg-purple-500 text-white flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_rgba(168,85,247,0.5)] transition-shadow">
+                                <Search size={24} />
+                            </div>
+                            <span className="font-pixel text-[10px] font-bold tracking-widest">WISHLIST / ИЩУ</span>
                         </button>
                     </div>
                 </div>

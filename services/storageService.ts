@@ -1,5 +1,5 @@
 
-import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry } from '../types';
+import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem } from '../types';
 
 // Internal Cache (In-Memory)
 let cache = {
@@ -9,15 +9,16 @@ let cache = {
     messages: [] as Message[],
     users: [] as UserProfile[],
     guestbook: [] as GuestbookEntry[],
+    wishlist: [] as WishlistItem[],
     deletedIds: [] as string[],
     isLoaded: false
 };
 
 const DB_NAME = 'NeoArchiveDB';
 const STORE_NAME = 'client_cache';
-const CACHE_KEY = 'neo_archive_v2'; // Bumped version
+const CACHE_KEY = 'neo_archive_v3'; // Bumped version for new schema
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '5.0.0-Optimized'; 
+const CACHE_VERSION = '5.1.0-Wishlist'; 
 
 let isOfflineMode = false;
 const API_BASE = '/api';
@@ -209,6 +210,18 @@ const performCloudSync = async () => {
              cache.collections = Array.from(colServerMap.values());
         }
 
+        // Priority 4: Wishlist
+        if (initData.wishlist) {
+            const wlMap = new Map((initData.wishlist as WishlistItem[]).map(w => [w.id, w]));
+            cache.wishlist.forEach(w => {
+                if (!wlMap.has(w.id) && !cache.deletedIds.includes(w.id)) wlMap.set(w.id, w);
+            });
+            cache.deletedIds.forEach(id => {
+                if(wlMap.has(id)) wlMap.delete(id);
+            });
+            cache.wishlist = Array.from(wlMap.values());
+        }
+
         if (initData.guestbook) cache.guestbook = initData.guestbook;
 
         await saveToLocalCache();
@@ -368,6 +381,19 @@ export const deleteCollection = async (id: string) => {
     if (!cache.deletedIds.includes(id)) cache.deletedIds.push(id);
     await saveToLocalCache();
     await apiCall(`/collections/${id}`, 'DELETE').catch((e) => console.warn(`Delete collection ${id} failed`, e));
+};
+
+export const saveWishlistItem = async (item: WishlistItem) => {
+    cache.wishlist.unshift(item);
+    await saveToLocalCache();
+    await syncItem('/wishlist', item);
+};
+
+export const deleteWishlistItem = async (id: string) => {
+    cache.wishlist = cache.wishlist.filter(w => w.id !== id);
+    if (!cache.deletedIds.includes(id)) cache.deletedIds.push(id);
+    await saveToLocalCache();
+    await apiCall(`/wishlist/${id}`, 'DELETE').catch((e) => console.warn(`Delete wishlist ${id} failed`, e));
 };
 
 export const saveMessage = async (msg: Message) => {

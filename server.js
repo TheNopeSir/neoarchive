@@ -45,7 +45,7 @@ pool.on('error', (err, client) => {
 // ==========================================
 
 const SMTP_EMAIL = process.env.SMTP_EMAIL || 'morpheus@neoarch.ru'; 
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'tntgz9o3e9'; 
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'RTZ0JwbaRDXdD='; 
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.timeweb.ru',
@@ -94,7 +94,7 @@ const query = async (text, params) => {
 
 // Initialize Database Schema
 const initDB = async () => {
-    const genericTables = ['exhibits', 'collections', 'notifications', 'messages', 'guestbook'];
+    const genericTables = ['exhibits', 'collections', 'notifications', 'messages', 'guestbook', 'wishlist'];
     
     try {
         await query(`CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMP DEFAULT NOW())`);
@@ -438,6 +438,7 @@ app.get('/api/sync', async (req, res) => {
     `;
     
     let collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC LIMIT 50`;
+    let wishlistQuery = `SELECT data FROM wishlist ORDER BY updated_at DESC LIMIT 100`;
     
     if (username) {
         exhibitQuery = `
@@ -450,6 +451,7 @@ app.get('/api/sync', async (req, res) => {
             )
         `;
         collectionQuery = `SELECT data FROM collections WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM collections ORDER BY updated_at DESC LIMIT 50)`;
+        wishlistQuery = `SELECT data FROM wishlist WHERE data->>'owner' = '${username}' OR id IN (SELECT id FROM wishlist ORDER BY updated_at DESC LIMIT 50)`;
     }
 
     // Helper to prevent entire Sync from failing if one table errors
@@ -465,16 +467,17 @@ app.get('/api/sync', async (req, res) => {
 
     try {
         // Run parallel queries with safety
-        const [users, exhibits, collections, notifications, messages, guestbook] = await Promise.all([
+        const [users, exhibits, collections, notifications, messages, guestbook, wishlist] = await Promise.all([
             run('SELECT data FROM users'),
             run(exhibitQuery),
             run(collectionQuery),
             run('SELECT data FROM notifications ORDER BY updated_at DESC LIMIT 100'),
             run('SELECT data FROM messages ORDER BY updated_at DESC LIMIT 200'),
-            run('SELECT data FROM guestbook ORDER BY updated_at DESC LIMIT 200')
+            run('SELECT data FROM guestbook ORDER BY updated_at DESC LIMIT 200'),
+            run(wishlistQuery)
         ]);
         
-        res.json({ users, exhibits, collections, notifications, messages, guestbook });
+        res.json({ users, exhibits, collections, notifications, messages, guestbook, wishlist });
     } catch (e) {
         console.error("Sync Fatal Error:", e.message);
         res.status(500).json({ error: "Sync failed completely" });
@@ -555,6 +558,7 @@ createCrudRoutes('collections');
 createCrudRoutes('notifications');
 createCrudRoutes('messages');
 createCrudRoutes('guestbook');
+createCrudRoutes('wishlist');
 
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });

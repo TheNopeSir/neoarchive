@@ -11,7 +11,20 @@ export interface Comment {
 
 export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'CURSED';
 
-export type TradeStatus = 'NONE' | 'LOOKING_FOR' | 'FOR_TRADE' | 'FOR_SALE' | 'GIFT' | 'NOT_FOR_SALE';
+export type TradeStatus = 'NONE' | 'FOR_TRADE' | 'FOR_SALE' | 'GIFT' | 'NOT_FOR_SALE';
+
+export type WishlistPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'GRAIL';
+
+export interface WishlistItem {
+    id: string;
+    title: string;
+    category: string;
+    owner: string;
+    priority: WishlistPriority;
+    notes?: string;
+    referenceImageUrl?: string; // Image of what user wants
+    timestamp: string;
+}
 
 export interface Exhibit {
   id: string;
@@ -32,8 +45,8 @@ export interface Exhibit {
   specs: Record<string, string>;
   comments: Comment[];
   isDraft?: boolean;
-  tradeStatus?: TradeStatus; // New: Status for Wishlist/Marketplace
-  relatedIds?: string[]; // New: IDs of connected items within user's collection
+  tradeStatus?: TradeStatus; 
+  relatedIds?: string[]; // IDs of connected items within user's collection
 }
 
 export interface Collection {
@@ -114,4 +127,4 @@ export interface UserProfile {
   telegram?: string;
 }
 
-export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'EDIT_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'MY_COLLECTION' | 'SOCIAL_LIST';
+export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_WISHLIST' | 'EDIT_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'MY_COLLECTION' | 'SOCIAL_LIST';
