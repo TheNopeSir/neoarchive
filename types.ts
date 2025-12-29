@@ -85,6 +85,14 @@ export interface AchievementProgress {
   unlocked: boolean;
 }
 
+export interface AppSettings {
+    theme?: 'dark' | 'light' | 'xp';
+    notificationsEnabled?: boolean;
+    soundEnabled?: boolean;
+    publicProfile?: boolean;
+    showEmail?: boolean;
+}
+
 export interface UserProfile {
   username: string;
   email: string;
@@ -96,6 +104,7 @@ export interface UserProfile {
   followers: string[]; 
   achievements: AchievementProgress[]; 
   preferences?: Record<string, number>;
+  settings?: AppSettings;
   password?: string;
   isAdmin?: boolean;
   telegram?: string;

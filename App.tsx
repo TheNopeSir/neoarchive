@@ -164,7 +164,13 @@ export default function App() {
       try {
           const activeUser = await db.initializeDatabase();
           if (activeUser) { 
-              setUser(activeUser); 
+              setUser(activeUser);
+              
+              // Apply saved theme preference
+              if (activeUser.settings?.theme) {
+                  setTheme(activeUser.settings.theme);
+              }
+
               // Simple URL parsing for initial load could go here
               setView('FEED'); 
               refreshData();
@@ -542,7 +548,13 @@ export default function App() {
 
         <main className={`pt-20 pb-28 px-4 max-w-7xl mx-auto min-h-screen relative z-10 transition-all duration-700 ${!isInitializing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             
-            {view === 'AUTH' && <MatrixLogin theme={theme === 'xp' ? 'light' : theme} onLogin={(u) => { setUser(u); navigateTo('FEED'); refreshData(); }} />}
+            {view === 'AUTH' && <MatrixLogin theme={theme === 'xp' ? 'light' : theme} onLogin={(u) => { 
+                setUser(u); 
+                // Apply User Preference Theme
+                if(u.settings?.theme) setTheme(u.settings.theme);
+                navigateTo('FEED'); 
+                refreshData(); 
+            }} />}
 
             {view === 'SEARCH' && (
                 <SearchView 

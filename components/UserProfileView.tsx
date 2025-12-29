@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
-import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Users, Palette } from 'lucide-react';
-import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus } from '../types';
+import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Users, Palette, Settings, Volume2, Bell, Shield, Database, Monitor, Sun, Moon, Terminal } from 'lucide-react';
+import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus, AppSettings } from '../types';
 import { STATUS_OPTIONS, BADGE_CONFIG } from '../constants';
 import * as db from '../services/storageService';
 import { getUserAvatar } from '../services/storageService';
@@ -67,15 +66,29 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
         following: [], 
         followers: [],
         achievements: [], 
-        telegram: '' 
+        telegram: '',
+        settings: {}
     } as UserProfile;
 
     const isCurrentUser = user?.username === viewedProfileUsername;
     const isSubscribed = user?.following.includes(viewedProfileUsername) || false;
 
+    // View State: 'LOGS' (Guestbook) or 'CONFIG' (Settings)
+    const [activeSection, setActiveSection] = useState<'LOGS' | 'CONFIG'>('LOGS');
+
+    // Guestbook Edit State
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [editEntryText, setEditEntryText] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+
+    // Settings State
+    const [localSettings, setLocalSettings] = useState<AppSettings>(user?.settings || {
+        theme: 'dark',
+        notificationsEnabled: true,
+        soundEnabled: true,
+        publicProfile: true,
+        showEmail: false
+    });
 
     const handleEditEntry = (entry: GuestbookEntry) => {
         setEditingEntryId(entry.id);
@@ -105,6 +118,23 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
         }
         setEditPassword(pass);
         setShowPassword(true);
+    };
+
+    const updateSetting = async (key: keyof AppSettings, value: any) => {
+        if (!isCurrentUser) return;
+        
+        const newSettings = { ...localSettings, [key]: value };
+        setLocalSettings(newSettings);
+        
+        // Immediate Theme Effect
+        if (key === 'theme' && onThemeChange) {
+            onThemeChange(value);
+        }
+
+        // Save to DB
+        const updatedUser = { ...user, settings: newSettings };
+        await db.updateUserProfile(updatedUser);
+        // We don't necessarily need to trigger a full app refresh for settings unless critical
     };
 
     return (
@@ -198,110 +228,193 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 </div>
             </div>
 
-            {isCurrentUser && onThemeChange && (
-                <div className={`p-6 rounded-xl border flex flex-col gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : theme === 'xp' ? 'bg-white border-[#245DDA] shadow-lg rounded-t-lg mt-4' : 'bg-white border-light-dim'}`}>
-                    {theme === 'xp' && <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-r from-[#0058EE] to-[#3F8CF3] rounded-t-lg flex items-center px-4 -mt-[1px] -mx-[1px] w-[calc(100%+2px)]"><span className="text-white font-bold text-sm drop-shadow-md italic">Appearance Settings</span></div>}
-                    
-                    <h3 className={`font-pixel text-sm flex items-center gap-2 uppercase tracking-widest ${theme === 'xp' ? 'mt-4 text-black' : 'opacity-70'}`}>
-                        <Palette size={16}/> ИНТЕРФЕЙС / THEME
-                    </h3>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <button 
-                            onClick={() => onThemeChange('dark')}
-                            className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${theme === 'dark' ? 'border-green-500 bg-green-500/10' : 'border-transparent hover:border-white/10 bg-black/20'}`}
-                        >
-                            <div className="w-8 h-8 rounded-full bg-black border border-green-500 flex items-center justify-center text-green-500 font-pixel font-bold">M</div>
-                            <div className="text-left">
-                                <div className="font-bold text-xs">MATRIX</div>
-                                <div className="text-[10px] opacity-50">Dark Mode (Default)</div>
-                            </div>
-                        </button>
+            {/* TAB NAVIGATION */}
+            <div className="flex mb-4 border-b border-gray-500/30">
+                <button 
+                    onClick={() => setActiveSection('LOGS')}
+                    className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'LOGS' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}
+                >
+                    <MessageSquare size={14} /> GUESTBOOK
+                </button>
+                {isCurrentUser && (
+                    <button 
+                        onClick={() => setActiveSection('CONFIG')}
+                        className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'CONFIG' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}
+                    >
+                        <Settings size={14} /> CONFIG
+                    </button>
+                )}
+            </div>
 
-                        <button 
-                            onClick={() => onThemeChange('light')}
-                            className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${theme === 'light' ? 'border-black bg-white shadow-md' : 'border-transparent hover:border-black/10 bg-gray-200 text-black'}`}
-                        >
-                            <div className="w-8 h-8 rounded-full bg-white border border-gray-300 flex items-center justify-center text-black font-pixel font-bold">O</div>
-                            <div className="text-left">
-                                <div className="font-bold text-xs">OFFICE</div>
-                                <div className="text-[10px] opacity-50">Light Mode</div>
-                            </div>
-                        </button>
+            {/* SETTINGS PANEL */}
+            {isCurrentUser && activeSection === 'CONFIG' && (
+                <div className={`p-6 rounded-xl border flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : theme === 'xp' ? 'bg-white border-[#245DDA] shadow-lg' : 'bg-white border-light-dim'}`}>
+                    
+                    {/* Visuals Section */}
+                    <div>
+                        <h3 className={`font-pixel text-[10px] uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'xp' ? 'text-blue-800' : 'opacity-70'}`}>
+                            <Palette size={14}/> Интерфейс / Visuals
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <button onClick={() => updateSetting('theme', 'dark')} className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${localSettings.theme === 'dark' ? 'border-green-500 bg-green-500/10' : 'border-transparent bg-black/5 hover:bg-black/10'}`}>
+                                <div className="w-8 h-8 bg-black rounded-full border border-gray-700 flex items-center justify-center text-green-500"><Terminal size={16}/></div>
+                                <span className="font-pixel text-[10px]">MATRIX</span>
+                            </button>
+                            <button onClick={() => updateSetting('theme', 'light')} className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${localSettings.theme === 'light' ? 'border-blue-500 bg-blue-500/10' : 'border-transparent bg-gray-100 hover:bg-gray-200'}`}>
+                                <div className="w-8 h-8 bg-white rounded-full border border-gray-300 flex items-center justify-center text-black"><Sun size={16}/></div>
+                                <span className="font-pixel text-[10px]">OFFICE</span>
+                            </button>
+                            <button onClick={() => updateSetting('theme', 'xp')} className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${localSettings.theme === 'xp' ? 'border-blue-600 bg-blue-50' : 'border-transparent bg-blue-50/50 hover:bg-blue-100'}`}>
+                                <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full border border-white flex items-center justify-center text-white italic font-serif shadow">XP</div>
+                                <span className="font-pixel text-[10px]">LUNA</span>
+                            </button>
+                        </div>
+                    </div>
 
-                        <button 
-                            onClick={() => onThemeChange('xp')}
-                            className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${theme === 'xp' ? 'border-blue-600 bg-blue-50 shadow-md' : 'border-transparent hover:border-blue-300 bg-blue-100 text-blue-900'}`}
-                        >
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 border border-white flex items-center justify-center text-white font-sans font-bold italic shadow">XP</div>
-                            <div className="text-left">
-                                <div className="font-bold text-xs">LUNA</div>
-                                <div className="text-[10px] opacity-50">Windows XP Style</div>
+                    <div className="w-full h-[1px] bg-gray-500/20" />
+
+                    {/* Preferences Section */}
+                    <div>
+                        <h3 className={`font-pixel text-[10px] uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'xp' ? 'text-blue-800' : 'opacity-70'}`}>
+                            <Settings size={14}/> Предпочтения / Preferences
+                        </h3>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Bell size={18} className="opacity-70" />
+                                    <div>
+                                        <div className="font-bold text-xs font-pixel">Уведомления</div>
+                                        <div className="text-[10px] opacity-50 font-mono">Получать оповещения о лайках и комментариях</div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => updateSetting('notificationsEnabled', !localSettings.notificationsEnabled)}
+                                    className={`w-10 h-5 rounded-full relative transition-colors ${localSettings.notificationsEnabled ? 'bg-green-500' : 'bg-gray-600'}`}
+                                >
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${localSettings.notificationsEnabled ? 'left-6' : 'left-1'}`} />
+                                </button>
                             </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Volume2 size={18} className="opacity-70" />
+                                    <div>
+                                        <div className="font-bold text-xs font-pixel">Звуковые эффекты</div>
+                                        <div className="text-[10px] opacity-50 font-mono">UI звуки интерфейса (Beta)</div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => updateSetting('soundEnabled', !localSettings.soundEnabled)}
+                                    className={`w-10 h-5 rounded-full relative transition-colors ${localSettings.soundEnabled ? 'bg-green-500' : 'bg-gray-600'}`}
+                                >
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${localSettings.soundEnabled ? 'left-6' : 'left-1'}`} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Shield size={18} className="opacity-70" />
+                                    <div>
+                                        <div className="font-bold text-xs font-pixel">Приватный профиль</div>
+                                        <div className="text-[10px] opacity-50 font-mono">Скрыть коллекции от неподписанных пользователей</div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => updateSetting('publicProfile', !localSettings.publicProfile)}
+                                    className={`w-10 h-5 rounded-full relative transition-colors ${!localSettings.publicProfile ? 'bg-green-500' : 'bg-gray-600'}`}
+                                >
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${!localSettings.publicProfile ? 'left-6' : 'left-1'}`} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-full h-[1px] bg-gray-500/20" />
+
+                    {/* Data Section */}
+                    <div>
+                        <h3 className={`font-pixel text-[10px] uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'xp' ? 'text-blue-800' : 'opacity-70'}`}>
+                            <Database size={14}/> Данные / Data
+                        </h3>
+                        <button 
+                            onClick={() => {
+                                if(confirm("Это удалит локальный кэш изображений и данных для освобождения места. Вы не выйдете из аккаунта. Продолжить?")) {
+                                    db.clearLocalCache();
+                                }
+                            }}
+                            className="w-full py-3 border border-red-500/50 text-red-500 hover:bg-red-500/10 rounded-xl font-pixel text-xs flex items-center justify-center gap-2 transition-all"
+                        >
+                            <Trash2 size={16} /> ОЧИСТИТЬ ЛОКАЛЬНЫЙ КЭШ
                         </button>
                     </div>
+
                 </div>
             )}
 
-            {/* Note: Collection and Artifact Grids Removed from Profile View as requested */}
+            {/* GUESTBOOK PANEL */}
+            {activeSection === 'LOGS' && (
+                <div className={`pt-4 border-t border-dashed ${theme === 'xp' ? 'border-blue-800/30' : 'border-gray-500/30'}`}>
+                    <h3 className={`font-pixel text-sm mb-4 ${theme === 'xp' ? 'text-black' : ''}`}>GUESTBOOK_PROTOCOL</h3>
+                    <div className="space-y-4 mb-4">
+                        {guestbook.filter(g => g.targetUser === profileUser.username).length === 0 ? (
+                            <div className="text-center py-8 opacity-30 font-mono text-xs uppercase">ЗАПИСЕЙ НЕТ</div>
+                        ) : (
+                            guestbook.filter(g => g.targetUser === profileUser.username).map(entry => {
+                                const canModify = user && (user.username === entry.author || isCurrentUser);
+                                const isEditing = editingEntryId === entry.id;
 
-            <div className={`pt-8 border-t border-dashed ${theme === 'xp' ? 'border-blue-800/30' : 'border-gray-500/30'}`}>
-                <h3 className={`font-pixel text-sm mb-4 ${theme === 'xp' ? 'text-black' : ''}`}>GUESTBOOK_PROTOCOL</h3>
-                <div className="space-y-4 mb-4">
-                    {guestbook.filter(g => g.targetUser === profileUser.username).map(entry => {
-                        const canModify = user && (user.username === entry.author || isCurrentUser);
-                        const isEditing = editingEntryId === entry.id;
+                                return (
+                                    <div key={entry.id} className={`p-3 border rounded text-xs relative group ${theme === 'xp' ? 'bg-white border-blue-200 text-black shadow-sm' : 'border-gray-500/30'}`}>
+                                        <div className="flex justify-between mb-1">
+                                            <span className="font-bold font-pixel cursor-pointer" onClick={() => onAuthorClick(entry.author)}>@{entry.author}</span>
+                                            <span className="opacity-50">{entry.timestamp}</span>
+                                        </div>
+                                        
+                                        {isEditing ? (
+                                            <div className="flex gap-2 my-2">
+                                                <input 
+                                                    value={editEntryText} 
+                                                    onChange={(e) => setEditEntryText(e.target.value)} 
+                                                    className="flex-1 bg-transparent border-b p-1 font-mono text-xs focus:outline-none"
+                                                    autoFocus
+                                                />
+                                                <button onClick={() => handleSaveEntry(entry)} className="text-green-500"><Check size={14}/></button>
+                                                <button onClick={() => setEditingEntryId(null)} className="text-red-500"><X size={14}/></button>
+                                            </div>
+                                        ) : (
+                                            <p className="font-mono mb-2">{entry.text}</p>
+                                        )}
 
-                        return (
-                            <div key={entry.id} className={`p-3 border rounded text-xs relative group ${theme === 'xp' ? 'bg-white border-blue-200 text-black shadow-sm' : 'border-gray-500/30'}`}>
-                                <div className="flex justify-between mb-1">
-                                    <span className="font-bold font-pixel cursor-pointer" onClick={() => onAuthorClick(entry.author)}>@{entry.author}</span>
-                                    <span className="opacity-50">{entry.timestamp}</span>
-                                </div>
-                                
-                                {isEditing ? (
-                                    <div className="flex gap-2 my-2">
-                                        <input 
-                                            value={editEntryText} 
-                                            onChange={(e) => setEditEntryText(e.target.value)} 
-                                            className="flex-1 bg-transparent border-b p-1 font-mono text-xs focus:outline-none"
-                                            autoFocus
-                                        />
-                                        <button onClick={() => handleSaveEntry(entry)} className="text-green-500"><Check size={14}/></button>
-                                        <button onClick={() => setEditingEntryId(null)} className="text-red-500"><X size={14}/></button>
-                                    </div>
-                                ) : (
-                                    <p className="font-mono mb-2">{entry.text}</p>
-                                )}
-
-                                <div className="flex items-center gap-4">
-                                    <button onClick={() => { setGuestbookInput(`@${entry.author} `); guestbookInputRef.current?.focus(); }} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity">
-                                        <Reply size={10} /> ОТВЕТИТЬ
-                                    </button>
-                                    {canModify && !isEditing && (
-                                        <>
-                                            {user.username === entry.author && (
-                                                <button onClick={() => handleEditEntry(entry)} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity hover:Yellow-500">
-                                                    <Edit2 size={10} /> ПРАВКА
-                                                </button>
-                                            )}
-                                            <button onClick={() => handleDeleteEntry(entry.id)} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity hover:text-red-500">
-                                                <Trash2 size={10} /> УДАЛИТЬ
+                                        <div className="flex items-center gap-4">
+                                            <button onClick={() => { setGuestbookInput(`@${entry.author} `); guestbookInputRef.current?.focus(); }} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity">
+                                                <Reply size={10} /> ОТВЕТИТЬ
                                             </button>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-                {user && (
-                    <div className="flex gap-2">
-                        <input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className={`flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none ${theme === 'xp' ? 'text-black border-blue-300 placeholder-gray-500' : ''}`} />
-                        <button onClick={onGuestbookPost} className="p-2 border rounded hover:bg-white/10"><Send size={16} /></button>
+                                            {canModify && !isEditing && (
+                                                <>
+                                                    {user.username === entry.author && (
+                                                        <button onClick={() => handleEditEntry(entry)} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity hover:Yellow-500">
+                                                            <Edit2 size={10} /> ПРАВКА
+                                                        </button>
+                                                    )}
+                                                    <button onClick={() => handleDeleteEntry(entry.id)} className="flex items-center gap-1 opacity-50 hover:opacity-100 text-[9px] transition-opacity hover:text-red-500">
+                                                        <Trash2 size={10} /> УДАЛИТЬ
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
-                )}
-            </div>
+                    {user && (
+                        <div className="flex gap-2">
+                            <input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className={`flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none ${theme === 'xp' ? 'text-black border-blue-300 placeholder-gray-500' : ''}`} />
+                            <button onClick={onGuestbookPost} className="p-2 border rounded hover:bg-white/10"><Send size={16} /></button>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
