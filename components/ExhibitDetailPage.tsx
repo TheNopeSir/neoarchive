@@ -139,7 +139,7 @@ export default function ExhibitDetailPage({
       <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/10">
         <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest"><ArrowLeft size={14} /> НАЗАД</button>
         <div className="flex gap-4">
-          {isOwner && onEdit && (
+          {(isOwner || isAdmin) && onEdit && (
               <button onClick={() => onEdit(exhibit)} className="text-purple-400 hover:text-purple-300 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase">
                   <Edit2 size={14} /> ИЗМЕНИТЬ
               </button>
