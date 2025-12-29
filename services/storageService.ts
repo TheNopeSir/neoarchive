@@ -222,9 +222,29 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
 export const forceSync = performCloudSync;
 export const getFullDatabase = () => ({ ...cache });
 
+// --- UTILS FOR ADMIN & ACHIEVEMENTS ---
+const checkAndAddHelloAchievement = async (user: UserProfile) => {
+    if (!user.achievements) user.achievements = [];
+    const hasHello = user.achievements.some(a => a.id === 'HELLO_WORLD');
+    if (!hasHello) {
+        user.achievements.push({ id: 'HELLO_WORLD', current: 1, target: 1, unlocked: true });
+        // Update user on server silently
+        await apiCall('/users/update', 'POST', user);
+    }
+};
+
+const checkSuperAdmin = (user: UserProfile) => {
+    if (user.email === 'kennyornope@gmail.com') {
+        user.isAdmin = true;
+    }
+};
+
 export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
     const res = await apiCall('/auth/login', 'POST', { email, password });
     if (res.success && res.user) {
+        checkSuperAdmin(res.user);
+        await checkAndAddHelloAchievement(res.user);
+
         localStorage.setItem(SESSION_USER_KEY, res.user.username);
         const idx = cache.users.findIndex(u => u.username === res.user.username);
         if (idx !== -1) cache.users[idx] = res.user; else cache.users.push(res.user);
@@ -243,6 +263,9 @@ export const recoverPassword = async (email: string): Promise<any> => {
 export const loginViaTelegram = async (user: any): Promise<UserProfile> => {
     const res = await apiCall('/auth/telegram', 'POST', user);
     if (res.success && res.user) {
+        checkSuperAdmin(res.user);
+        await checkAndAddHelloAchievement(res.user);
+
         localStorage.setItem(SESSION_USER_KEY, res.user.username);
         const idx = cache.users.findIndex(u => u.username === res.user.username);
         if (idx !== -1) cache.users[idx] = res.user; else cache.users.push(res.user);
@@ -253,7 +276,10 @@ export const loginViaTelegram = async (user: any): Promise<UserProfile> => {
 };
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
-    const profile = { username, email, tagline, avatarUrl: getUserAvatar(username), joinedDate: new Date().toLocaleString(), following: [], followers: [], achievements: [{id:'HELLO_WORLD', current:1, target:1, unlocked:true}], password };
+    const profile = { username, email, tagline, avatarUrl: getUserAvatar(username), joinedDate: new Date().toLocaleString(), following: [], followers: [], achievements: [{id:'HELLO_WORLD', current:1, target:1, unlocked:true}], password, isAdmin: false };
+    
+    checkSuperAdmin(profile);
+    
     const res = await apiCall('/auth/register', 'POST', { username, email, password, data: profile });
     if (res.success) return profile;
     throw new Error(res.error || "Registration failed");

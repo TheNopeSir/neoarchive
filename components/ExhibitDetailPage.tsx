@@ -144,7 +144,7 @@ export default function ExhibitDetailPage({
                   <Edit2 size={14} /> ИЗМЕНИТЬ
               </button>
           )}
-          {isOwner && onDelete && ( 
+          {(isOwner || isAdmin) && onDelete && ( 
               <button 
                 onClick={() => onDelete(exhibit.id)} 
                 className="text-red-500 hover:text-red-400 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase"
@@ -168,13 +168,26 @@ export default function ExhibitDetailPage({
 
       <div className="flex flex-col gap-6">
         <div className="space-y-4">
-          {/* Main Image */}
+          {/* Main Image Container with Blurred Background */}
           <div className={`relative aspect-square md:aspect-video w-full rounded-2xl overflow-hidden border transition-all duration-500 ${theme === 'dark' ? 'border-white/10 bg-black' : 'border-black/10 bg-white'} ${isCursed ? 'shadow-[0_0_30px_red]' : ''}`}>
-             <img src={images[currentImageIndex]} alt={exhibit.title} className="w-full h-full object-contain" />
+             
+             {/* Blurred Background Layer */}
+             <div 
+                className="absolute inset-0 bg-cover bg-center blur-2xl opacity-50 scale-110" 
+                style={{backgroundImage: `url(${images[currentImageIndex]})`}} 
+             />
+
+             {/* Main Image */}
+             <img 
+                src={images[currentImageIndex]} 
+                alt={exhibit.title} 
+                className="relative z-10 w-full h-full object-contain" 
+             />
+
              {images.length > 1 && (
                <>
-                 <button onClick={() => setCurrentImageIndex(prev => (prev - 1 + images.length) % images.length)} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60 transition-colors"><ChevronLeft size={24}/></button>
-                 <button onClick={() => setCurrentImageIndex(prev => (prev + 1) % images.length)} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60 transition-colors"><ChevronRight size={24}/></button>
+                 <button onClick={() => setCurrentImageIndex(prev => (prev - 1 + images.length) % images.length)} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60 transition-colors z-20"><ChevronLeft size={24}/></button>
+                 <button onClick={() => setCurrentImageIndex(prev => (prev + 1) % images.length)} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60 transition-colors z-20"><ChevronRight size={24}/></button>
                </>
              )}
           </div>
@@ -281,7 +294,7 @@ export default function ExhibitDetailPage({
                                     <button onClick={() => handleReply(c)} className="text-gray-500 hover:text-white transition-colors" title="Ответить">
                                         <CornerDownRight size={14} />
                                     </button>
-                                    {isAuthor && (
+                                    {(isAuthor || isAdmin) && (
                                         <button onClick={() => onDeleteComment(exhibit.id, c.id)} className="text-gray-500 hover:text-red-500 transition-colors" title="Удалить">
                                             <Trash2 size={14} />
                                         </button>

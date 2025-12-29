@@ -65,7 +65,9 @@ export const CATEGORY_CONDITIONS: Record<string, string[]> = {
 };
 
 export const getArtifactTier = (item: Exhibit): TierType => {
-    if (item.title === 'вфуфвф' && (item.owner === 'Truester' || item.owner === '@Truester')) return 'CURSED';
+    // Easier trigger for Cursed items for testing and fun
+    if (item.title.toUpperCase().includes('CURSED') || (item.title === 'вфуфвф' && (item.owner === 'Truester' || item.owner === '@Truester'))) return 'CURSED';
+    
     const score = (item.likes * 25) + ((item.comments?.length || 0) * 10) + item.views;
     if (score >= 10000) return 'LEGENDARY';
     if (score >= 2000) return 'EPIC';
@@ -74,11 +76,11 @@ export const getArtifactTier = (item: Exhibit): TierType => {
 };
 
 export const TIER_CONFIG: Record<TierType, any> = {
-    COMMON: { name: 'COMMON', color: 'text-gray-500', bgColor: 'bg-gray-500/20', borderDark: 'border-dark-dim', badge: 'bg-gray-500 text-white', icon: User },
-    RARE: { name: 'RARE', color: 'text-cyan-500', bgColor: 'bg-cyan-500/20', borderDark: 'border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.3)]', badge: 'bg-cyan-600 text-white', icon: Award },
-    EPIC: { name: 'EPIC', color: 'text-purple-500', bgColor: 'bg-purple-500/20', borderDark: 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]', badge: 'bg-purple-600 text-white', icon: Flame },
-    LEGENDARY: { name: 'LEGENDARY', color: 'text-yellow-500', bgColor: 'bg-yellow-500/20', borderDark: 'border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.5)]', badge: 'bg-gradient-to-r from-yellow-600 to-red-600 text-white', icon: Zap },
-    CURSED: { name: 'CURSED', color: 'text-red-500', bgColor: 'bg-red-500/20', borderDark: 'border-red-600 shadow-[0_0_30px_rgba(239,68,68,0.7)] animate-pulse-slow', badge: 'bg-red-600 text-white font-black italic', icon: Ghost }
+    COMMON: { name: 'COMMON', color: 'text-gray-500', bgColor: 'bg-gray-500/20', borderDark: 'border-dark-dim', badge: 'bg-gray-500 text-white', icon: User, shadow: '' },
+    RARE: { name: 'RARE', color: 'text-cyan-500', bgColor: 'bg-cyan-500/20', borderDark: 'border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.3)]', badge: 'bg-cyan-600 text-white', icon: Award, shadow: 'shadow-[0_0_10px_rgba(6,182,212,0.2)]' },
+    EPIC: { name: 'EPIC', color: 'text-purple-500', bgColor: 'bg-purple-500/20', borderDark: 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]', badge: 'bg-purple-600 text-white', icon: Flame, shadow: 'shadow-[0_0_20px_rgba(168,85,247,0.3)]' },
+    LEGENDARY: { name: 'LEGENDARY', color: 'text-yellow-500', bgColor: 'bg-yellow-500/20', borderDark: 'border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.5)]', badge: 'bg-gradient-to-r from-yellow-600 to-red-600 text-white', icon: Zap, shadow: 'shadow-[0_0_30px_rgba(234,179,8,0.4)]' },
+    CURSED: { name: 'CURSED', color: 'text-red-500', bgColor: 'bg-red-500/20', borderDark: 'border-red-600 shadow-[0_0_30px_rgba(239,68,68,0.7)] animate-pulse-slow', badge: 'bg-red-600 text-white font-black italic', icon: Ghost, shadow: 'shadow-[0_0_30px_rgba(220,38,38,0.6)] animate-pulse' }
 };
 
 export const calculateArtifactScore = (item: Exhibit, userPreferences?: Record<string, number>): number => {

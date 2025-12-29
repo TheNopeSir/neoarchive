@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Search, Grid, FolderPlus, Users, ArrowLeft } from 'lucide-react';
 import { Exhibit, Collection, UserProfile } from '../types';
@@ -28,13 +27,23 @@ const SearchView: React.FC<SearchViewProps> = ({
     const filteredArtifacts = useMemo(() => {
         if (!query) return [];
         const lower = query.toLowerCase();
-        return exhibits.filter(e => !e.isDraft && (e.title.toLowerCase().includes(lower) || e.description.toLowerCase().includes(lower) || e.category.toLowerCase().includes(lower)));
+        return exhibits.filter(e => {
+            if (e.isDraft) return false;
+            // Search in Title, Description, Category, Owner, and Specs values
+            const inTitle = e.title.toLowerCase().includes(lower);
+            const inDesc = e.description.toLowerCase().includes(lower);
+            const inCat = e.category.toLowerCase().includes(lower);
+            const inOwner = e.owner.toLowerCase().includes(lower);
+            const inSpecs = e.specs ? Object.values(e.specs).some((val) => (val as string).toLowerCase().includes(lower)) : false;
+            
+            return inTitle || inDesc || inCat || inOwner || inSpecs;
+        });
     }, [query, exhibits]);
 
     const filteredCollections = useMemo(() => {
         if (!query) return [];
         const lower = query.toLowerCase();
-        return collections.filter(c => c.title.toLowerCase().includes(lower) || c.description.toLowerCase().includes(lower));
+        return collections.filter(c => c.title.toLowerCase().includes(lower) || c.description.toLowerCase().includes(lower) || c.owner.toLowerCase().includes(lower));
     }, [query, collections]);
 
     const filteredUsers = useMemo(() => {
@@ -65,12 +74,15 @@ const SearchView: React.FC<SearchViewProps> = ({
             <div className="flex mb-8 border-b border-gray-500/30">
                 <button onClick={() => setActiveTab('ARTIFACTS')} className={`flex-1 pb-3 text-xs font-pixel flex justify-center items-center gap-2 ${activeTab === 'ARTIFACTS' ? 'text-green-500 border-b-2 border-green-500' : 'opacity-50'}`}>
                     <Grid size={14} /> АРТЕФАКТЫ
+                    {query && <span className="bg-white/10 px-1.5 rounded-full text-[9px]">{filteredArtifacts.length}</span>}
                 </button>
                 <button onClick={() => setActiveTab('COLLECTIONS')} className={`flex-1 pb-3 text-xs font-pixel flex justify-center items-center gap-2 ${activeTab === 'COLLECTIONS' ? 'text-green-500 border-b-2 border-green-500' : 'opacity-50'}`}>
                     <FolderPlus size={14} /> КОЛЛЕКЦИИ
+                    {query && <span className="bg-white/10 px-1.5 rounded-full text-[9px]">{filteredCollections.length}</span>}
                 </button>
                 <button onClick={() => setActiveTab('USERS')} className={`flex-1 pb-3 text-xs font-pixel flex justify-center items-center gap-2 ${activeTab === 'USERS' ? 'text-green-500 border-b-2 border-green-500' : 'opacity-50'}`}>
                     <Users size={14} /> ЛЮДИ
+                    {query && <span className="bg-white/10 px-1.5 rounded-full text-[9px]">{filteredUsers.length}</span>}
                 </button>
             </div>
 

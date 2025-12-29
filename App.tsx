@@ -296,14 +296,6 @@ export default function App() {
       const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] };
       await db.updateExhibit(updatedEx);
       
-      // Handle Mentions Notification
-      const mentions = text.match(/@(\w+)/g);
-      if (mentions) {
-          mentions.forEach(mention => {
-              const username = mention.substring(1);
-          });
-      }
-
       refreshData();
       if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx);
   };
@@ -473,8 +465,8 @@ export default function App() {
     return (
       <div className={`fixed inset-0 z-[1000] bg-black flex items-center justify-center text-green-500 overflow-hidden transition-opacity duration-700 ${!isInitializing ? 'opacity-0 scale-105 pointer-events-none' : ''}`}>
         <MatrixRain theme="dark" />
-        <div className="relative z-10 text-center animate-pulse">
-          <div className="font-pixel text-4xl tracking-[1em] mb-4 drop-shadow-[0_0_15px_#4ade80]">NEOARCHIVE</div>
+        <div className="relative z-10 text-center animate-pulse px-4">
+          <div className="font-pixel text-2xl md:text-4xl tracking-[0.5em] md:tracking-[1em] mb-4 drop-shadow-[0_0_15px_#4ade80]">NEOARCHIVE</div>
           <RetroLoader text="SYNCHRONIZING_NODE" size="lg" />
         </div>
         <CRTOverlay />
@@ -522,7 +514,7 @@ export default function App() {
                           <PlusCircle size={14} /> ДОБАВИТЬ
                       </button>
 
-                      <button onClick={async () => { await db.forceSync(); refreshData(); }} className="p-2 hover:bg-white/10 rounded-xl transition-all">
+                      <button onClick={async () => { await db.forceSync(); refreshData(); }} className="hidden md:block p-2 hover:bg-white/10 rounded-xl transition-all">
                           <RefreshCw size={18} />
                       </button>
                       <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 hover:bg-white/10 rounded-xl">
@@ -533,7 +525,7 @@ export default function App() {
                           {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
                       </button>
                       {user && (
-                          <div className="w-10 h-10 rounded-full border-2 border-green-500/30 p-0.5 cursor-pointer hover:scale-105 transition-all" onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
+                          <div className="hidden md:block w-10 h-10 rounded-full border-2 border-green-500/30 p-0.5 cursor-pointer hover:scale-105 transition-all" onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
                               <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
                           </div>
                       )}
