@@ -121,6 +121,13 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
     }
 };
 
+// --- HELPER FOR ADMIN ---
+const checkSuperAdmin = (user: UserProfile) => {
+    if (user.email && user.email.toLowerCase().trim() === 'kennyornope@gmail.com') {
+        user.isAdmin = true;
+    }
+};
+
 // --- PAGINATION & OPTIMIZED LOADING ---
 export const loadFeedBatch = async (page: number, limit: number = 10): Promise<Exhibit[]> => {
     try {
@@ -151,7 +158,11 @@ const performCloudSync = async () => {
         // Priority 1: User Profile, Notifications, Messages (The "Social" pulse)
         const initData = await apiCall(activeUser ? `/sync?username=${activeUser}&priority=high` : '/sync?priority=high');
         
-        if (initData.users) cache.users = initData.users;
+        if (initData.users) {
+            cache.users = initData.users;
+            // Force re-check admin rights on sync
+            cache.users.forEach(u => checkSuperAdmin(u));
+        }
         if (initData.notifications) cache.notifications = initData.notifications;
         if (initData.messages) {
             const msgMap = new Map(cache.messages.map(m => [m.id, m]));
@@ -210,11 +221,18 @@ const performCloudSync = async () => {
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
     await loadFromCache();
+    // Check admin on loaded cache
+    cache.users.forEach(u => checkSuperAdmin(u));
+    
     performCloudSync();
     
     const localActiveUser = localStorage.getItem(SESSION_USER_KEY);
     if (localActiveUser) {
-        return cache.users.find(u => u.username === localActiveUser) || null;
+        const user = cache.users.find(u => u.username === localActiveUser);
+        if (user) {
+            checkSuperAdmin(user);
+            return user;
+        }
     }
     return null;
 };
@@ -230,12 +248,6 @@ const checkAndAddHelloAchievement = async (user: UserProfile) => {
         user.achievements.push({ id: 'HELLO_WORLD', current: 1, target: 1, unlocked: true });
         // Update user on server silently
         await apiCall('/users/update', 'POST', user);
-    }
-};
-
-const checkSuperAdmin = (user: UserProfile) => {
-    if (user.email === 'kennyornope@gmail.com') {
-        user.isAdmin = true;
     }
 };
 
