@@ -3,14 +3,16 @@ import React, { useState } from 'react';
 import { Search, Image as ImageIcon, Crown, Star, Flame, Circle } from 'lucide-react';
 import { WishlistItem } from '../types';
 import { WISHLIST_PRIORITY_CONFIG } from '../constants';
+import { getUserAvatar } from '../services/storageService';
 
 interface WishlistCardProps {
   item: WishlistItem;
   theme: 'dark' | 'light' | 'xp';
   onDelete?: (id: string) => void;
+  onUserClick?: (username: string) => void;
 }
 
-const WishlistCard: React.FC<WishlistCardProps> = ({ item, theme, onDelete }) => {
+const WishlistCard: React.FC<WishlistCardProps> = ({ item, theme, onDelete, onUserClick }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const priorityConfig = WISHLIST_PRIORITY_CONFIG[item.priority];
   const isXP = theme === 'xp';
@@ -59,14 +61,26 @@ const WishlistCard: React.FC<WishlistCardProps> = ({ item, theme, onDelete }) =>
             </p>
         )}
 
-        {onDelete && (
-            <button 
-                onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-                className="mt-auto pt-4 text-[9px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-center hover:underline"
-            >
-                УДАЛИТЬ ИЗ СПИСКА
-            </button>
-        )}
+        {/* Footer: User Info or Delete Action */}
+        <div className={`mt-auto pt-3 flex items-center justify-between border-t border-dashed ${isXP ? 'border-gray-400' : 'border-white/10'}`}>
+            {onUserClick ? (
+                <div onClick={(e) => { e.stopPropagation(); onUserClick(item.owner); }} className="flex items-center gap-2 cursor-pointer group/author">
+                    <img src={getUserAvatar(item.owner)} className={`w-5 h-5 rounded-full border ${isXP ? 'border-gray-400' : 'border-white/20'}`} />
+                    <span className={`text-[9px] font-pixel opacity-50 group-hover/author:opacity-100 transition-opacity ${isXP ? 'text-black' : ''}`}>@{item.owner}</span>
+                </div>
+            ) : (
+                <div className="h-5"></div> // Spacer if no user click provided
+            )}
+
+            {onDelete && (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+                    className="text-[9px] text-red-500 opacity-50 hover:opacity-100 transition-opacity hover:underline"
+                >
+                    УДАЛИТЬ
+                </button>
+            )}
+        </div>
       </div>
     </div>
   );

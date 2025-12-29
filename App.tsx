@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark, Sparkles
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -22,6 +22,7 @@ import DirectChat from './components/DirectChat';
 import CreateArtifactView from './components/CreateArtifactView';
 import CreateCollectionView from './components/CreateCollectionView';
 import CreateWishlistItemView from './components/CreateWishlistItemView';
+import WishlistCard from './components/WishlistCard';
 import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
 
@@ -51,7 +52,7 @@ export default function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [viewedProfileUsername, setViewedProfileUsername] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
-  const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS'>('ARTIFACTS');
+  const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'>('ARTIFACTS');
 
   // Pagination
   const [feedPage, setFeedPage] = useState(1);
@@ -587,21 +588,25 @@ export default function App() {
 
             {view === 'FEED' && (
                 <div className="space-y-8 animate-in fade-in zoom-in-95">
-                    <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
-                         <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
-                         {Object.values(DefaultCategory).map(cat => (
-                             <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
-                         ))}
-                    </div>
+                    {/* Only show categories for ARTIFACTS mode */}
+                    {feedMode === 'ARTIFACTS' && (
+                        <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
+                             <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
+                             {Object.values(DefaultCategory).map(cat => (
+                                 <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
+                             ))}
+                        </div>
+                    )}
                     
                     <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                        <div className="flex gap-6">
-                            <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
-                            <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
+                        <div className="flex gap-6 overflow-x-auto scrollbar-hide">
+                            <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
+                            <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
+                            <button onClick={() => setFeedMode('WISHLIST')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><Sparkles size={14} /> ВИШЛИСТЫ</button>
                         </div>
                     </div>
                     
-                    {feedMode === 'ARTIFACTS' ? (
+                    {feedMode === 'ARTIFACTS' && (
                         <div className="space-y-10">
                             {/* SUBSCRIPTIONS FEED */}
                             {followingExhibits.length > 0 && (
@@ -628,9 +633,12 @@ export default function App() {
                                 <div className="flex justify-center py-10"><RetroLoader text="SYNCHRONIZING..." /></div>
                             )}
                         </div>
-                    ) : (
+                    )}
+
+                    {feedMode === 'COLLECTIONS' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {collections.map(col => ( 
+                            {collections.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Коллекций пока нет</div> :
+                            collections.map(col => ( 
                                 <CollectionCard 
                                     key={col.id} 
                                     col={col} 
@@ -640,6 +648,20 @@ export default function App() {
                                     isLiked={col.likedBy?.includes(user?.username || '')}
                                     onLike={(e) => handleCollectionLike(col.id, e)}
                                 /> 
+                            ))}
+                        </div>
+                    )}
+
+                    {feedMode === 'WISHLIST' && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {wishlist.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Список желаемого пуст</div> :
+                            wishlist.map(item => (
+                                <WishlistCard 
+                                    key={item.id} 
+                                    item={item} 
+                                    theme={theme}
+                                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                                />
                             ))}
                         </div>
                     )}
