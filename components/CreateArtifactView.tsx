@@ -1,18 +1,19 @@
 
 import React, { useState, useRef } from 'react';
-import { Camera, ArrowLeft, Save, X, Info, Archive, Video } from 'lucide-react';
-import { DefaultCategory, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES } from '../constants';
+import { Camera, ArrowLeft, Save, X, Info, Archive, Video, RefreshCw, Link2 } from 'lucide-react';
+import { DefaultCategory, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES, TRADE_STATUS_CONFIG } from '../constants';
 import { fileToBase64 } from '../services/storageService';
-import { Exhibit } from '../types';
+import { Exhibit, TradeStatus } from '../types';
 
 interface CreateArtifactViewProps {
   theme: 'dark' | 'light' | 'xp';
   onBack: () => void;
   onSave: (artifact: any) => void;
   initialData?: Exhibit | null;
+  userArtifacts?: Exhibit[]; // Needed for linking items
 }
 
-const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, onSave, initialData }) => {
+const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, onSave, initialData, userArtifacts = [] }) => {
   const [images, setImages] = useState<string[]>(initialData?.imageUrls || []);
   const [title, setTitle] = useState(initialData?.title || '');
   const [description, setDescription] = useState(initialData?.description || '');
@@ -20,6 +21,9 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
   const [subcategory, setSubcategory] = useState(initialData?.subcategory || '');
   const [videoUrl, setVideoUrl] = useState(initialData?.videoUrl || '');
   const [specs, setSpecs] = useState<Record<string, string>>(initialData?.specs || {});
+  const [tradeStatus, setTradeStatus] = useState<TradeStatus>(initialData?.tradeStatus || 'NONE');
+  const [relatedIds, setRelatedIds] = useState<string[]>(initialData?.relatedIds || []);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -33,13 +37,17 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
     }
   };
 
+  const toggleRelated = (id: string) => {
+      setRelatedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
   const handleSubmit = (asDraft: boolean = false) => {
     if (!title) {
       alert("Укажите название артефакта");
       return;
     }
     onSave({
-      id: initialData?.id, // Pass ID if editing
+      id: initialData?.id,
       title,
       description,
       category,
@@ -47,6 +55,8 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
       videoUrl,
       imageUrls: images.length > 0 ? images : ['https://placehold.co/600x400?text=NO+IMAGE'],
       specs,
+      tradeStatus,
+      relatedIds,
       isDraft: asDraft
     });
   };
@@ -85,7 +95,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
             <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
           </div>
           <p className="text-[10px] font-mono opacity-40 text-center md:text-left">
-             Загрузите до 5 фотографий вашего артефакта.
+             Загрузите до 5 фотографий.
           </p>
         </div>
 
@@ -138,19 +148,40 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                 </div>
               </div>
 
+              {/* Trade Status Selection */}
+              <div>
+                  <label className="text-[10px] font-pixel opacity-50 uppercase tracking-widest mb-2 flex items-center gap-2"><RefreshCw size={12}/> Статус (Торговый терминал)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(TRADE_STATUS_CONFIG).filter(([k]) => k !== 'NONE').map(([k, cfg]) => {
+                          const statusKey = k as TradeStatus;
+                          const isSelected = tradeStatus === statusKey;
+                          return (
+                              <button 
+                                key={k}
+                                onClick={() => setTradeStatus(isSelected ? 'NONE' : statusKey)}
+                                className={`p-3 rounded-xl border text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2 ${isSelected ? cfg.color : 'border-white/10 opacity-50 hover:opacity-100 hover:border-white/30'}`}
+                              >
+                                  {cfg.icon && React.createElement(cfg.icon, { size: 14 })}
+                                  {cfg.label}
+                              </button>
+                          );
+                      })}
+                  </div>
+              </div>
+
               <div>
                 <label className="text-[10px] font-pixel opacity-50 uppercase tracking-widest mb-2 block">Описание и история</label>
                 <textarea 
                   value={description} 
                   onChange={e => setDescription(e.target.value)} 
-                  rows={8}
+                  rows={6}
                   className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none resize-none leading-relaxed" 
                   placeholder="Опишите артефакт, его происхождение и значение для коллекции..."
                 />
               </div>
             </div>
 
-            {/* Specifications Section */}
+            {/* Specifications & Linked Items */}
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="font-pixel text-[11px] opacity-70 tracking-widest uppercase flex items-center gap-2">
@@ -169,9 +200,29 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                     />
                   </div>
                 ))}
-                <p className="text-[9px] font-mono opacity-30 italic mt-2">
-                  * Заполните поля вручную для создания точной карточки товара.
-                </p>
+              </div>
+
+              {/* Linked Items Selection */}
+              <div className="pt-4 border-t border-white/10">
+                  <h3 className="font-pixel text-[11px] opacity-70 tracking-widest uppercase flex items-center gap-2 mb-4">
+                      <Link2 size={14} className="text-yellow-400" /> СВЯЗАННЫЕ ПРЕДМЕТЫ
+                  </h3>
+                  <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-2 pr-2 custom-scrollbar">
+                      {userArtifacts.filter(a => a.id !== initialData?.id).length === 0 && <div className="text-center opacity-30 text-[10px] py-4">Нет других предметов для связки</div>}
+                      {userArtifacts.filter(a => a.id !== initialData?.id).map(art => (
+                          <div 
+                            key={art.id} 
+                            onClick={() => toggleRelated(art.id)}
+                            className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-all ${relatedIds.includes(art.id) ? 'bg-green-500/10 border-green-500 text-green-500' : 'border-white/10 hover:bg-white/5'}`}
+                          >
+                              <div className="w-8 h-8 rounded bg-gray-800 overflow-hidden flex-shrink-0">
+                                  <img src={art.imageUrls[0]} className="w-full h-full object-cover" />
+                              </div>
+                              <div className="text-xs truncate flex-1">{art.title}</div>
+                              {relatedIds.includes(art.id) && <div className="w-2 h-2 rounded-full bg-green-500"></div>}
+                          </div>
+                      ))}
+                  </div>
               </div>
             </div>
           </div>

@@ -11,6 +11,8 @@ export interface Comment {
 
 export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'CURSED';
 
+export type TradeStatus = 'NONE' | 'LOOKING_FOR' | 'FOR_TRADE' | 'FOR_SALE' | 'GIFT' | 'NOT_FOR_SALE';
+
 export interface Exhibit {
   id: string;
   slug?: string;
@@ -30,6 +32,8 @@ export interface Exhibit {
   specs: Record<string, string>;
   comments: Comment[];
   isDraft?: boolean;
+  tradeStatus?: TradeStatus; // New: Status for Wishlist/Marketplace
+  relatedIds?: string[]; // New: IDs of connected items within user's collection
 }
 
 export interface Collection {

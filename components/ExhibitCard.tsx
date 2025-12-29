@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Heart, Eye, Image as ImageIcon } from 'lucide-react';
 import { Exhibit } from '../types';
-import { getArtifactTier, TIER_CONFIG } from '../constants';
+import { getArtifactTier, TIER_CONFIG, TRADE_STATUS_CONFIG } from '../constants';
 import { getUserAvatar } from '../services/storageService';
 
 interface ExhibitCardProps {
@@ -20,6 +20,11 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
   const config = TIER_CONFIG[tier];
   const Icon = config.icon;
   const isCursed = tier === 'CURSED';
+  
+  // Trade Status Logic
+  const tradeStatus = item.tradeStatus || 'NONE';
+  const tradeConfig = TRADE_STATUS_CONFIG[tradeStatus];
+  const isWishlist = tradeStatus === 'LOOKING_FOR';
 
   const isXP = theme === 'xp';
 
@@ -31,7 +36,8 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
           ? 'rounded-t-lg shadow-lg border-2 border-[#0058EE] bg-white' 
           : `rounded-2xl overflow-hidden border-2 ${theme === 'dark' ? `bg-dark-surface border-white/10 hover:border-green-500/50 ${config.shadow}` : 'bg-white border-black/5 hover:border-black/20 shadow-lg'}`
         } 
-        ${isCursed ? 'animate-pulse' : ''}`
+        ${isCursed ? 'animate-pulse' : ''}
+        ${isWishlist ? 'border-dashed opacity-80 hover:opacity-100' : ''}`
       }
     >
       {/* XP Window Header */}
@@ -58,14 +64,22 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
             alt={item.title} 
             loading="lazy"
             onLoad={() => setIsLoaded(true)}
-            className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
+            className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${isLoaded ? 'opacity-100' : 'opacity-0'} ${isWishlist ? 'grayscale contrast-125' : ''}`} 
         />
         
         {!isXP && <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-black/60 backdrop-blur-md text-[8px] font-pixel text-white border border-white/10 uppercase">{item.category}</div>}
         
+        {/* Tier Badge */}
         <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-lg flex items-center gap-1 text-[8px] font-pixel font-bold shadow-xl border border-white/10 ${config.badge}`}>
             <Icon size={10} /> {config.name}
         </div>
+
+        {/* Trade Status Badge */}
+        {tradeStatus !== 'NONE' && (
+            <div className={`absolute bottom-2 left-2 px-2 py-1 rounded-lg flex items-center gap-1 text-[9px] font-black font-pixel shadow-xl uppercase border ${tradeConfig.color} bg-black/80 backdrop-blur-md`}>
+                {tradeConfig.icon && React.createElement(tradeConfig.icon, { size: 10 })} {tradeConfig.badge}
+            </div>
+        )}
       </div>
 
       <div className={`p-4 flex flex-col flex-1 ${isXP ? 'bg-[#ECE9D8]' : ''}`}>

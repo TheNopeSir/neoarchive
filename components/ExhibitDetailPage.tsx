@@ -1,12 +1,13 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ChevronLeft, ChevronRight, Heart, Share2, MessageSquare, Trash2, 
-  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2
+  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2, Link2, Sparkles
 } from 'lucide-react';
 import { Exhibit, Comment, UserProfile } from '../types';
-import { getArtifactTier, TIER_CONFIG } from '../constants';
+import { getArtifactTier, TIER_CONFIG, TRADE_STATUS_CONFIG, getSimilarArtifacts } from '../constants';
 import { getUserAvatar } from '../services/storageService';
+import ExhibitCard from './ExhibitCard'; // Need ExhibitCard for similar items
 
 interface ExhibitDetailPageProps {
   exhibit: Exhibit;
@@ -30,6 +31,7 @@ interface ExhibitDetailPageProps {
   currentUser: string;
   isAdmin: boolean;
   users: UserProfile[];
+  allExhibits?: Exhibit[]; // Needed for similar items
 }
 
 // Helper for video embedding
@@ -61,7 +63,7 @@ const renderTextWithMentions = (text: string, onUserClick: (u: string) => void) 
 };
 
 export default function ExhibitDetailPage({
-  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, isFollowing, currentUser, isAdmin, users
+  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, isFollowing, currentUser, isAdmin, users, allExhibits
 }: ExhibitDetailPageProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
@@ -82,9 +84,24 @@ export default function ExhibitDetailPage({
   const TierIcon = tier.icon;
   const isCursed = tierKey === 'CURSED';
 
+  const tradeStatus = exhibit.tradeStatus || 'NONE';
+  const tradeConfig = TRADE_STATUS_CONFIG[tradeStatus];
+
   const nonEmptySpecs = Object.entries(specs).filter(([_, val]) => !!val);
   const videoEmbedUrl = exhibit.videoUrl ? getEmbedUrl(exhibit.videoUrl) : null;
   const isOwner = currentUser === exhibit.owner;
+
+  // Calculate similar artifacts
+  const similarArtifacts = useMemo(() => {
+      if (!allExhibits) return [];
+      return getSimilarArtifacts(exhibit, allExhibits);
+  }, [exhibit, allExhibits]);
+
+  // Find linked artifacts if any
+  const linkedArtifacts = useMemo(() => {
+      if (!exhibit.relatedIds || !allExhibits) return [];
+      return allExhibits.filter(e => exhibit.relatedIds?.includes(e.id));
+  }, [exhibit.relatedIds, allExhibits]);
 
   useEffect(() => {
       if (mentionQuery !== null) {
@@ -132,6 +149,24 @@ export default function ExhibitDetailPage({
       const newText = [...words, `@${username} `].join(' ');
       setCommentText(newText);
       setMentionQuery(null);
+  };
+
+  // Helper for clicking on similar item
+  const handleItemClick = (item: Exhibit) => {
+      // In a real router, we'd just push. Here we might need to rely on parent re-render or window.location if not fully SPA logic in App.tsx
+      // App.tsx handles navigation via props, but we are inside ExhibitDetailPage.
+      // We assume App.tsx re-renders this component with new props when ID changes in URL or state.
+      // Since App.tsx controls "selectedExhibit", we can't directly switch unless passed a handler.
+      // However, App.tsx passes "onBack" etc. Ideally it should pass "onNavigate".
+      // Workaround: Use window.location for now or rely on App logic if it detects prop change.
+      // Actually, we need to bubble up. The standard pattern here is `onExhibitClick` prop passed down.
+      // Let's assume onLike acts as a refresh trigger, but for navigation we need `onExhibitClick`.
+      // Since we don't have it in props yet, let's just trigger a full reload via hash or rely on parent.
+      // BETTER: Add logic to App.tsx to pass onExhibitClick to DetailPage too.
+      // For now, let's use a simple window location hack compatible with the App's history listener.
+      window.history.pushState({ view: 'EXHIBIT' }, '', `/artifact/${item.id}`);
+      // Dispatch a popstate to trigger App.tsx listener
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { view: 'EXHIBIT' } }));
   };
 
   return (
@@ -213,6 +248,11 @@ export default function ExhibitDetailPage({
                   <div className="flex items-center gap-2 mb-3 flex-wrap">
                       <span className="px-2 py-1 text-[9px] font-pixel rounded bg-green-500 text-black font-bold uppercase">{exhibit.category}</span>
                       <span className={`px-2 py-1 text-[9px] font-bold font-pixel rounded border flex items-center gap-1 ${tier.bgColor} ${tier.color} uppercase`}><TierIcon size={10} /> {tier.name}</span>
+                      {tradeStatus !== 'NONE' && (
+                          <span className={`px-2 py-1 text-[9px] font-bold font-pixel rounded border flex items-center gap-1 uppercase ${tradeConfig.color} ${tradeConfig.bg}`}>
+                              {tradeConfig.icon && React.createElement(tradeConfig.icon, { size: 10 })} {tradeConfig.badge}
+                          </span>
+                      )}
                   </div>
                   <h1 className={`text-2xl md:text-4xl font-bold font-pixel leading-tight mb-4 ${isCursed ? 'text-red-500 italic' : ''}`}>{exhibit.title}</h1>
                </div>
@@ -268,6 +308,23 @@ export default function ExhibitDetailPage({
                {nonEmptySpecs.map(([key, val]) => ( <div key={key} className="p-3 bg-black/20 rounded-xl border border-white/5"><div className="text-[9px] uppercase opacity-40 mb-1 font-pixel tracking-widest">{key}</div><div className="font-bold font-mono text-sm">{val}</div></div> ))}
                {exhibit.condition && ( <div className="p-3 bg-black/20 rounded-xl border border-white/5"><div className="text-[9px] uppercase opacity-40 mb-1 font-pixel tracking-widest">СОСТОЯНИЕ</div><div className="font-black font-mono text-sm text-green-400 uppercase">{exhibit.condition}</div></div> )}
             </div>
+
+            {/* Linked Artifacts (Feature 7) */}
+            {linkedArtifacts.length > 0 && (
+                <div className="mb-8 p-4 rounded-2xl bg-white/5 border border-white/10">
+                    <h3 className="font-pixel text-[10px] opacity-70 uppercase tracking-widest mb-4 flex items-center gap-2"><Link2 size={14}/> СВЯЗАННЫЕ ЭКСПОНАТЫ</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {linkedArtifacts.map(link => (
+                            <div key={link.id} onClick={() => handleItemClick(link)} className="group cursor-pointer">
+                                <div className="aspect-square rounded-lg overflow-hidden border border-white/10 relative">
+                                    <img src={link.imageUrls[0]} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                                </div>
+                                <div className="mt-2 text-[10px] font-bold truncate">{link.title}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div className="pt-8 border-t border-white/10">
                <h3 className="font-pixel text-sm mb-6 flex items-center gap-2"><MessageSquare size={16} /> ПРОТОКОЛ КОММЕНТАРИЕВ ({comments.length})</h3>
@@ -367,6 +424,26 @@ export default function ExhibitDetailPage({
                </div>
             </div>
         </div>
+
+        {/* Similar Artifacts (New Algorithm) */}
+        {similarArtifacts.length > 0 && (
+            <div className="mt-12">
+                <h3 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Sparkles size={14} className="text-purple-400" /> РЕКОМЕНДУЕМЫЕ ОБЪЕКТЫ (AI MATCH)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {similarArtifacts.map(sim => (
+                        <ExhibitCard 
+                            key={sim.id} 
+                            item={sim} 
+                            theme={theme}
+                            onClick={() => handleItemClick(sim)}
+                            isLiked={sim.likedBy?.includes(currentUser)}
+                            onLike={() => {}} // No like action in quick view for simplicity
+                            onAuthorClick={onAuthorClick}
+                        />
+                    ))}
+                </div>
+            </div>
+        )}
       </div>
     </div>
   );

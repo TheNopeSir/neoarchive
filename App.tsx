@@ -366,7 +366,9 @@ export default function App() {
                   imageUrls: artifactData.imageUrls || existing.imageUrls,
                   specs: artifactData.specs || existing.specs,
                   title: artifactData.title || existing.title,
-                  category: artifactData.category || existing.category
+                  category: artifactData.category || existing.category,
+                  tradeStatus: artifactData.tradeStatus || existing.tradeStatus,
+                  relatedIds: artifactData.relatedIds || existing.relatedIds
               };
               await db.updateExhibit(updated);
               if (selectedExhibit?.id === updated.id) setSelectedExhibit(updated);
@@ -389,7 +391,9 @@ export default function App() {
             specs: artifactData.specs || {}, 
             comments: [], 
             isDraft: artifactData.isDraft, 
-            quality: 'MINT' 
+            quality: 'MINT',
+            tradeStatus: artifactData.tradeStatus || 'NONE',
+            relatedIds: artifactData.relatedIds || []
           };
           await db.saveExhibit(ex);
       }
@@ -529,10 +533,10 @@ export default function App() {
                       <button onClick={async () => { await db.forceSync(); refreshData(); }} className={`hidden md:block p-2 rounded-xl transition-all ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
                           <RefreshCw size={18} />
                       </button>
-                      <button onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'xp' : 'dark')} className={`p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
+                      <button onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'xp' : 'dark')} className={`hidden md:block p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
                           {theme === 'dark' ? <Sun size={20}/> : theme === 'light' ? <Monitor size={20} /> : <Moon size={20}/>}
                       </button>
-                      <button onClick={() => navigateTo('ACTIVITY')} className={`relative p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
+                      <button onClick={() => navigateTo('ACTIVITY')} className={`hidden md:block relative p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
                           <Bell size={20} />
                           {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
                       </button>
@@ -633,11 +637,23 @@ export default function App() {
             )}
 
             {view === 'CREATE_ARTIFACT' && (
-              <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} />
+              <CreateArtifactView 
+                theme={theme} 
+                onBack={handleBack} 
+                onSave={handleSaveArtifact} 
+                // Pass current user's artifacts for linking
+                userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
+              />
             )}
 
             {view === 'EDIT_ARTIFACT' && selectedExhibit && (
-               <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} initialData={selectedExhibit} />
+               <CreateArtifactView 
+                theme={theme} 
+                onBack={handleBack} 
+                onSave={handleSaveArtifact} 
+                initialData={selectedExhibit} 
+                userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
+               />
             )}
 
             {/* CREATE OR EDIT COLLECTION VIEW */}
@@ -675,6 +691,8 @@ export default function App() {
                     onEdit={(item: Exhibit) => navigateTo('EDIT_ARTIFACT', { item })}
                     onDelete={(id: string) => handleDeleteArtifact(id)}
                     users={db.getFullDatabase().users}
+                    // Pass all exhibits for Similarity Algorithm
+                    allExhibits={exhibits}
                 />
             )}
             

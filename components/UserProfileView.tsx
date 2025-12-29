@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Users, Palette, Settings, Volume2, Bell, Shield, Database, Monitor, Sun, Moon, Terminal } from 'lucide-react';
+import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Users, Palette, Settings, Volume2, Bell, Shield, Database, Monitor, Sun, Moon, Terminal, Search } from 'lucide-react';
 import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus, AppSettings } from '../types';
 import { STATUS_OPTIONS, BADGE_CONFIG } from '../constants';
 import * as db from '../services/storageService';
@@ -74,7 +75,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     const isSubscribed = user?.following.includes(viewedProfileUsername) || false;
 
     // View State: 'LOGS' (Guestbook) or 'CONFIG' (Settings)
-    const [activeSection, setActiveSection] = useState<'LOGS' | 'CONFIG'>('LOGS');
+    const [activeSection, setActiveSection] = useState<'LOGS' | 'CONFIG' | 'WISHLIST'>('LOGS');
 
     // Guestbook Edit State
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
@@ -89,6 +90,8 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
         publicProfile: true,
         showEmail: false
     });
+
+    const wishlistItems = exhibits.filter(e => e.owner === viewedProfileUsername && e.tradeStatus === 'LOOKING_FOR');
 
     const handleEditEntry = (entry: GuestbookEntry) => {
         setEditingEntryId(entry.id);
@@ -134,7 +137,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
         // Save to DB
         const updatedUser = { ...user, settings: newSettings };
         await db.updateUserProfile(updatedUser);
-        // We don't necessarily need to trigger a full app refresh for settings unless critical
     };
 
     return (
@@ -236,6 +238,12 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 >
                     <MessageSquare size={14} /> GUESTBOOK
                 </button>
+                <button 
+                    onClick={() => setActiveSection('WISHLIST')}
+                    className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'WISHLIST' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}
+                >
+                    <Search size={14} /> WISHLIST ({wishlistItems.length})
+                </button>
                 {isCurrentUser && (
                     <button 
                         onClick={() => setActiveSection('CONFIG')}
@@ -245,6 +253,31 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                     </button>
                 )}
             </div>
+
+            {/* WISHLIST PANEL */}
+            {activeSection === 'WISHLIST' && (
+                <div className={`pt-4 border-t border-dashed ${theme === 'xp' ? 'border-blue-800/30' : 'border-gray-500/30'}`}>
+                    {wishlistItems.length === 0 ? (
+                        <div className="text-center py-12 opacity-30 font-mono text-xs uppercase border-2 border-dashed border-white/10 rounded-2xl">
+                            Список желаемого пуст
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {wishlistItems.map(item => (
+                                <ExhibitCard 
+                                    key={item.id} 
+                                    item={item} 
+                                    theme={theme} 
+                                    onClick={onExhibitClick} 
+                                    isLiked={item.likedBy?.includes(user?.username || '')} 
+                                    onLike={(e) => onLike(item.id, e)} 
+                                    onAuthorClick={onAuthorClick} 
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* SETTINGS PANEL */}
             {isCurrentUser && activeSection === 'CONFIG' && (
