@@ -5,7 +5,7 @@ import { UserProfile, Message } from '../types';
 import { getUserAvatar } from '../services/storageService';
 
 interface DirectChatProps {
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp';
     currentUser: UserProfile;
     partnerUsername: string;
     messages: Message[];

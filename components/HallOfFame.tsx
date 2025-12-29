@@ -5,7 +5,7 @@ import { BADGE_CONFIG } from '../constants';
 import { AchievementProgress } from '../types';
 
 interface HallOfFameProps {
-  theme: 'dark' | 'light';
+  theme: 'dark' | 'light' | 'xp';
   achievements: AchievementProgress[];
   onBack: () => void;
 }

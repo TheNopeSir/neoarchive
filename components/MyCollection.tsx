@@ -6,7 +6,7 @@ import ExhibitCard from './ExhibitCard';
 import CollectionCard from './CollectionCard';
 
 interface MyCollectionProps {
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp';
     user: UserProfile;
     exhibits: Exhibit[];
     collections: Collection[];

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor
@@ -545,7 +546,7 @@ export default function App() {
 
             {view === 'SEARCH' && (
                 <SearchView 
-                    theme={theme === 'xp' ? 'light' : theme}
+                    theme={theme}
                     exhibits={exhibits}
                     collections={collections}
                     users={db.getFullDatabase().users}
@@ -620,17 +621,17 @@ export default function App() {
             )}
 
             {view === 'CREATE_ARTIFACT' && (
-              <CreateArtifactView theme={theme === 'xp' ? 'light' : theme} onBack={handleBack} onSave={handleSaveArtifact} />
+              <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} />
             )}
 
             {view === 'EDIT_ARTIFACT' && selectedExhibit && (
-               <CreateArtifactView theme={theme === 'xp' ? 'light' : theme} onBack={handleBack} onSave={handleSaveArtifact} initialData={selectedExhibit} />
+               <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} initialData={selectedExhibit} />
             )}
 
             {/* CREATE OR EDIT COLLECTION VIEW */}
             {(view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') && user && (
                 <CreateCollectionView
-                    theme={theme === 'xp' ? 'light' : theme}
+                    theme={theme}
                     userArtifacts={exhibits.filter(e => e.owner === user.username && !e.isDraft)}
                     initialData={view === 'EDIT_COLLECTION' ? selectedCollection : null}
                     onBack={handleBack}
@@ -642,11 +643,11 @@ export default function App() {
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
                     exhibit={selectedExhibit} 
-                    theme={theme === 'xp' ? 'light' : theme} 
+                    theme={theme} 
                     onBack={handleBack} 
                     onShare={() => {}} 
                     onFavorite={() => {}} 
-                    onLike={(id) => handleLike(id)} 
+                    onLike={(id: string) => handleLike(id)} 
                     isFavorited={false} 
                     isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} 
                     onPostComment={handlePostComment}
@@ -659,8 +660,8 @@ export default function App() {
                     isAdmin={user?.isAdmin || false} 
                     isFollowing={user?.following.includes(selectedExhibit.owner) || false} 
                     onAddToCollection={(id) => setIsAddingToCollection(id)}
-                    onEdit={(item) => navigateTo('EDIT_ARTIFACT', { item })}
-                    onDelete={handleDeleteArtifact}
+                    onEdit={(item: Exhibit) => navigateTo('EDIT_ARTIFACT', { item })}
+                    onDelete={(id: string) => handleDeleteArtifact(id)}
                     users={db.getFullDatabase().users}
                 />
             )}
@@ -669,7 +670,7 @@ export default function App() {
                 <CollectionDetailPage
                     collection={selectedCollection}
                     artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))}
-                    theme={theme === 'xp' ? 'light' : theme}
+                    theme={theme}
                     onBack={handleBack}
                     onExhibitClick={handleExhibitClick}
                     onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
@@ -681,7 +682,7 @@ export default function App() {
 
             {view === 'DIRECT_CHAT' && user && viewedProfileUsername && (
                 <DirectChat 
-                    theme={theme === 'xp' ? 'light' : theme} 
+                    theme={theme} 
                     currentUser={user} 
                     partnerUsername={viewedProfileUsername} 
                     messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} 
@@ -695,7 +696,7 @@ export default function App() {
                     type={socialListType} 
                     username={viewedProfileUsername} 
                     currentUserUsername={user?.username}
-                    theme={theme === 'xp' ? 'light' : theme} 
+                    theme={theme} 
                     onBack={handleBack} 
                     onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} 
                 />
@@ -745,18 +746,18 @@ export default function App() {
 
             {view === 'HALL_OF_FAME' && user && (
                 <HallOfFame 
-                    theme={theme === 'xp' ? 'light' : theme} 
+                    theme={theme} 
                     achievements={user.achievements || []} 
                     onBack={handleBack} 
                 />
             )}
 
             {view === 'ACTIVITY' && user && (
-                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme === 'xp' ? 'light' : theme} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} />
+                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} />
             )}
             
             {view === 'MY_COLLECTION' && user && (
-                <MyCollection theme={theme === 'xp' ? 'light' : theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
+                <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
             )}
 
         </main>

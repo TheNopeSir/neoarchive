@@ -8,7 +8,7 @@ import { getUserAvatar } from '../services/storageService';
 interface CollectionDetailPageProps {
     collection: Collection;
     artifacts: Exhibit[];
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp';
     onBack: () => void;
     onExhibitClick: (item: Exhibit) => void;
     onAuthorClick: (author: string) => void;

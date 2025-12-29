@@ -7,7 +7,7 @@ interface SocialListViewProps {
     type: 'followers' | 'following';
     username: string;
     currentUserUsername?: string;
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp';
     onBack: () => void;
     onUserClick: (username: string) => void;
 }

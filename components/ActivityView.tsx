@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Bell, MessageCircle, ChevronDown, ChevronUp, User, Heart, MessageSquare, UserPlus, BookOpen } from 'lucide-react';
 import { Notification, Message, UserProfile, Exhibit } from '../types';
@@ -7,7 +8,7 @@ interface ActivityViewProps {
     notifications: Notification[];
     messages: Message[];
     currentUser: UserProfile;
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp';
     onAuthorClick: (username: string) => void;
     onExhibitClick: (id: string) => void;
     onChatClick: (username: string) => void;

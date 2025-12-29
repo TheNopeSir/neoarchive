@@ -6,7 +6,7 @@ import { fileToBase64 } from '../services/storageService';
 import { Exhibit } from '../types';
 
 interface CreateArtifactViewProps {
-  theme: 'dark' | 'light';
+  theme: 'dark' | 'light' | 'xp';
   onBack: () => void;
   onSave: (artifact: any) => void;
   initialData?: Exhibit | null;

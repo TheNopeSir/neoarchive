@@ -5,7 +5,7 @@ import { Collection, Exhibit } from '../types';
 import { fileToBase64 } from '../services/storageService';
 
 interface CreateCollectionViewProps {
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp';
     userArtifacts: Exhibit[]; // Только артефакты текущего пользователя
     initialData?: Collection | null;
     onBack: () => void;

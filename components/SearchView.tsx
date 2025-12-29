@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Search, Grid, FolderPlus, Users, ArrowLeft } from 'lucide-react';
 import { Exhibit, Collection, UserProfile } from '../types';
@@ -6,7 +7,7 @@ import CollectionCard from './CollectionCard';
 import { getUserAvatar } from '../services/storageService';
 
 interface SearchViewProps {
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp';
     exhibits: Exhibit[];
     collections: Collection[];
     users: UserProfile[];
@@ -29,13 +30,11 @@ const SearchView: React.FC<SearchViewProps> = ({
         const lower = query.toLowerCase();
         return exhibits.filter(e => {
             if (e.isDraft) return false;
-            // Search in Title, Description, Category, Owner, and Specs values
             const inTitle = e.title.toLowerCase().includes(lower);
             const inDesc = e.description.toLowerCase().includes(lower);
             const inCat = e.category.toLowerCase().includes(lower);
             const inOwner = e.owner.toLowerCase().includes(lower);
             const inSpecs = e.specs ? Object.values(e.specs).some((val) => (val as string).toLowerCase().includes(lower)) : false;
-            
             return inTitle || inDesc || inCat || inOwner || inSpecs;
         });
     }, [query, exhibits]);
