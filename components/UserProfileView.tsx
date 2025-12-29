@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Users } from 'lucide-react';
+import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Users, Palette } from 'lucide-react';
 import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus } from '../types';
 import { STATUS_OPTIONS, BADGE_CONFIG } from '../constants';
 import * as db from '../services/storageService';
@@ -15,7 +15,7 @@ interface UserProfileViewProps {
     exhibits: Exhibit[];
     collections: Collection[];
     guestbook: GuestbookEntry[];
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp';
     onBack: () => void;
     onLogout: () => void;
     onFollow: (username: string) => void;
@@ -46,6 +46,7 @@ interface UserProfileViewProps {
     profileTab: 'ARTIFACTS' | 'COLLECTIONS';
     setProfileTab: (v: 'ARTIFACTS' | 'COLLECTIONS') => void;
     onOpenSocialList: (username: string, type: 'followers' | 'following') => void;
+    onThemeChange?: (theme: 'dark' | 'light' | 'xp') => void;
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({ 
@@ -55,7 +56,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     isEditingProfile, setIsEditingProfile, editTagline, setEditTagline, editStatus, setEditStatus, editTelegram, setEditTelegram, 
     editPassword, setEditPassword,
     onSaveProfile, onProfileImageUpload, guestbookInput, setGuestbookInput, guestbookInputRef, profileTab, setProfileTab, refreshData,
-    onOpenSocialList
+    onOpenSocialList, onThemeChange
 }) => {
     const profileUser = db.getFullDatabase().users.find(u => u.username === viewedProfileUsername) || { 
         username: viewedProfileUsername, 
@@ -69,8 +70,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
         telegram: '' 
     } as UserProfile;
 
-    const profileArtifacts = exhibits.filter(e => e.owner === viewedProfileUsername && !e.isDraft);
-    const profileCollections = collections.filter(c => c.owner === viewedProfileUsername);
     const isCurrentUser = user?.username === viewedProfileUsername;
     const isSubscribed = user?.following.includes(viewedProfileUsername) || false;
 
@@ -121,9 +120,11 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
             <button onClick={onBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
                  <ArrowLeft size={16} /> НАЗАД
             </button>
-            <div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
-                <div className="relative">
-                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-green-500/30">
+            <div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : theme === 'xp' ? 'bg-white border-[#245DDA] shadow-lg rounded-t-lg' : 'bg-white border-light-dim'}`}>
+                {theme === 'xp' && <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-r from-[#0058EE] to-[#3F8CF3] rounded-t-lg flex items-center px-4"><span className="text-white font-bold text-sm drop-shadow-md italic">User Properties</span></div>}
+                
+                <div className={`relative ${theme === 'xp' ? 'mt-6' : ''}`}>
+                    <div className={`w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 ${theme === 'xp' ? 'border-[#245DDA]' : 'border-green-500/30'}`}>
                         <img src={profileUser.avatarUrl} alt={profileUser.username || ''} className="w-full h-full object-cover"/>
                     </div>
                     {isCurrentUser && (
@@ -133,7 +134,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                         </label>
                     )}
                 </div>
-                <div className="flex-1 text-center md:text-left space-y-2">
+                <div className={`flex-1 text-center md:text-left space-y-2 ${theme === 'xp' ? 'mt-6' : ''}`}>
                     {isEditingProfile && isCurrentUser ? (
                         <div className="space-y-2 max-w-sm mx-auto md:mx-0">
                             <input value={editTagline} onChange={(e) => setEditTagline(e.target.value)} placeholder="Статус..." className="w-full bg-transparent border-b p-1 font-mono text-sm" />
@@ -151,7 +152,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                     ) : (
                         <>
                             <div className="flex items-center justify-center md:justify-start gap-4">
-                                <h2 className="text-2xl font-pixel font-bold">@{profileUser.username}</h2>
+                                <h2 className={`text-2xl font-pixel font-bold ${theme === 'xp' ? 'text-black' : ''}`}>@{profileUser.username}</h2>
                                 {isCurrentUser && (
                                     <button onClick={onLogout} className="text-red-500 opacity-50 hover:opacity-100" title="ВЫХОД"><LogOut size={18}/></button>
                                 )}
@@ -197,27 +198,62 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 </div>
             </div>
 
-            <div className="flex gap-4 border-b border-gray-500/30">
-                <button onClick={() => setProfileTab('ARTIFACTS')} className={`pb-2 font-pixel text-xs ${profileTab === 'ARTIFACTS' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50'}`}>АРТЕФАКТЫ</button>
-                <button onClick={() => setProfileTab('COLLECTIONS')} className={`pb-2 font-pixel text-xs ${profileTab === 'COLLECTIONS' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50'}`}>КОЛЛЕКЦИИ</button>
-            </div>
+            {isCurrentUser && onThemeChange && (
+                <div className={`p-6 rounded-xl border flex flex-col gap-4 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : theme === 'xp' ? 'bg-white border-[#245DDA] shadow-lg rounded-t-lg mt-4' : 'bg-white border-light-dim'}`}>
+                    {theme === 'xp' && <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-r from-[#0058EE] to-[#3F8CF3] rounded-t-lg flex items-center px-4 -mt-[1px] -mx-[1px] w-[calc(100%+2px)]"><span className="text-white font-bold text-sm drop-shadow-md italic">Appearance Settings</span></div>}
+                    
+                    <h3 className={`font-pixel text-sm flex items-center gap-2 uppercase tracking-widest ${theme === 'xp' ? 'mt-4 text-black' : 'opacity-70'}`}>
+                        <Palette size={16}/> ИНТЕРФЕЙС / THEME
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <button 
+                            onClick={() => onThemeChange('dark')}
+                            className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${theme === 'dark' ? 'border-green-500 bg-green-500/10' : 'border-transparent hover:border-white/10 bg-black/20'}`}
+                        >
+                            <div className="w-8 h-8 rounded-full bg-black border border-green-500 flex items-center justify-center text-green-500 font-pixel font-bold">M</div>
+                            <div className="text-left">
+                                <div className="font-bold text-xs">MATRIX</div>
+                                <div className="text-[10px] opacity-50">Dark Mode (Default)</div>
+                            </div>
+                        </button>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                {profileTab === 'ARTIFACTS' && profileArtifacts.map(item => (
-                    <ExhibitCard key={item.id} item={item} theme={theme} onClick={onExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} onLike={(e) => onLike(item.id, e)} onAuthorClick={() => {}} />
-                ))}
-                {profileTab === 'COLLECTIONS' && profileCollections.map(c => <CollectionCard key={c.id} col={c} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />)}
-            </div>
+                        <button 
+                            onClick={() => onThemeChange('light')}
+                            className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${theme === 'light' ? 'border-black bg-white shadow-md' : 'border-transparent hover:border-black/10 bg-gray-200 text-black'}`}
+                        >
+                            <div className="w-8 h-8 rounded-full bg-white border border-gray-300 flex items-center justify-center text-black font-pixel font-bold">O</div>
+                            <div className="text-left">
+                                <div className="font-bold text-xs">OFFICE</div>
+                                <div className="text-[10px] opacity-50">Light Mode</div>
+                            </div>
+                        </button>
 
-            <div className="pt-8 border-t border-dashed border-gray-500/30">
-                <h3 className="font-pixel text-sm mb-4">GUESTBOOK_PROTOCOL</h3>
+                        <button 
+                            onClick={() => onThemeChange('xp')}
+                            className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${theme === 'xp' ? 'border-blue-600 bg-blue-50 shadow-md' : 'border-transparent hover:border-blue-300 bg-blue-100 text-blue-900'}`}
+                        >
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 border border-white flex items-center justify-center text-white font-sans font-bold italic shadow">XP</div>
+                            <div className="text-left">
+                                <div className="font-bold text-xs">LUNA</div>
+                                <div className="text-[10px] opacity-50">Windows XP Style</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Note: Collection and Artifact Grids Removed from Profile View as requested */}
+
+            <div className={`pt-8 border-t border-dashed ${theme === 'xp' ? 'border-blue-800/30' : 'border-gray-500/30'}`}>
+                <h3 className={`font-pixel text-sm mb-4 ${theme === 'xp' ? 'text-black' : ''}`}>GUESTBOOK_PROTOCOL</h3>
                 <div className="space-y-4 mb-4">
                     {guestbook.filter(g => g.targetUser === profileUser.username).map(entry => {
                         const canModify = user && (user.username === entry.author || isCurrentUser);
                         const isEditing = editingEntryId === entry.id;
 
                         return (
-                            <div key={entry.id} className="p-3 border rounded border-gray-500/30 text-xs relative group">
+                            <div key={entry.id} className={`p-3 border rounded text-xs relative group ${theme === 'xp' ? 'bg-white border-blue-200 text-black shadow-sm' : 'border-gray-500/30'}`}>
                                 <div className="flex justify-between mb-1">
                                     <span className="font-bold font-pixel cursor-pointer" onClick={() => onAuthorClick(entry.author)}>@{entry.author}</span>
                                     <span className="opacity-50">{entry.timestamp}</span>
@@ -261,7 +297,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 </div>
                 {user && (
                     <div className="flex gap-2">
-                        <input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className="flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none" />
+                        <input ref={guestbookInputRef} value={guestbookInput} onChange={e => setGuestbookInput(e.target.value)} placeholder={`Написать @${profileUser.username}...`} className={`flex-1 bg-transparent border-b p-2 font-mono text-sm focus:outline-none ${theme === 'xp' ? 'text-black border-blue-300 placeholder-gray-500' : ''}`} />
                         <button onClick={onGuestbookPost} className="p-2 border rounded hover:bg-white/10"><Send size={16} /></button>
                     </div>
                 )}

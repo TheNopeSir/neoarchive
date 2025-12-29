@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -30,7 +29,7 @@ import { DefaultCategory, calculateArtifactScore } from './constants';
 import useSwipe from './hooks/useSwipe';
 
 export default function App() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light' | 'xp'>('dark');
   const [view, setView] = useState<ViewState>('AUTH');
   const [navigationStack, setNavigationStack] = useState<ViewState[]>([]);
   
@@ -477,30 +476,36 @@ export default function App() {
   // Swipe logic active on ALL authenticated views to allow "Exit Window" behavior
   const swipeProps = view !== 'AUTH' ? swipeHandlers : {};
 
+  // Background style logic
+  let bgClass = '';
+  if (theme === 'dark') bgClass = 'bg-black text-gray-200';
+  else if (theme === 'light') bgClass = 'bg-gray-100 text-gray-900';
+  else if (theme === 'xp') bgClass = 'bg-gradient-to-b from-[#628dce] via-[#85aaee] to-[#e2e1d6] text-black font-sans'; // Bliss-ish gradient
+
   return (
     <div 
         {...swipeProps}
-        className={`min-h-screen transition-colors duration-500 font-sans ${theme === 'dark' ? 'bg-black text-gray-200' : 'bg-gray-100 text-gray-900'} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}
+        className={`min-h-screen transition-colors duration-500 ${theme === 'xp' ? 'font-sans' : 'font-sans'} ${bgClass} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}
     >
         <SEO title="NeoArchive | Цифровая полка коллекционера" />
-        <MatrixRain theme={theme} />
-        <PixelSnow theme={theme} />
+        {theme !== 'xp' && <MatrixRain theme={theme} />}
+        {theme !== 'xp' && <PixelSnow theme={theme} />}
         <CRTOverlay />
         
         {view !== 'AUTH' && (
-          <header className={`fixed top-0 left-0 right-0 z-50 border-b border-white/10 backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'bg-black/60' : 'bg-white/80'}`}>
+          <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${theme === 'dark' ? 'bg-black/60 border-b border-white/10 backdrop-blur-xl' : theme === 'xp' ? 'bg-gradient-to-b from-[#245DDA] to-[#2055C8] border-b-2 border-[#003c74] shadow-md' : 'bg-white/80 border-b border-white/10 backdrop-blur-xl'}`}>
               <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                   <div className="flex items-center gap-6">
-                      <div className="font-pixel text-lg font-black tracking-widest cursor-pointer group" onClick={() => navigateTo('FEED')}>
-                          NEO<span className="text-green-500 transition-colors group-hover:text-white">ARCHIVE</span>
+                      <div className={`font-pixel text-lg font-black tracking-widest cursor-pointer group ${theme === 'xp' ? 'text-white italic drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]' : ''}`} onClick={() => navigateTo('FEED')}>
+                          NEO<span className={`${theme === 'xp' ? 'text-white' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
                       </div>
                       
                       {/* NEW SEARCH BUTTON (Mobile & Desktop) */}
                       <button 
                         onClick={() => navigateTo('SEARCH')}
-                        className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}
+                        className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}
                       >
-                          <Search size={14} className="opacity-40 mr-2" />
+                          <Search size={14} className={`${theme === 'xp' ? 'opacity-100 text-blue-600' : 'opacity-40'} mr-2`} />
                           <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК ПО БАЗЕ...</span>
                       </button>
                   </div>
@@ -509,23 +514,23 @@ export default function App() {
                       {/* CREATE BUTTON FOR DESKTOP */}
                       <button 
                           onClick={() => setShowCreateMenu(true)} 
-                          className="hidden md:flex items-center gap-2 px-4 py-2 bg-green-500 text-black rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform shadow-[0_0_15px_rgba(74,222,128,0.4)] mr-2"
+                          className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}
                       >
                           <PlusCircle size={14} /> ДОБАВИТЬ
                       </button>
 
-                      <button onClick={async () => { await db.forceSync(); refreshData(); }} className="hidden md:block p-2 hover:bg-white/10 rounded-xl transition-all">
+                      <button onClick={async () => { await db.forceSync(); refreshData(); }} className={`hidden md:block p-2 rounded-xl transition-all ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
                           <RefreshCw size={18} />
                       </button>
-                      <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 hover:bg-white/10 rounded-xl">
-                          {theme === 'dark' ? <Sun size={20}/> : <Moon size={20}/>}
+                      <button onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'xp' : 'dark')} className={`p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
+                          {theme === 'dark' ? <Sun size={20}/> : theme === 'light' ? <Monitor size={20} /> : <Moon size={20}/>}
                       </button>
-                      <button onClick={() => navigateTo('ACTIVITY')} className="relative p-2 hover:bg-white/10 rounded-xl">
+                      <button onClick={() => navigateTo('ACTIVITY')} className={`relative p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
                           <Bell size={20} />
                           {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
                       </button>
                       {user && (
-                          <div className="hidden md:block w-10 h-10 rounded-full border-2 border-green-500/30 p-0.5 cursor-pointer hover:scale-105 transition-all" onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
+                          <div className={`hidden md:block w-10 h-10 rounded-full p-0.5 cursor-pointer hover:scale-105 transition-all ${theme === 'xp' ? 'border-2 border-white/50' : 'border-2 border-green-500/30'}`} onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
                               <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
                           </div>
                       )}
@@ -536,11 +541,11 @@ export default function App() {
 
         <main className={`pt-20 pb-28 px-4 max-w-7xl mx-auto min-h-screen relative z-10 transition-all duration-700 ${!isInitializing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             
-            {view === 'AUTH' && <MatrixLogin theme={theme} onLogin={(u) => { setUser(u); navigateTo('FEED'); refreshData(); }} />}
+            {view === 'AUTH' && <MatrixLogin theme={theme === 'xp' ? 'light' : theme} onLogin={(u) => { setUser(u); navigateTo('FEED'); refreshData(); }} />}
 
             {view === 'SEARCH' && (
                 <SearchView 
-                    theme={theme}
+                    theme={theme === 'xp' ? 'light' : theme}
                     exhibits={exhibits}
                     collections={collections}
                     users={db.getFullDatabase().users}
@@ -556,16 +561,16 @@ export default function App() {
             {view === 'FEED' && (
                 <div className="space-y-8 animate-in fade-in zoom-in-95">
                     <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
-                         <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]' : 'border-white/10 opacity-50'}`}>ВСЕ</button>
+                         <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
                          {Object.values(DefaultCategory).map(cat => (
-                             <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]' : 'border-white/10 opacity-50'}`}>{cat}</button>
+                             <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
                          ))}
                     </div>
                     
                     <div className="flex items-center justify-between border-b border-white/10 pb-4">
                         <div className="flex gap-6">
-                            <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest ${feedMode === 'ARTIFACTS' ? 'text-green-500 border-b-2 border-green-500 pb-4' : 'opacity-40 hover:opacity-100 transition-all'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
-                            <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest ${feedMode === 'COLLECTIONS' ? 'text-green-500 border-b-2 border-green-500 pb-4' : 'opacity-40 hover:opacity-100 transition-all'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
+                            <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
+                            <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
                         </div>
                     </div>
                     
@@ -574,7 +579,7 @@ export default function App() {
                             {/* SUBSCRIPTIONS FEED */}
                             {followingExhibits.length > 0 && (
                                 <div>
-                                    <h2 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Zap size={14} className="text-yellow-500" /> ПОДПИСКИ</h2>
+                                    <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Zap size={14} className="text-yellow-500" /> ПОДПИСКИ</h2>
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
                                         {followingExhibits.map(item => (
                                             <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
@@ -585,7 +590,7 @@ export default function App() {
                             
                             {/* GLOBAL FEED */}
                             <div>
-                                <h2 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Grid size={14} className="text-green-500" /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}</h2>
+                                <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Grid size={14} className={theme === 'xp' ? 'text-blue-600' : 'text-green-500'} /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}</h2>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
                                     {globalExhibits.map(item => (
                                         <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
@@ -615,17 +620,17 @@ export default function App() {
             )}
 
             {view === 'CREATE_ARTIFACT' && (
-              <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} />
+              <CreateArtifactView theme={theme === 'xp' ? 'light' : theme} onBack={handleBack} onSave={handleSaveArtifact} />
             )}
 
             {view === 'EDIT_ARTIFACT' && selectedExhibit && (
-               <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} initialData={selectedExhibit} />
+               <CreateArtifactView theme={theme === 'xp' ? 'light' : theme} onBack={handleBack} onSave={handleSaveArtifact} initialData={selectedExhibit} />
             )}
 
             {/* CREATE OR EDIT COLLECTION VIEW */}
             {(view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') && user && (
                 <CreateCollectionView
-                    theme={theme}
+                    theme={theme === 'xp' ? 'light' : theme}
                     userArtifacts={exhibits.filter(e => e.owner === user.username && !e.isDraft)}
                     initialData={view === 'EDIT_COLLECTION' ? selectedCollection : null}
                     onBack={handleBack}
@@ -637,7 +642,7 @@ export default function App() {
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
                     exhibit={selectedExhibit} 
-                    theme={theme} 
+                    theme={theme === 'xp' ? 'light' : theme} 
                     onBack={handleBack} 
                     onShare={() => {}} 
                     onFavorite={() => {}} 
@@ -664,7 +669,7 @@ export default function App() {
                 <CollectionDetailPage
                     collection={selectedCollection}
                     artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))}
-                    theme={theme}
+                    theme={theme === 'xp' ? 'light' : theme}
                     onBack={handleBack}
                     onExhibitClick={handleExhibitClick}
                     onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
@@ -676,7 +681,7 @@ export default function App() {
 
             {view === 'DIRECT_CHAT' && user && viewedProfileUsername && (
                 <DirectChat 
-                    theme={theme} 
+                    theme={theme === 'xp' ? 'light' : theme} 
                     currentUser={user} 
                     partnerUsername={viewedProfileUsername} 
                     messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} 
@@ -690,30 +695,68 @@ export default function App() {
                     type={socialListType} 
                     username={viewedProfileUsername} 
                     currentUserUsername={user?.username}
-                    theme={theme} 
+                    theme={theme === 'xp' ? 'light' : theme} 
                     onBack={handleBack} 
                     onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} 
                 />
             )}
 
             {view === 'USER_PROFILE' && user && (
-                <UserProfileView user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={handleBack} onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} onFollow={handleFollow} onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} onExhibitClick={handleExhibitClick} onLike={handleLike} onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onShareCollection={() => {}} onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab} onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} />
+                <UserProfileView 
+                    user={user} 
+                    viewedProfileUsername={viewedProfileUsername} 
+                    exhibits={exhibits} 
+                    collections={collections} 
+                    guestbook={guestbook} 
+                    theme={theme} 
+                    onBack={handleBack} 
+                    onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} 
+                    onFollow={handleFollow} 
+                    onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
+                    onExhibitClick={handleExhibitClick} 
+                    onLike={handleLike} 
+                    onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} 
+                    onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} 
+                    onShareCollection={() => {}} 
+                    onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} 
+                    onGuestbookPost={() => {}} 
+                    refreshData={refreshData} 
+                    isEditingProfile={isEditingProfile} 
+                    setIsEditingProfile={setIsEditingProfile} 
+                    editTagline={editTagline} 
+                    setEditTagline={setEditTagline} 
+                    editStatus={editStatus} 
+                    setEditStatus={setEditStatus} 
+                    editTelegram={editTelegram} 
+                    setEditTelegram={setEditTelegram} 
+                    editPassword={editPassword} 
+                    setEditPassword={setEditPassword} 
+                    onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} 
+                    onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} 
+                    guestbookInput={guestbookInput} 
+                    setGuestbookInput={setGuestbookInput} 
+                    guestbookInputRef={guestbookInputRef} 
+                    profileTab={profileTab} 
+                    setProfileTab={setProfileTab} 
+                    onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} 
+                    onThemeChange={(t) => setTheme(t)}
+                />
             )}
 
             {view === 'HALL_OF_FAME' && user && (
                 <HallOfFame 
-                    theme={theme} 
+                    theme={theme === 'xp' ? 'light' : theme} 
                     achievements={user.achievements || []} 
                     onBack={handleBack} 
                 />
             )}
 
             {view === 'ACTIVITY' && user && (
-                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} />
+                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme === 'xp' ? 'light' : theme} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} />
             )}
             
             {view === 'MY_COLLECTION' && user && (
-                <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
+                <MyCollection theme={theme === 'xp' ? 'light' : theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
             )}
 
         </main>
@@ -797,12 +840,12 @@ export default function App() {
         )}
         
         {view !== 'AUTH' && (
-          <nav className="fixed bottom-0 left-0 right-0 h-20 border-t border-white/10 backdrop-blur-2xl md:hidden flex justify-around items-center z-50 bg-black/60 px-4 pb-safe">
-              <button onClick={() => navigateTo('FEED')} className={`p-2 transition-all ${view === 'FEED' ? 'text-green-500 scale-125' : 'opacity-40'}`}><LayoutGrid size={24} /></button>
-              <button onClick={() => navigateTo('MY_COLLECTION')} className={`p-2 transition-all ${view === 'MY_COLLECTION' ? 'text-green-500 scale-125' : 'opacity-40'}`}><Package size={24} /></button>
-              <div className="relative -top-5"><button onClick={() => setShowCreateMenu(true)} className="bg-green-500 text-black w-14 h-14 rounded-full shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black flex items-center justify-center transition-all hover:scale-105 active:scale-95"><PlusCircle size={32} /></button></div>
-              <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? 'text-green-500 scale-125' : 'opacity-40'} relative`}><Bell size={24} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black" />}</button>
-              <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? 'text-green-500 scale-125' : 'opacity-40'}`}><User size={24} /></button>
+          <nav className={`fixed bottom-0 left-0 right-0 h-20 border-t backdrop-blur-2xl md:hidden flex justify-around items-center z-50 px-4 pb-safe ${theme === 'dark' ? 'border-white/10 bg-black/60' : theme === 'xp' ? 'bg-[#245DDA]/90 border-[#003c74]' : 'bg-white/80 border-black/10'}`}>
+              <button onClick={() => navigateTo('FEED')} className={`p-2 transition-all ${view === 'FEED' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><LayoutGrid size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+              <button onClick={() => navigateTo('MY_COLLECTION')} className={`p-2 transition-all ${view === 'MY_COLLECTION' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><Package size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+              <div className="relative -top-5"><button onClick={() => setShowCreateMenu(true)} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${theme === 'xp' ? 'bg-green-600 border-4 border-[#245DDA] shadow-lg text-white font-serif italic' : 'bg-green-500 text-black shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black'}`}><PlusCircle size={32} /></button></div>
+              <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'} relative`}><Bell size={24} className={theme === 'xp' ? 'text-white' : ''} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}</button>
+              <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><User size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
           </nav>
         )}
     </div>
