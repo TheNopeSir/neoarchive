@@ -27,6 +27,7 @@ interface ExhibitDetailPageProps {
   onDelete?: (id: string) => void;
   onEdit?: (exhibit: Exhibit) => void;
   onAddToCollection?: (id: string) => void;
+  onExhibitClick: (item: Exhibit) => void; // New prop for navigation
   isFollowing: boolean;
   currentUser: string;
   isAdmin: boolean;
@@ -63,7 +64,7 @@ const renderTextWithMentions = (text: string, onUserClick: (u: string) => void) 
 };
 
 export default function ExhibitDetailPage({
-  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, isFollowing, currentUser, isAdmin, users, allExhibits
+  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, onExhibitClick, isFollowing, currentUser, isAdmin, users, allExhibits
 }: ExhibitDetailPageProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
@@ -90,6 +91,11 @@ export default function ExhibitDetailPage({
   const nonEmptySpecs = Object.entries(specs).filter(([_, val]) => !!val);
   const videoEmbedUrl = exhibit.videoUrl ? getEmbedUrl(exhibit.videoUrl) : null;
   const isOwner = currentUser === exhibit.owner;
+
+  // Reset image index when exhibit changes
+  useEffect(() => {
+      setCurrentImageIndex(0);
+  }, [exhibit.id]);
 
   // Calculate similar artifacts
   const similarArtifacts = useMemo(() => {
@@ -149,24 +155,6 @@ export default function ExhibitDetailPage({
       const newText = [...words, `@${username} `].join(' ');
       setCommentText(newText);
       setMentionQuery(null);
-  };
-
-  // Helper for clicking on similar item
-  const handleItemClick = (item: Exhibit) => {
-      // In a real router, we'd just push. Here we might need to rely on parent re-render or window.location if not fully SPA logic in App.tsx
-      // App.tsx handles navigation via props, but we are inside ExhibitDetailPage.
-      // We assume App.tsx re-renders this component with new props when ID changes in URL or state.
-      // Since App.tsx controls "selectedExhibit", we can't directly switch unless passed a handler.
-      // However, App.tsx passes "onBack" etc. Ideally it should pass "onNavigate".
-      // Workaround: Use window.location for now or rely on App logic if it detects prop change.
-      // Actually, we need to bubble up. The standard pattern here is `onExhibitClick` prop passed down.
-      // Let's assume onLike acts as a refresh trigger, but for navigation we need `onExhibitClick`.
-      // Since we don't have it in props yet, let's just trigger a full reload via hash or rely on parent.
-      // BETTER: Add logic to App.tsx to pass onExhibitClick to DetailPage too.
-      // For now, let's use a simple window location hack compatible with the App's history listener.
-      window.history.pushState({ view: 'EXHIBIT' }, '', `/artifact/${item.id}`);
-      // Dispatch a popstate to trigger App.tsx listener
-      window.dispatchEvent(new PopStateEvent('popstate', { state: { view: 'EXHIBIT' } }));
   };
 
   return (
@@ -315,7 +303,7 @@ export default function ExhibitDetailPage({
                     <h3 className="font-pixel text-[10px] opacity-70 uppercase tracking-widest mb-4 flex items-center gap-2"><Link2 size={14}/> СВЯЗАННЫЕ ЭКСПОНАТЫ</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {linkedArtifacts.map(link => (
-                            <div key={link.id} onClick={() => handleItemClick(link)} className="group cursor-pointer">
+                            <div key={link.id} onClick={() => onExhibitClick(link)} className="group cursor-pointer">
                                 <div className="aspect-square rounded-lg overflow-hidden border border-white/10 relative">
                                     <img src={link.imageUrls[0]} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                                 </div>
@@ -435,7 +423,7 @@ export default function ExhibitDetailPage({
                             key={sim.id} 
                             item={sim} 
                             theme={theme}
-                            onClick={() => handleItemClick(sim)}
+                            onClick={() => onExhibitClick(sim)}
                             isLiked={sim.likedBy?.includes(currentUser)}
                             onLike={() => {}} // No like action in quick view for simplicity
                             onAuthorClick={onAuthorClick}

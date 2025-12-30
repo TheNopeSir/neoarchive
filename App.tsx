@@ -730,6 +730,7 @@ export default function App() {
                     onAddToCollection={(id) => setIsAddingToCollection(id)}
                     onEdit={(item: Exhibit) => navigateTo('EDIT_ARTIFACT', { item })}
                     onDelete={(id: string) => handleDeleteArtifact(id)}
+                    onExhibitClick={handleExhibitClick} // Fix: Pass handler for internal navigation
                     users={db.getFullDatabase().users}
                     // Pass all exhibits for Similarity Algorithm
                     allExhibits={exhibits}
