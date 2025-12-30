@@ -149,7 +149,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in pb-32">
+        <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-right-8 fade-in duration-500 pb-32">
             <SEO 
                 title={`@${profileUser.username} | Профиль NeoArchive`}
                 description={profileUser.tagline || `Посмотрите коллекцию пользователя @${profileUser.username}`}

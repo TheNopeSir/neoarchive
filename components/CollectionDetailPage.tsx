@@ -23,7 +23,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
     const isOwner = currentUser === collection.owner;
 
     return (
-        <div className="w-full min-h-full pb-20 animate-in fade-in duration-300">
+        <div className="w-full min-h-full pb-20 animate-in slide-in-from-right-8 fade-in duration-500">
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/10">
                 <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest">
                     <ArrowLeft size={14} /> НАЗАД

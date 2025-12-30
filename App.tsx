@@ -99,6 +99,9 @@ export default function App() {
       else if (newView === 'FEED') path = '/';
       
       window.history.pushState({ view: newView }, '', path);
+      
+      // 5. Scroll to Top
+      window.scrollTo(0, 0);
   };
 
   const handleBack = () => {
@@ -710,6 +713,7 @@ export default function App() {
 
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
+                    key={selectedExhibit.id} // Forces remount animation on ID change
                     exhibit={selectedExhibit} 
                     theme={theme} 
                     onBack={handleBack} 
@@ -730,7 +734,7 @@ export default function App() {
                     onAddToCollection={(id) => setIsAddingToCollection(id)}
                     onEdit={(item: Exhibit) => navigateTo('EDIT_ARTIFACT', { item })}
                     onDelete={(id: string) => handleDeleteArtifact(id)}
-                    onExhibitClick={handleExhibitClick} // Fix: Pass handler for internal navigation
+                    onExhibitClick={handleExhibitClick} 
                     users={db.getFullDatabase().users}
                     // Pass all exhibits for Similarity Algorithm
                     allExhibits={exhibits}
@@ -739,6 +743,7 @@ export default function App() {
             
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
                 <CollectionDetailPage
+                    key={selectedCollection.id}
                     collection={selectedCollection}
                     artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))}
                     theme={theme}
@@ -775,23 +780,11 @@ export default function App() {
 
             {view === 'USER_PROFILE' && user && (
                 <UserProfileView 
+                    key={viewedProfileUsername}
                     user={user} 
                     viewedProfileUsername={viewedProfileUsername} 
                     exhibits={exhibits} 
                     collections={collections} 
-                    // Pass filtered wishlist
-                    // In a real app we'd pass the full wishlist or filtered one.
-                    // UserProfileView will need to be updated to accept wishlist prop or fetch it.
-                    // For now, let's inject it via props in UserProfileView (I will update UserProfileView to read from cache directly or via props)
-                    // Wait, I updated UserProfileView signature? No, I need to pass it.
-                    // Let's pass it via props or let it filter from full db.
-                    // Actually, UserProfileView pulls profileUser from DB.
-                    // I need to update UserProfileView to handle wishlist.
-                    // I will pass `wishlist` as a prop.
-                    // Oops, `UserProfileView` props definition in `App.tsx` needs to match.
-                    // I will update UserProfileView to take `wishlist` prop or `exhibits` prop and filter inside? 
-                    // No, `wishlist` is a separate array now.
-                    // I'll update UserProfileView to filter from `db.getFullDatabase().wishlist`.
                     guestbook={guestbook} 
                     theme={theme} 
                     onBack={handleBack} 

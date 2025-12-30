@@ -158,7 +158,7 @@ export default function ExhibitDetailPage({
   };
 
   return (
-    <div className={`w-full min-h-full pb-20 animate-in fade-in duration-300 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
+    <div className={`w-full min-h-full pb-20 animate-in slide-in-from-right-8 fade-in duration-500 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
       <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/10">
         <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest"><ArrowLeft size={14} /> НАЗАД</button>
         <div className="flex gap-4">
