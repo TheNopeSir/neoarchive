@@ -31,8 +31,8 @@ const pool = new Pool({
         rejectUnauthorized: false
     },
     max: 15, // Slightly increased for concurrent sync queries
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 60000, // Increased to 60s
+    connectionTimeoutMillis: 15000, // Increased to 15s
 });
 
 // Handle unexpected pool errors
@@ -44,8 +44,8 @@ pool.on('error', (err, client) => {
 // 📧 НАСТРОЙКА ПОЧТЫ (TIMEWEB SMTP)
 // ==========================================
 
-const SMTP_EMAIL = process.env.SMTP_EMAIL || 'morpheus@neoarch.ru'; 
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'tntgz9o3e9'; 
+const SMTP_EMAIL = process.env.SMTP_EMAIL || 'support@neoarchive.ru'; 
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'your_real_password_here'; 
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.timeweb.ru',

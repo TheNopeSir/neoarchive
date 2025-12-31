@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ChevronLeft, ChevronRight, Heart, Share2, MessageSquare, Trash2, 
@@ -63,9 +62,9 @@ const renderTextWithMentions = (text: string, onUserClick: (u: string) => void) 
     });
 };
 
-export default function ExhibitDetailPage({
+const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
   exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, onExhibitClick, isFollowing, currentUser, isAdmin, users, allExhibits
-}: ExhibitDetailPageProps) {
+}) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
@@ -436,3 +435,5 @@ export default function ExhibitDetailPage({
     </div>
   );
 }
+
+export default ExhibitDetailPage;

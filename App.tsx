@@ -165,10 +165,19 @@ export default function App() {
     }
   }, [user]);
 
+  // Subscribe to DB changes to auto-refresh UI when background sync finishes
   useEffect(() => {
-    const safetyTimer = setTimeout(() => { setIsInitializing(false); setShowSplash(false); }, 5000);
+    const unsubscribe = db.subscribe(() => {
+        refreshData();
+    });
+    return () => unsubscribe();
+  }, [refreshData]);
+
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => { setIsInitializing(false); setShowSplash(false); }, 6000); // Increased safety timer
     const init = async () => {
       try {
+          // initializeDatabase now smart-waits if cache is empty
           const activeUser = await db.initializeDatabase();
           if (activeUser) { 
               setUser(activeUser);
@@ -626,11 +635,18 @@ export default function App() {
                             {/* GLOBAL FEED */}
                             <div>
                                 <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Grid size={14} className={theme === 'xp' ? 'text-blue-600' : 'text-green-500'} /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
-                                    {globalExhibits.map(item => (
-                                        <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
-                                    ))}
-                                </div>
+                                {globalExhibits.length === 0 ? (
+                                    <div className="py-20 flex flex-col items-center justify-center opacity-50">
+                                        <RetroLoader text="NO_DATA_FOUND" />
+                                        <p className="mt-4 text-xs font-mono">База данных пуста или недоступна</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
+                                        {globalExhibits.map(item => (
+                                            <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             {isLoadingMore && (
                                 <div className="flex justify-center py-10"><RetroLoader text="SYNCHRONIZING..." /></div>
