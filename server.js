@@ -44,8 +44,8 @@ pool.on('error', (err, client) => {
 // 📧 НАСТРОЙКА ПОЧТЫ (TIMEWEB SMTP)
 // ==========================================
 
-const SMTP_EMAIL = process.env.SMTP_EMAIL || 'support@neoarchive.ru'; 
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'your_real_password_here'; 
+const SMTP_EMAIL = process.env.SMTP_EMAIL || 'morpheus@neoarch.ru'; 
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'tntgz9o3e9'; 
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.timeweb.ru',

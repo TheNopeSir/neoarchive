@@ -40,10 +40,10 @@ export const CATEGORY_SPECS_TEMPLATES: Record<string, string[]> = {
 
 export const TRADE_STATUS_CONFIG: Record<TradeStatus, any> = {
     'NONE': { label: '', color: '', icon: null },
-    'FOR_TRADE': { label: 'ОБМЕН', color: 'text-blue-400 border-blue-400 bg-blue-400/10', icon: RefreshCw, badge: 'TRADE' },
-    'FOR_SALE': { label: 'ПРОДАЖА', color: 'text-green-400 border-green-400 bg-green-400/10', icon: DollarSign, badge: 'SALE' },
-    'GIFT': { label: 'ДАРЮ', color: 'text-pink-400 border-pink-400 bg-pink-400/10', icon: Gift, badge: 'FREE' },
-    'NOT_FOR_SALE': { label: 'НЕ ПРОДАЕТСЯ', color: 'text-red-400 border-red-400 bg-red-400/10', icon: Lock, badge: 'KEEPER' },
+    'FOR_TRADE': { label: 'ОБМЕН', color: 'text-blue-300 border-blue-500 bg-blue-500/20', icon: RefreshCw, badge: 'ОБМЕН' },
+    'FOR_SALE': { label: 'ПРОДАЖА', color: 'text-emerald-300 border-emerald-500 bg-emerald-500/20', icon: DollarSign, badge: 'ПРОДАЖА' },
+    'GIFT': { label: 'ДАРЮ', color: 'text-pink-300 border-pink-500 bg-pink-500/20', icon: Gift, badge: 'ОТДАМ' },
+    'NOT_FOR_SALE': { label: 'НЕ ПРОДАЕТСЯ', color: 'text-gray-400 border-gray-600 bg-gray-500/20', icon: Lock, badge: 'ЛИЧНОЕ' },
 };
 
 export const WISHLIST_PRIORITY_CONFIG: Record<WishlistPriority, any> = {

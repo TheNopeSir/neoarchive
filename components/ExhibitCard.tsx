@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Heart, Eye, Image as ImageIcon } from 'lucide-react';
 import { Exhibit } from '../types';
@@ -73,8 +74,9 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
 
         {/* Trade Status Badge */}
         {tradeStatus !== 'NONE' && (
-            <div className={`absolute bottom-2 left-2 px-2 py-1 rounded-lg flex items-center gap-1 text-[9px] font-black font-pixel shadow-xl uppercase border ${tradeConfig.color} bg-black/80 backdrop-blur-md`}>
-                {tradeConfig.icon && React.createElement(tradeConfig.icon, { size: 10 })} {tradeConfig.badge}
+            <div className={`absolute bottom-2 left-2 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] font-bold tracking-wide shadow-lg uppercase border !bg-zinc-900/95 backdrop-blur-md ${tradeConfig.color.replace(/bg-[\w/-]+/, '')}`}>
+                {tradeConfig.icon && React.createElement(tradeConfig.icon, { size: 12, strokeWidth: 2.5 })} 
+                {tradeConfig.badge}
             </div>
         )}
       </div>
