@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Users, Palette, Settings, Volume2, Bell, Shield, Database, Monitor, Sun, Moon, Terminal, Search } from 'lucide-react';
-import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus, AppSettings } from '../types';
+import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus, AppSettings, WishlistItem } from '../types';
 import { STATUS_OPTIONS, BADGE_CONFIG } from '../constants';
 import * as db from '../services/storageService';
 import { getUserAvatar } from '../services/storageService';
@@ -48,6 +48,7 @@ interface UserProfileViewProps {
     setProfileTab: (v: 'ARTIFACTS' | 'COLLECTIONS') => void;
     onOpenSocialList: (username: string, type: 'followers' | 'following') => void;
     onThemeChange?: (theme: 'dark' | 'light' | 'xp') => void;
+    onWishlistClick: (item: WishlistItem) => void;
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({ 
@@ -57,7 +58,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     isEditingProfile, setIsEditingProfile, editTagline, setEditTagline, editStatus, setEditStatus, editTelegram, setEditTelegram, 
     editPassword, setEditPassword,
     onSaveProfile, onProfileImageUpload, guestbookInput, setGuestbookInput, guestbookInputRef, profileTab, setProfileTab, refreshData,
-    onOpenSocialList, onThemeChange
+    onOpenSocialList, onThemeChange, onWishlistClick
 }) => {
     const profileUser = db.getFullDatabase().users.find(u => u.username === viewedProfileUsername) || { 
         username: viewedProfileUsername, 
@@ -277,6 +278,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                     key={item.id} 
                                     item={item} 
                                     theme={theme} 
+                                    onClick={onWishlistClick}
                                     onDelete={isCurrentUser ? handleDeleteWishlist : undefined}
                                 />
                             ))}

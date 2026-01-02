@@ -10,9 +10,10 @@ interface WishlistCardProps {
   theme: 'dark' | 'light' | 'xp';
   onDelete?: (id: string) => void;
   onUserClick?: (username: string) => void;
+  onClick?: (item: WishlistItem) => void;
 }
 
-const WishlistCard: React.FC<WishlistCardProps> = ({ item, theme, onDelete, onUserClick }) => {
+const WishlistCard: React.FC<WishlistCardProps> = ({ item, theme, onDelete, onUserClick, onClick }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const priorityConfig = WISHLIST_PRIORITY_CONFIG[item.priority];
   const isXP = theme === 'xp';
@@ -20,7 +21,8 @@ const WishlistCard: React.FC<WishlistCardProps> = ({ item, theme, onDelete, onUs
 
   return (
     <div 
-      className={`relative group flex flex-col h-full transition-all duration-300 hover:-translate-y-1
+      onClick={() => onClick && onClick(item)}
+      className={`relative group flex flex-col h-full transition-all duration-300 hover:-translate-y-1 cursor-pointer
         ${isXP 
           ? 'rounded border-2 border-dashed border-[#0058EE] bg-white/50 hover:bg-white' 
           : `rounded-2xl overflow-hidden border-2 border-dashed ${theme === 'dark' ? 'border-white/20 bg-white/5 hover:border-purple-500/50' : 'border-black/10 bg-black/5 hover:border-black/30'}`

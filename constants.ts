@@ -76,6 +76,11 @@ export const CATEGORY_CONDITIONS: Record<string, string[]> = {
   [DefaultCategory.PHONES]: ['НОВЫЙ (SEALED)', 'LIKE NEW', 'EXC', 'GOOD', 'FAIR', 'PARTS'],
   [DefaultCategory.GAMES]: ['SEALED', 'CIB', 'BOXED', 'LOOSE', 'D.O.A.'],
   [DefaultCategory.MUSIC]: ['MINT', 'NM', 'VG+', 'VG', 'G', 'POOR'],
+  [DefaultCategory.MAGAZINES]: ['NEW', 'FINE', 'VERY GOOD', 'GOOD', 'FAIR', 'POOR'],
+  [DefaultCategory.VIDEO]: ['SEALED', 'MINT', 'EXC', 'GOOD', 'VHS-RIP'],
+  [DefaultCategory.TOYS]: ['MISB (Sealed)', 'MIB (Boxed)', 'LOOSE (Complete)', 'LOOSE (Incomplete)', 'BROKEN'],
+  [DefaultCategory.COMPUTERS]: ['NOS (New Old Stock)', 'RESTORED', 'WORKING', 'UNTESTED', 'FOR PARTS'],
+  [DefaultCategory.CAMERAS]: ['MINT', 'NEAR MINT', 'EXC++', 'EXC', 'USER', 'UG'],
   [DefaultCategory.MISC]: ['ИДЕАЛ', 'ХОРОШЕЕ', 'ПОТЕРТОЕ', 'СЛОМАНО']
 };
 

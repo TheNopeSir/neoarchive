@@ -23,6 +23,7 @@ import CreateArtifactView from './components/CreateArtifactView';
 import CreateCollectionView from './components/CreateCollectionView';
 import CreateWishlistItemView from './components/CreateWishlistItemView';
 import WishlistCard from './components/WishlistCard';
+import WishlistDetailView from './components/WishlistDetailView';
 import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
 
@@ -50,6 +51,7 @@ export default function App() {
   
   const [selectedExhibit, setSelectedExhibit] = useState<Exhibit | null>(null);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [selectedWishlistItem, setSelectedWishlistItem] = useState<WishlistItem | null>(null);
   const [viewedProfileUsername, setViewedProfileUsername] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'>('ARTIFACTS');
@@ -74,11 +76,12 @@ export default function App() {
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
   // --- NAVIGATION HELPER ---
-  const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection }) => {
+  const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection; wishlistItem?: WishlistItem }) => {
       // 1. Update Data State
       if (params?.username) setViewedProfileUsername(params.username);
       if (params?.item) setSelectedExhibit(params.item);
       if (params?.collection) setSelectedCollection(params.collection);
+      if (params?.wishlistItem) setSelectedWishlistItem(params.wishlistItem);
 
       // 2. Update Navigation Stack
       setNavigationStack(prev => [...prev, view]);
@@ -91,6 +94,7 @@ export default function App() {
       if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
       else if (newView === 'EXHIBIT') path = `/artifact/${params?.item?.id || selectedExhibit?.id}`;
       else if (newView === 'COLLECTION_DETAIL') path = `/collection/${params?.collection?.id || selectedCollection?.id}`;
+      else if (newView === 'WISHLIST_DETAIL') path = `/wishlist/${params?.wishlistItem?.id || selectedWishlistItem?.id}`;
       else if (newView === 'ACTIVITY') path = '/activity';
       else if (newView === 'MY_COLLECTION') path = '/my-collection';
       else if (newView === 'HALL_OF_FAME') path = '/hall-of-fame';
@@ -121,10 +125,7 @@ export default function App() {
     const handlePopState = (event: PopStateEvent) => {
         if (event.state && event.state.view) {
             setView(event.state.view);
-            // We don't update navigationStack here closely because it's complex to sync perfectly 
-            // with browser history stack without a router lib, but this handles basic Back button usage.
         } else {
-            // Fallback to Feed if history state is empty
             setView('FEED');
         }
     };
@@ -174,28 +175,73 @@ export default function App() {
   }, [refreshData]);
 
   useEffect(() => {
-    const safetyTimer = setTimeout(() => { setIsInitializing(false); setShowSplash(false); }, 6000); // Increased safety timer
+    const safetyTimer = setTimeout(() => { setIsInitializing(false); setShowSplash(false); }, 6000); 
     const init = async () => {
       try {
-          // initializeDatabase now smart-waits if cache is empty
           const activeUser = await db.initializeDatabase();
+          // Initial Refresh to populate state
+          refreshData(); 
+
           if (activeUser) { 
               setUser(activeUser);
-              
-              // Apply saved theme preference
               if (activeUser.settings?.theme) {
                   setTheme(activeUser.settings.theme);
               }
 
-              // Simple URL parsing for initial load could go here
-              setView('FEED'); 
-              refreshData();
-          } 
-          else { setView('AUTH'); }
+              // --- DEEP LINKING ROUTING LOGIC ---
+              const path = window.location.pathname;
+              const data = db.getFullDatabase(); // Get raw data to find objects immediately
+
+              if (path.startsWith('/artifact/')) {
+                  const id = path.split('/')[2];
+                  const item = data.exhibits.find(e => e.id === id);
+                  if (item) {
+                      setSelectedExhibit(item);
+                      setView('EXHIBIT');
+                  } else {
+                      setView('FEED');
+                  }
+              } else if (path.startsWith('/collection/')) {
+                  const id = path.split('/')[2];
+                  const col = data.collections.find(c => c.id === id);
+                  if (col) {
+                      setSelectedCollection(col);
+                      setView('COLLECTION_DETAIL');
+                  } else {
+                      setView('FEED');
+                  }
+              } else if (path.startsWith('/wishlist/')) {
+                  const id = path.split('/')[2];
+                  const item = data.wishlist.find(w => w.id === id);
+                  if (item) {
+                      setSelectedWishlistItem(item);
+                      setView('WISHLIST_DETAIL');
+                  } else {
+                      setView('FEED');
+                  }
+              } else if (path.startsWith('/u/')) {
+                  const username = path.split('/')[2];
+                  setViewedProfileUsername(username);
+                  setView('USER_PROFILE');
+              } else if (path === '/activity') {
+                  setView('ACTIVITY');
+              } else if (path === '/my-collection') {
+                  setView('MY_COLLECTION');
+              } else if (path === '/hall-of-fame') {
+                  setView('HALL_OF_FAME');
+              } else if (path === '/create') {
+                  setView('CREATE_ARTIFACT');
+              } else if (path === '/search') {
+                  setView('SEARCH');
+              } else {
+                  setView('FEED'); 
+              }
+          } else { 
+              setView('AUTH'); 
+          }
       } catch (e) { 
           setView('AUTH'); 
-      } 
-      finally { 
+      } finally { 
           clearTimeout(safetyTimer); 
           setIsInitializing(false); 
           setTimeout(() => setShowSplash(false), 300); 
@@ -248,7 +294,6 @@ export default function App() {
     await db.updateExhibit(updated);
   };
 
-  // --- NEW: Handle Collection Like ---
   const handleCollectionLike = async (id: string, e?: React.MouseEvent) => {
       e?.stopPropagation();
       const col = collections.find(c => c.id === id);
@@ -333,7 +378,6 @@ export default function App() {
       const collection = collections.find(c => c.id === collectionId);
       if (!collection) return;
       
-      // Ensure we only add owned items to owned collections (Constraint check)
       const artifact = exhibits.find(e => e.id === isAddingToCollection);
       if (!artifact || artifact.owner !== user.username) {
           alert("Нельзя добавлять чужие артефакты в свои коллекции.");
@@ -352,17 +396,14 @@ export default function App() {
       setIsAddingToCollection(null);
   };
 
-  // Base filter for all feeds
   const baseFilteredExhibits = exhibits.filter(e => {
       if (e.isDraft && e.owner !== user?.username) return false;
       if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
       return true;
   });
 
-  // SUBSCRIPTION FEED: Only people I follow
   const followingExhibits = user ? baseFilteredExhibits.filter(e => user.following.includes(e.owner)) : [];
 
-  // GLOBAL FEED: Everyone ELSE (Exclude following, exclude myself) - Instagram Logic
   const globalExhibits = user ? baseFilteredExhibits.filter(e => 
       !user.following.includes(e.owner) && 
       e.owner !== user.username
@@ -371,26 +412,24 @@ export default function App() {
   const handleSaveArtifact = async (artifactData: Partial<Exhibit>) => {
       if (!user || !artifactData.title) return;
       
-      // Update Existing
       if (artifactData.id) {
           const existing = exhibits.find(e => e.id === artifactData.id);
           if (existing) {
               const updated: Exhibit = {
                   ...existing,
                   ...artifactData,
-                  // Ensure mandatory fields aren't lost if not passed in partial
                   imageUrls: artifactData.imageUrls || existing.imageUrls,
                   specs: artifactData.specs || existing.specs,
                   title: artifactData.title || existing.title,
                   category: artifactData.category || existing.category,
                   tradeStatus: artifactData.tradeStatus || existing.tradeStatus,
-                  relatedIds: artifactData.relatedIds || existing.relatedIds
+                  relatedIds: artifactData.relatedIds || existing.relatedIds,
+                  condition: artifactData.condition || existing.condition
               };
               await db.updateExhibit(updated);
               if (selectedExhibit?.id === updated.id) setSelectedExhibit(updated);
           }
       } else {
-          // Create New
           const ex: Exhibit = { 
             id: crypto.randomUUID(), 
             title: artifactData.title, 
@@ -407,22 +446,20 @@ export default function App() {
             specs: artifactData.specs || {}, 
             comments: [], 
             isDraft: artifactData.isDraft, 
-            quality: 'MINT',
+            condition: artifactData.condition,
+            quality: artifactData.condition || 'MINT',
             tradeStatus: artifactData.tradeStatus || 'NONE',
             relatedIds: artifactData.relatedIds || []
           };
           await db.saveExhibit(ex);
       }
-      
       navigateTo('FEED');
       refreshData();
   };
 
   const handleSaveCollection = async (data: Partial<Collection>) => {
       if (!user || !data.title) return;
-      
       if (data.id) {
-          // Update existing
           const existing = collections.find(c => c.id === data.id);
           if (existing) {
               const updated = { ...existing, ...data };
@@ -430,7 +467,6 @@ export default function App() {
               if (selectedCollection?.id === data.id) setSelectedCollection(updated as Collection);
           }
       } else {
-          // Create new
           const newCol: Collection = {
               id: crypto.randomUUID(),
               title: data.title!,
@@ -439,8 +475,8 @@ export default function App() {
               coverImage: data.coverImage || '',
               exhibitIds: data.exhibitIds || [],
               timestamp: new Date().toISOString(),
-              likes: 0, // Init likes
-              likedBy: [] // Init likedBy
+              likes: 0,
+              likedBy: []
           };
           await db.saveCollection(newCol);
       }
@@ -467,15 +503,22 @@ export default function App() {
       if(confirm('Удалить артефакт безвозвратно?')) {
           await db.deleteExhibit(id);
           setExhibits(prev => prev.filter(e => e.id !== id));
-          // Remove from collections locally
           setCollections(prev => prev.map(c => ({
               ...c,
               exhibitIds: c.exhibitIds.filter(eid => eid !== id)
           })));
-          // If currently viewing deleted item, go back
           if (selectedExhibit?.id === id) {
               handleBack();
           }
+      }
+  };
+
+  const handleDeleteWishlist = async (id: string) => {
+      if(!user) return;
+      if(confirm('Удалить запрос?')) {
+          await db.deleteWishlistItem(id);
+          setWishlist(prev => prev.filter(w => w.id !== id));
+          if(selectedWishlistItem?.id === id) handleBack();
       }
   };
 
@@ -507,14 +550,11 @@ export default function App() {
     );
   }
 
-  // Swipe logic active on ALL authenticated views to allow "Exit Window" behavior
   const swipeProps = view !== 'AUTH' ? swipeHandlers : {};
-
-  // Background style logic
   let bgClass = '';
   if (theme === 'dark') bgClass = 'bg-black text-gray-200';
   else if (theme === 'light') bgClass = 'bg-gray-100 text-gray-900';
-  else if (theme === 'xp') bgClass = 'bg-gradient-to-b from-[#628dce] via-[#85aaee] to-[#e2e1d6] text-black font-sans'; // Bliss-ish gradient
+  else if (theme === 'xp') bgClass = 'bg-gradient-to-b from-[#628dce] via-[#85aaee] to-[#e2e1d6] text-black font-sans'; 
 
   return (
     <div 
@@ -534,7 +574,6 @@ export default function App() {
                           NEO<span className={`${theme === 'xp' ? 'text-white' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
                       </div>
                       
-                      {/* NEW SEARCH BUTTON (Mobile & Desktop) */}
                       <button 
                         onClick={() => navigateTo('SEARCH')}
                         className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}
@@ -545,7 +584,6 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2 md:gap-4">
-                      {/* CREATE BUTTON FOR DESKTOP */}
                       <button 
                           onClick={() => setShowCreateMenu(true)} 
                           className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}
@@ -577,7 +615,6 @@ export default function App() {
             
             {view === 'AUTH' && <MatrixLogin theme={theme === 'xp' ? 'light' : theme} onLogin={(u) => { 
                 setUser(u); 
-                // Apply User Preference Theme
                 if(u.settings?.theme) setTheme(u.settings.theme);
                 navigateTo('FEED'); 
                 refreshData(); 
@@ -600,7 +637,6 @@ export default function App() {
 
             {view === 'FEED' && (
                 <div className="space-y-8 animate-in fade-in zoom-in-95">
-                    {/* Only show categories for ARTIFACTS mode */}
                     {feedMode === 'ARTIFACTS' && (
                         <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
                              <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
@@ -620,7 +656,6 @@ export default function App() {
                     
                     {feedMode === 'ARTIFACTS' && (
                         <div className="space-y-10">
-                            {/* SUBSCRIPTIONS FEED */}
                             {followingExhibits.length > 0 && (
                                 <div>
                                     <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Zap size={14} className="text-yellow-500" /> ПОДПИСКИ</h2>
@@ -632,7 +667,6 @@ export default function App() {
                                 </div>
                             )}
                             
-                            {/* GLOBAL FEED */}
                             <div>
                                 <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Grid size={14} className={theme === 'xp' ? 'text-blue-600' : 'text-green-500'} /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}</h2>
                                 {globalExhibits.length === 0 ? (
@@ -680,6 +714,7 @@ export default function App() {
                                     item={item} 
                                     theme={theme}
                                     onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                                    onClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })}
                                 />
                             ))}
                         </div>
@@ -692,7 +727,6 @@ export default function App() {
                 theme={theme} 
                 onBack={handleBack} 
                 onSave={handleSaveArtifact} 
-                // Pass current user's artifacts for linking
                 userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
               />
             )}
@@ -715,7 +749,6 @@ export default function App() {
                />
             )}
 
-            {/* CREATE OR EDIT COLLECTION VIEW */}
             {(view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') && user && (
                 <CreateCollectionView
                     theme={theme}
@@ -729,7 +762,7 @@ export default function App() {
 
             {view === 'EXHIBIT' && selectedExhibit && (
                 <ExhibitDetailPage 
-                    key={selectedExhibit.id} // Forces remount animation on ID change
+                    key={selectedExhibit.id}
                     exhibit={selectedExhibit} 
                     theme={theme} 
                     onBack={handleBack} 
@@ -752,7 +785,6 @@ export default function App() {
                     onDelete={(id: string) => handleDeleteArtifact(id)}
                     onExhibitClick={handleExhibitClick} 
                     users={db.getFullDatabase().users}
-                    // Pass all exhibits for Similarity Algorithm
                     allExhibits={exhibits}
                 />
             )}
@@ -769,6 +801,17 @@ export default function App() {
                     currentUser={user?.username || ''}
                     onEdit={() => navigateTo('EDIT_COLLECTION')}
                     onDelete={handleDeleteCollection}
+                />
+            )}
+
+            {view === 'WISHLIST_DETAIL' && selectedWishlistItem && (
+                <WishlistDetailView
+                    item={selectedWishlistItem}
+                    theme={theme}
+                    onBack={handleBack}
+                    onDelete={handleDeleteWishlist}
+                    onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
+                    currentUser={user?.username || ''}
                 />
             )}
 
@@ -834,6 +877,7 @@ export default function App() {
                     setProfileTab={setProfileTab} 
                     onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} 
                     onThemeChange={(t) => setTheme(t)}
+                    onWishlistClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })}
                 />
             )}
 
@@ -855,7 +899,6 @@ export default function App() {
 
         </main>
 
-        {/* CREATE MENU MODAL */}
         {showCreateMenu && (
             <div className="fixed inset-0 z-[3000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowCreateMenu(false)}>
                 <div className={`w-full max-w-sm p-6 rounded-3xl border-2 transform transition-all scale-100 ${theme === 'dark' ? 'bg-[#09090b] border-white/10 shadow-[0_0_50px_rgba(74,222,128,0.2)]' : 'bg-white border-black/10 shadow-2xl'}`} onClick={e => e.stopPropagation()}>
@@ -899,7 +942,6 @@ export default function App() {
             </div>
         )}
         
-        {/* ADD TO COLLECTION MODAL */}
         {isAddingToCollection && user && (
             <div className="fixed inset-0 z-[2000] bg-black/80 flex items-center justify-center p-4">
                 <div className={`w-full max-w-md p-6 rounded-2xl border ${theme === 'dark' ? 'bg-dark-surface border-white/10' : 'bg-white border-black/10'}`}>
@@ -909,7 +951,6 @@ export default function App() {
                     </div>
                     
                     <div className="space-y-2 max-h-[60vh] overflow-y-auto mb-4 scrollbar-hide">
-                        {/* New Collection Button */}
                          <button 
                             onClick={() => { setIsAddingToCollection(null); navigateTo('CREATE_COLLECTION'); }}
                             className="w-full text-left p-4 rounded-xl border border-dashed border-white/20 hover:bg-white/5 flex items-center justify-center gap-2 mb-4 text-green-500"

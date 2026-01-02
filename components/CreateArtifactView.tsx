@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
-import { Camera, ArrowLeft, Save, X, Info, Archive, Video, RefreshCw, Link2 } from 'lucide-react';
-import { DefaultCategory, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES, TRADE_STATUS_CONFIG } from '../constants';
+import { Camera, ArrowLeft, Save, X, Info, Archive, Video, RefreshCw, Link2, Award } from 'lucide-react';
+import { DefaultCategory, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES, TRADE_STATUS_CONFIG, CATEGORY_CONDITIONS } from '../constants';
 import { fileToBase64 } from '../services/storageService';
 import { Exhibit, TradeStatus } from '../types';
 
@@ -19,6 +19,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
   const [description, setDescription] = useState(initialData?.description || '');
   const [category, setCategory] = useState<string>(initialData?.category || DefaultCategory.PHONES);
   const [subcategory, setSubcategory] = useState(initialData?.subcategory || '');
+  const [condition, setCondition] = useState(initialData?.condition || '');
   const [videoUrl, setVideoUrl] = useState(initialData?.videoUrl || '');
   const [specs, setSpecs] = useState<Record<string, string>>(initialData?.specs || {});
   const [tradeStatus, setTradeStatus] = useState<TradeStatus>(initialData?.tradeStatus || 'NONE');
@@ -52,6 +53,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
       description,
       category,
       subcategory,
+      condition,
       videoUrl,
       imageUrls: images.length > 0 ? images : ['https://placehold.co/600x400?text=NO+IMAGE'],
       specs,
@@ -123,12 +125,12 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                   />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-[10px] font-pixel opacity-50 uppercase tracking-widest mb-2 block">Категория</label>
                   <select 
                     value={category} 
-                    onChange={e => { setCategory(e.target.value); setSubcategory(''); }}
+                    onChange={e => { setCategory(e.target.value); setSubcategory(''); setCondition(''); }}
                     className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-green-500 outline-none appearance-none"
                   >
                     {Object.values(DefaultCategory).map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -145,6 +147,19 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                     <option value="">Не выбрано</option>
                     {CATEGORY_SUBCATEGORIES[category]?.map(sub => <option key={sub} value={sub}>{sub}</option>)}
                   </select>
+                </div>
+                <div>
+                    <label className="text-[10px] font-pixel opacity-50 uppercase tracking-widest mb-2 flex items-center gap-2"><Award size={12}/> Грейд / Состояние</label>
+                    <select 
+                        value={condition} 
+                        onChange={e => setCondition(e.target.value)}
+                        className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-green-500 outline-none appearance-none"
+                    >
+                        <option value="">Не указано</option>
+                        {(CATEGORY_CONDITIONS[category] || CATEGORY_CONDITIONS[DefaultCategory.MISC]).map(cond => (
+                            <option key={cond} value={cond}>{cond}</option>
+                        ))}
+                    </select>
                 </div>
               </div>
 
