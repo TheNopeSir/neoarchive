@@ -12,10 +12,11 @@ interface CommunityHubProps {
     onExhibitClick: (item: Exhibit) => void;
     onUserClick: (username: string) => void;
     onBack?: () => void;
-    onGuildClick?: (guild: Guild) => void; // New prop to handle guild navigation
+    onGuildClick?: (guild: Guild) => void; 
+    currentUser?: UserProfile | null; // Added prop for proper guild creation
 }
 
-const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onExhibitClick, onUserClick, onBack, onGuildClick }) => {
+const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onExhibitClick, onUserClick, onBack, onGuildClick, currentUser }) => {
     const [tab, setTab] = useState<'TRENDS' | 'TRADE' | 'DUELS' | 'GUILDS'>('TRENDS');
     const [showCreateGuild, setShowCreateGuild] = useState(false);
     const [newGuildName, setNewGuildName] = useState('');
@@ -52,13 +53,13 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
     };
 
     const handleCreateGuild = () => {
-        if(!newGuildName) return;
+        if(!newGuildName || !currentUser) return;
         const newGuild: Guild = {
             id: crypto.randomUUID(),
             name: newGuildName,
             description: newGuildDesc,
-            leader: 'CurrentUser', // App should inject current user really, handled in service usually or passed down
-            members: ['CurrentUser'],
+            leader: currentUser.username, // FIXED: Use actual current user
+            members: [currentUser.username],
             isPrivate: false,
             rules: newGuildRules,
             bannerUrl: newGuildAvatar
@@ -72,8 +73,8 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
     };
 
     const handleJoinByCode = async () => {
-        if (!joinCode) return;
-        const success = await joinGuild(joinCode, 'CurrentUser');
+        if (!joinCode || !currentUser) return;
+        const success = await joinGuild(joinCode, currentUser.username);
         if (success) {
             alert('Вы вступили в гильдию!');
             setJoinCode('');
@@ -113,8 +114,8 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
             {/* Header */}
             {isWinamp ? (
                 <WinampWindow title="COMMUNITY NETWORK">
-                    <h1 className="text-xl font-winamp text-wa-gold flex items-center gap-2 mb-2"><Users size={24}/> GLOBAL NETWORK HUB</h1>
-                    <p className="text-[12px] opacity-80">Connected Nodes: {users.length}</p>
+                    <h1 className="text-xl font-winamp text-wa-gold flex items-center gap-2 mb-2"><Users size={24}/> ГЛОБАЛЬНАЯ СЕТЬ</h1>
+                    <p className="text-[12px] opacity-80">Активные узлы: {users.length}</p>
                 </WinampWindow>
             ) : (
                 <div className="p-6 mb-6 border-b border-white/10">
@@ -125,10 +126,10 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
 
             {/* Navigation */}
             <div className={`flex mb-8 sticky top-16 z-30 ${isWinamp ? 'bg-[#292929] border-b border-[#505050]' : 'border-b border-white/10 bg-black/80 backdrop-blur-md'}`}>
-                {renderTabButton('TRENDS', TrendingUp, 'Тренды')}
-                {renderTabButton('TRADE', RefreshCw, 'Обмен')}
-                {renderTabButton('DUELS', Swords, 'Дуэли')}
-                {renderTabButton('GUILDS', Shield, 'Гильдии')}
+                {renderTabButton('TRENDS', TrendingUp, 'ТРЕНДЫ')}
+                {renderTabButton('TRADE', RefreshCw, 'ОБМЕН')}
+                {renderTabButton('DUELS', Swords, 'ДУЭЛИ')}
+                {renderTabButton('GUILDS', Shield, 'ГИЛЬДИИ')}
             </div>
 
             {/* Content Area */}
@@ -137,7 +138,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
                     <div className="space-y-8 animate-in slide-in-from-right-4">
                         {/* Top Collectors */}
                         <div className={`p-4 rounded-2xl border ${isWinamp ? 'bg-[#292929] border-[#505050]' : 'bg-gradient-to-r from-yellow-900/10 to-transparent border-yellow-500/20'}`}>
-                            <h3 className={`text-xs mb-4 flex items-center gap-2 uppercase tracking-widest ${isWinamp ? 'text-wa-gold font-winamp' : 'text-yellow-500 font-pixel'}`}><Trophy size={14}/> Топ Коллекционеры</h3>
+                            <h3 className={`text-xs mb-4 flex items-center gap-2 uppercase tracking-widest ${isWinamp ? 'text-wa-gold font-winamp' : 'text-yellow-500 font-pixel'}`}><Trophy size={14}/> ТОП КОЛЛЕКЦИОНЕРЫ</h3>
                             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
                                 {topUsers.map((u, i) => (
                                     <div key={u.username} onClick={() => onUserClick(u.username)} className="flex flex-col items-center gap-2 cursor-pointer group min-w-[80px]">
@@ -156,7 +157,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
 
                         {/* Hot Items */}
                         <div>
-                            <h3 className={`text-xs mb-4 flex items-center gap-2 uppercase tracking-widest ${isWinamp ? 'text-wa-gold font-winamp' : 'text-red-400 font-pixel'}`}><Flame size={14}/> Сейчас популярно</h3>
+                            <h3 className={`text-xs mb-4 flex items-center gap-2 uppercase tracking-widest ${isWinamp ? 'text-wa-gold font-winamp' : 'text-red-400 font-pixel'}`}><Flame size={14}/> СЕЙЧАС ПОПУЛЯРНО</h3>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {trendingExhibits.map(item => (
                                     <ExhibitCard 
@@ -255,7 +256,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
                                             <button 
                                                 className={`px-4 py-2 text-[10px] border rounded uppercase opacity-50 hover:opacity-100 ${isWinamp ? 'border-wa-green text-wa-green' : ''}`}
                                             >
-                                                Открыть
+                                                ОТКРЫТЬ
                                             </button>
                                         </div>
                                     ))}
@@ -263,7 +264,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
                             </div>
                         ) : (
                             <div className={`p-6 border rounded-xl space-y-4 ${isWinamp ? 'bg-[#292929] border-[#505050]' : 'bg-white/5 border-white/10'}`}>
-                                <h3 className="font-pixel text-lg">Создание Гильдии</h3>
+                                <h3 className="font-pixel text-lg">СОЗДАНИЕ ГИЛЬДИИ</h3>
                                 
                                 <div className="flex items-center gap-4">
                                     <div 
@@ -295,8 +296,8 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
                                     onChange={(e) => setNewGuildRules(e.target.value)}
                                 />
                                 <div className="flex gap-2">
-                                    <button onClick={handleCreateGuild} className="bg-green-500 text-black px-6 py-2 rounded font-bold text-xs uppercase">Создать</button>
-                                    <button onClick={() => setShowCreateGuild(false)} className="border border-white/20 px-6 py-2 rounded hover:bg-white/10 text-xs uppercase">Отмена</button>
+                                    <button onClick={handleCreateGuild} className="bg-green-500 text-black px-6 py-2 rounded font-bold text-xs uppercase">СОЗДАТЬ</button>
+                                    <button onClick={() => setShowCreateGuild(false)} className="border border-white/20 px-6 py-2 rounded hover:bg-white/10 text-xs uppercase">ОТМЕНА</button>
                                 </div>
                             </div>
                         )}

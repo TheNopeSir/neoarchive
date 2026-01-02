@@ -453,12 +453,16 @@ export const deleteGuestbookEntry = async (id: string) => { cache.guestbook = ca
 export const createGuild = async (guild: Guild) => {
     guild.inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     cache.guilds.push(guild);
-    // Auto-update user profile to show guild membership
+    
+    // Update leader's profile
     const leader = cache.users.find(u => u.username === guild.leader);
-    if(leader) { leader.guildId = guild.id; updateUserProfile(leader); }
+    if(leader) { 
+        leader.guildId = guild.id; 
+        updateUserProfile(leader); 
+    }
+    
     await saveToLocalCache();
     notifyListeners();
-    // In real app, sync to server
 };
 
 export const updateGuild = async (guild: Guild) => {
@@ -470,6 +474,24 @@ export const updateGuild = async (guild: Guild) => {
     }
 };
 
+export const deleteGuild = async (guildId: string) => {
+    const guild = cache.guilds.find(g => g.id === guildId);
+    if (!guild) return;
+
+    // Remove guildId from all members
+    guild.members.forEach(username => {
+        const u = cache.users.find(user => user.username === username);
+        if (u) {
+            u.guildId = undefined;
+            updateUserProfile(u);
+        }
+    });
+
+    cache.guilds = cache.guilds.filter(g => g.id !== guildId);
+    await saveToLocalCache();
+    notifyListeners();
+};
+
 export const joinGuild = async (guildIdOrCode: string, username: string) => {
     let g = cache.guilds.find(g => g.id === guildIdOrCode || g.inviteCode === guildIdOrCode);
     
@@ -477,10 +499,15 @@ export const joinGuild = async (guildIdOrCode: string, username: string) => {
 
     const u = cache.users.find(u => u.username === username);
     if (g && u && !g.members.includes(username)) {
+        // If user is already in another guild, they leave it first (optional logic, but cleaner)
+        if (u.guildId && u.guildId !== g.id) {
+            await leaveGuild(u.guildId, username);
+        }
+
         g.members.push(username);
         u.guildId = g.id;
-        await saveToLocalCache();
-        notifyListeners();
+        await updateUserProfile(u);
+        await updateGuild(g);
         return true;
     }
     return false;
@@ -489,12 +516,20 @@ export const joinGuild = async (guildIdOrCode: string, username: string) => {
 export const leaveGuild = async (guildId: string, username: string) => {
     const g = cache.guilds.find(g => g.id === guildId);
     const u = cache.users.find(u => u.username === username);
+    
     if (g && u) {
+        // Leader cannot simply leave, they must delete the guild (simplified logic)
+        if (g.leader === username) {
+            return false; 
+        }
+
         g.members = g.members.filter(m => m !== username);
         u.guildId = undefined;
-        await saveToLocalCache();
-        notifyListeners();
+        await updateUserProfile(u);
+        await updateGuild(g);
+        return true;
     }
+    return false;
 };
 
 export const kickFromGuild = async (guildId: string, targetUsername: string) => {
@@ -503,8 +538,8 @@ export const kickFromGuild = async (guildId: string, targetUsername: string) => 
     if (g && u) {
         g.members = g.members.filter(m => m !== targetUsername);
         u.guildId = undefined;
-        await saveToLocalCache();
-        notifyListeners();
+        await updateUserProfile(u);
+        await updateGuild(g);
     }
 };
 

@@ -27,7 +27,7 @@ import WishlistCard from './components/WishlistCard';
 import WishlistDetailView from './components/WishlistDetailView';
 import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
-import GuildDetailView from './components/GuildDetailView'; // Import new component
+import GuildDetailView from './components/GuildDetailView';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem, Guild } from './types';
@@ -103,6 +103,8 @@ export default function App() {
       let path = '/';
       if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
       else if (newView === 'EXHIBIT') path = `/artifact/${params?.item?.id || selectedExhibit?.id}`;
+      else if (newView === 'COLLECTION_DETAIL') path = `/collection/${params?.collection?.id || selectedCollection?.id}`;
+      else if (newView === 'GUILD_DETAIL') path = `/guild/${params?.guild?.id || selectedGuild?.id}`;
       else if (newView === 'COMMUNITY_HUB') path = '/community';
       
       window.history.pushState({ view: newView }, '', path);
@@ -167,7 +169,11 @@ export default function App() {
     return () => unsubscribe();
   }, [refreshData]);
 
+  // INITIALIZATION AND URL ROUTING
   useEffect(() => {
+    // Add scroll overflow to body to prevent layout shift
+    document.body.style.overflowY = 'scroll';
+
     const safetyTimer = setTimeout(() => { setIsInitializing(false); setShowSplash(false); }, 6000); 
     const init = async () => {
       try {
@@ -176,7 +182,53 @@ export default function App() {
           if (activeUser) { 
               setUser(activeUser);
               if (activeUser.settings?.theme) setTheme(activeUser.settings.theme);
-              setView('FEED'); 
+              
+              // --- URL PARSER LOGIC ---
+              const path = window.location.pathname;
+              const data = db.getFullDatabase(); // Get data from fresh init
+
+              if (path.startsWith('/u/') || path.startsWith('/profile/')) {
+                  const username = path.split('/')[2];
+                  if (username) {
+                      setViewedProfileUsername(username);
+                      setView('USER_PROFILE');
+                  } else {
+                      setView('FEED');
+                  }
+              } else if (path.startsWith('/artifact/')) {
+                  const id = path.split('/')[2];
+                  const item = data.exhibits.find(e => e.id === id);
+                  if (item) {
+                      setSelectedExhibit(item);
+                      setView('EXHIBIT');
+                  } else {
+                      setView('FEED');
+                  }
+              } else if (path.startsWith('/collection/')) {
+                  const id = path.split('/')[2];
+                  const col = data.collections.find(c => c.id === id);
+                  if (col) {
+                      setSelectedCollection(col);
+                      setView('COLLECTION_DETAIL');
+                  } else {
+                      setView('FEED');
+                  }
+              } else if (path.startsWith('/guild/')) {
+                  const id = path.split('/')[2];
+                  const guild = data.guilds.find(g => g.id === id);
+                  if (guild) {
+                      setSelectedGuild(guild);
+                      setView('GUILD_DETAIL');
+                  } else {
+                      setView('FEED');
+                  }
+              } else if (path === '/community') {
+                  setView('COMMUNITY_HUB');
+              } else {
+                  setView('FEED'); 
+              }
+              // ------------------------
+
           } else { setView('AUTH'); }
       } catch (e) { setView('AUTH'); } 
       finally { clearTimeout(safetyTimer); setIsInitializing(false); setTimeout(() => setShowSplash(false), 300); }
@@ -318,7 +370,7 @@ export default function App() {
       );
   }, [baseFilteredExhibits]);
   
-  // WISHLIST SORTING - Updated: No extra priority for Grail in main sorting
+  // WISHLIST SORTING
   const sortedWishlist = useMemo(() => {
       return [...wishlist].sort((a,b) => 
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
@@ -449,13 +501,13 @@ export default function App() {
                           
                           {/* Desktop Winamp Navigation */}
                           <div className="hidden md:flex gap-2 font-winamp text-[10px] text-wa-gold">
-                              <button onClick={() => user && navigateTo('USER_PROFILE', { username: user.username })} className="hover:text-white">[ PROFILE ]</button>
-                              <button onClick={() => navigateTo('COMMUNITY_HUB')} className="hover:text-white">[ NETWORK ]</button>
+                              <button onClick={() => user && navigateTo('USER_PROFILE', { username: user.username })} className="hover:text-white">[ ПРОФИЛЬ ]</button>
+                              <button onClick={() => navigateTo('COMMUNITY_HUB')} className="hover:text-white">[ СЕТЬ ]</button>
                               <button onClick={() => navigateTo('ACTIVITY')} className="hover:text-white relative">
-                                  [ LOGS ]
+                                  [ ЛОГИ ]
                                   {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute -top-1 -right-1 text-red-500">*</span>}
                               </button>
-                              <button onClick={() => navigateTo('SEARCH')} className="hover:text-white">[ SEARCH ]</button>
+                              <button onClick={() => navigateTo('SEARCH')} className="hover:text-white">[ ПОИСК ]</button>
                           </div>
 
                           <div className="flex gap-1">
@@ -471,11 +523,11 @@ export default function App() {
                                 NEO<span className={`${theme === 'xp' ? 'text-white' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
                             </div>
                             <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`hidden md:flex items-center px-4 py-1.5 rounded-2xl transition-all ${theme === 'dark' ? 'hover:bg-white/10 text-white/70' : 'hover:bg-black/10'}`}>
-                                <Globe size={14} className="mr-2"/> <span className="font-pixel text-xs">COMMUNITY</span>
+                                <Globe size={14} className="mr-2"/> <span className="font-pixel text-xs">СООБЩЕСТВО</span>
                             </button>
                             <button onClick={() => navigateTo('SEARCH')} className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}>
                                 <Search size={14} className={`${theme === 'xp' ? 'opacity-100 text-blue-600' : 'opacity-40'} mr-2`} />
-                                <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК ПО БАЗЕ...</span>
+                                <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК...</span>
                             </button>
                           </div>
                           
@@ -515,16 +567,16 @@ export default function App() {
                     {/* Winamp doesn't need big tabs, it needs small buttons or a playlist switch */}
                     {theme === 'winamp' ? (
                         <div className="flex gap-1 mb-4 border-b border-[#505050] pb-2">
-                             <button onClick={() => setFeedMode('ARTIFACTS')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'ARTIFACTS' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ ARTIFACTS ]</button>
-                             <button onClick={() => setFeedMode('COLLECTIONS')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'COLLECTIONS' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ COLLECTIONS ]</button>
-                             <button onClick={() => setFeedMode('WISHLIST')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'WISHLIST' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ WISHLIST ]</button>
+                             <button onClick={() => setFeedMode('ARTIFACTS')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'ARTIFACTS' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ АРТЕФАКТЫ ]</button>
+                             <button onClick={() => setFeedMode('COLLECTIONS')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'COLLECTIONS' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ КОЛЛЕКЦИИ ]</button>
+                             <button onClick={() => setFeedMode('WISHLIST')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'WISHLIST' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ ВИШЛИСТ ]</button>
                         </div>
                     ) : (
                         <div className="flex items-center justify-between border-b border-white/10 pb-4">
                             <div className="flex gap-6 overflow-x-auto scrollbar-hide w-full">
                                 <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
                                 <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
-                                <button onClick={() => setFeedMode('WISHLIST')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Radar size={14} /> РАДАР (WISHLIST)</button>
+                                <button onClick={() => setFeedMode('WISHLIST')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Radar size={14} /> РАДАР (ВИШЛИСТ)</button>
                             </div>
                         </div>
                     )}
@@ -537,7 +589,7 @@ export default function App() {
                             <div className="space-y-4">
                                 <div className={`flex gap-2 overflow-x-auto pb-2 scrollbar-hide ${theme === 'winamp' ? 'border-b border-[#505050]' : ''}`}>
                                     <button onClick={() => { setSelectedCategory('ВСЕ'); setSelectedSubcategory('ВСЕ'); }} className={`whitespace-nowrap transition-all ${theme === 'winamp' ? `px-2 py-1 text-[10px] font-winamp ${selectedCategory === 'ВСЕ' ? 'text-wa-gold' : 'text-wa-green'}` : `px-5 py-2 rounded-xl font-pixel text-[10px] font-bold border ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}`}>
-                                        {theme === 'winamp' ? '[ ALL ]' : 'ВСЕ'}
+                                        {theme === 'winamp' ? '[ ВСЕ ]' : 'ВСЕ'}
                                     </button>
                                     {Object.values(DefaultCategory).map(cat => (
                                         <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubcategory('ВСЕ'); }} className={`whitespace-nowrap transition-all ${theme === 'winamp' ? `px-2 py-1 text-[10px] font-winamp ${selectedCategory === cat ? 'text-wa-gold' : 'text-wa-green'}` : `px-5 py-2 rounded-xl font-pixel text-[10px] font-bold border ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}`}>
@@ -579,7 +631,7 @@ export default function App() {
 
             {view === 'COMMUNITY_HUB' && (
                 <div key="COMMUNITY_HUB" className="animate-in fade-in">
-                    <CommunityHub theme={theme} users={db.getFullDatabase().users} exhibits={exhibits} onExhibitClick={handleExhibitClick} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onGuildClick={(g) => navigateTo('GUILD_DETAIL', { guild: g })} />
+                    <CommunityHub theme={theme} users={db.getFullDatabase().users} exhibits={exhibits} onExhibitClick={handleExhibitClick} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onGuildClick={(g) => navigateTo('GUILD_DETAIL', { guild: g })} currentUser={user} />
                 </div>
             )}
 

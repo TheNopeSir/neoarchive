@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Users, Shield, BookOpen, Share2, LogOut, Trash2, UserMinus } from 'lucide-react';
 import { Guild, UserProfile } from '../types';
-import { getUserAvatar, updateGuild, leaveGuild, kickFromGuild } from '../services/storageService';
+import { getUserAvatar, leaveGuild, kickFromGuild, deleteGuild } from '../services/storageService';
 
 interface GuildDetailViewProps {
     guild: Guild;
@@ -27,8 +27,19 @@ const GuildDetailView: React.FC<GuildDetailViewProps> = ({
     };
 
     const handleLeave = async () => {
+        if (isLeader) {
+            alert('Лидер не может покинуть гильдию. Вы можете удалить её или передать права (в разработке).');
+            return;
+        }
         if (confirm('Вы уверены, что хотите покинуть гильдию?')) {
-            await leaveGuild(guild.id, currentUser.username);
+            const success = await leaveGuild(guild.id, currentUser.username);
+            if(success) onBack();
+        }
+    };
+
+    const handleDelete = async () => {
+        if (confirm('Вы уверены? Это удалит гильдию и исключит всех участников. Действие необратимо.')) {
+            await deleteGuild(guild.id);
             onBack();
         }
     };
@@ -60,8 +71,8 @@ const GuildDetailView: React.FC<GuildDetailViewProps> = ({
                         <h1 className={`text-2xl md:text-3xl font-pixel font-bold mb-2 ${isWinamp ? 'text-[#00ff00]' : 'text-white'}`}>{guild.name}</h1>
                         <p className="opacity-60 text-sm font-mono max-w-xl">{guild.description}</p>
                         <div className="flex items-center justify-center md:justify-start gap-4 mt-4 text-xs font-mono opacity-50">
-                            <span className="flex items-center gap-1"><Users size={14}/> {guild.members.length} Members</span>
-                            <span className="flex items-center gap-1"><Shield size={14}/> Leader: {guild.leader}</span>
+                            <span className="flex items-center gap-1"><Users size={14}/> {guild.members.length} Участников</span>
+                            <span className="flex items-center gap-1"><Shield size={14}/> Лидер: {guild.leader}</span>
                         </div>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -69,12 +80,19 @@ const GuildDetailView: React.FC<GuildDetailViewProps> = ({
                             onClick={handleCopyInvite}
                             className={`px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase hover:bg-blue-500 transition-all flex items-center gap-2`}
                         >
-                            <Share2 size={14}/> {inviteCopied ? 'КОД СКОПИРОВАН!' : 'ПРИГЛАСИТЬ'}
+                            <Share2 size={14}/> {inviteCopied ? 'СКОПИРОВАНО!' : 'ПРИГЛАСИТЬ'}
                         </button>
-                        {guild.inviteCode && <div className="text-[10px] text-center opacity-50 font-mono">CODE: {guild.inviteCode}</div>}
+                        {guild.inviteCode && <div className="text-[10px] text-center opacity-50 font-mono">КОД: {guild.inviteCode}</div>}
+                        
                         {!isLeader && (
                             <button onClick={handleLeave} className="px-4 py-2 border border-red-500/50 text-red-500 rounded-xl font-bold text-xs uppercase hover:bg-red-500/10 transition-all flex items-center gap-2">
                                 <LogOut size={14}/> ПОКИНУТЬ
+                            </button>
+                        )}
+
+                        {isLeader && (
+                            <button onClick={handleDelete} className="px-4 py-2 border border-red-600 text-red-500 rounded-xl font-bold text-xs uppercase hover:bg-red-600 hover:text-white transition-all flex items-center gap-2">
+                                <Trash2 size={14}/> УДАЛИТЬ
                             </button>
                         )}
                     </div>
