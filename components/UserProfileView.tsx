@@ -77,7 +77,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     } as UserProfile;
 
     const isCurrentUser = user?.username === viewedProfileUsername;
-    const isSubscribed = user?.following.includes(viewedProfileUsername) || false;
+    const isSubscribed = user?.following?.includes(viewedProfileUsername) || false;
     const isWinamp = theme === 'winamp';
 
     const [activeSection, setActiveSection] = useState<'SHELF' | 'LOGS' | 'CONFIG' | 'WISHLIST'>('SHELF');

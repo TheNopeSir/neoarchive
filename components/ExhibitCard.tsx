@@ -27,12 +27,14 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
 
   const isXP = theme === 'xp';
   const isWinamp = theme === 'winamp';
+  
+  const imageUrl = item.imageUrls?.[0] || 'https://placehold.co/600x400?text=NO+IMAGE';
 
   if (isWinamp) {
       return (
         <div 
             onClick={() => onClick(item)}
-            className="group cursor-pointer flex flex-col h-full bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] overflow-hidden"
+            className="group cursor-pointer flex flex-col h-full min-h-[200px] bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] overflow-hidden"
         >
             {/* Winamp Title Bar */}
             <div className="h-4 bg-gradient-to-r from-wa-blue-light to-wa-blue-dark flex items-center justify-between px-1 cursor-default select-none">
@@ -46,7 +48,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
                 <div className="relative aspect-square mb-2 bg-black border-2 border-t-[#101010] border-l-[#101010] border-r-[#505050] border-b-[#505050] flex items-center justify-center overflow-hidden">
                     {!isLoaded && <div className="text-wa-green font-winamp text-xs animate-pulse">LOADING...</div>}
                     <img 
-                        src={item.imageUrls[0]} 
+                        src={imageUrl} 
                         alt={item.title} 
                         loading="lazy"
                         onLoad={() => setIsLoaded(true)}
@@ -103,7 +105,7 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
         )}
         
         <img 
-            src={item.imageUrls[0]} 
+            src={imageUrl} 
             alt={item.title} 
             loading="lazy"
             onLoad={() => setIsLoaded(true)}

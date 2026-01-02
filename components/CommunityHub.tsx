@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Trophy, TrendingUp, Users, RefreshCw, Swords, Shield, Star, Flame, Lock, UserPlus, Zap } from 'lucide-react';
+import { Trophy, TrendingUp, Users, RefreshCw, Swords, Shield, Flame, Lock, UserPlus } from 'lucide-react';
 import { UserProfile, Exhibit, Guild } from '../types';
 import ExhibitCard from './ExhibitCard';
 import { getUserAvatar, getFullDatabase, createGuild, joinGuild } from '../services/storageService';
@@ -30,17 +30,16 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
     const topUsers = users
         .map(u => {
             const postCount = exhibits.filter(e => e.owner === u.username).length;
-            const likeCount = u.achievements.find(a => a.id === 'INFLUENCER')?.current || 0; // Simplified proxy for total likes
-            const score = (postCount * 5) + likeCount + (u.followers.length * 2);
+            const likeCount = u.achievements?.find(a => a.id === 'INFLUENCER')?.current || 0;
+            const followerCount = u.followers?.length || 0; // Fix: Safe access
+            const score = (postCount * 5) + likeCount + (followerCount * 2);
             return { ...u, score, postCount };
         })
-        .filter(u => u.score > 0) // Hide inactive users
+        .filter(u => u.score > 0)
         .sort((a,b) => b.score - a.score)
         .slice(0, 5);
 
     const trendingExhibits = exhibits.sort((a,b) => (b.likes + b.views) - (a.likes + a.views)).slice(0, 6);
-    
-    // Trade: Only items FOR SALE or FOR TRADE
     const tradeExhibits = exhibits.filter(e => e.tradeStatus === 'FOR_SALE' || e.tradeStatus === 'FOR_TRADE');
 
     const handleCreateGuild = () => {
@@ -49,7 +48,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
             id: crypto.randomUUID(),
             name: newGuildName,
             description: newGuildDesc,
-            leader: 'CurrentUser', // Mock, usually passed via props or context
+            leader: 'CurrentUser', 
             members: ['CurrentUser'],
             isPrivate: false
         };
@@ -91,7 +90,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
             {isWinamp ? (
                 <WinampWindow title="COMMUNITY NETWORK">
                     <h1 className="text-xl font-winamp text-wa-gold flex items-center gap-2 mb-2"><Users size={24}/> GLOBAL NETWORK HUB</h1>
-                    <p className="text-[12px] opacity-80">Connecting {users.length} nodes...</p>
+                    <p className="text-[12px] opacity-80">Connected Nodes: {users.length}</p>
                 </WinampWindow>
             ) : (
                 <div className="p-6 mb-6 border-b border-white/10">
@@ -181,41 +180,6 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
                     </div>
                 )}
 
-                {tab === 'DUELS' && (
-                    <div className="animate-in slide-in-from-right-4 space-y-6">
-                        {duelStage === 'LOBBY' && (
-                            <div className="text-center py-10 space-y-6">
-                                <Swords size={64} className={`mx-auto ${isWinamp ? 'text-wa-gold' : 'text-red-500 opacity-50'}`} />
-                                <div>
-                                    <h2 className="font-pixel text-lg mb-2">АРЕНА ДУЭЛЕЙ</h2>
-                                    <p className="font-mono text-xs opacity-60 max-w-md mx-auto">
-                                        Вызывайте других коллекционеров на битву. Сравните редкость предметов.<br/>
-                                        Победитель получает опыт и уважение.
-                                    </p>
-                                </div>
-                                <button 
-                                    onClick={() => setDuelStage('FIGHT')} // Shortcuts to fight animation for demo
-                                    className={`px-8 py-3 border rounded-full font-pixel text-xs uppercase tracking-widest transition-all hover:scale-105 ${isWinamp ? 'border-wa-gold text-wa-gold hover:bg-[#292929]' : 'border-red-500/50 hover:bg-red-500/10'}`}
-                                >
-                                    НАЙТИ ПРОТИВНИКА
-                                </button>
-                            </div>
-                        )}
-
-                        {duelStage === 'FIGHT' && (
-                            <div className={`p-8 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-8 ${isWinamp ? 'border-[#505050] bg-[#191919]' : 'border-red-500/30 bg-red-900/10'}`}>
-                                <div className="text-xl font-pixel animate-pulse">БИТВА...</div>
-                                <div className="flex items-center gap-8">
-                                    <div className="w-20 h-20 bg-gray-800 rounded animate-bounce"></div>
-                                    <div className="font-black text-2xl">VS</div>
-                                    <div className="w-20 h-20 bg-gray-800 rounded animate-bounce animation-delay-500"></div>
-                                </div>
-                                <button onClick={() => setDuelStage('LOBBY')} className="text-xs underline opacity-50">Отмена</button>
-                            </div>
-                        )}
-                    </div>
-                )}
-
                 {tab === 'GUILDS' && (
                     <div className="animate-in slide-in-from-right-4">
                         {!showCreateGuild ? (
@@ -254,7 +218,6 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
                             </div>
                         ) : (
                             <div className="p-6 border rounded-xl">
-                                {/* Create Guild Form Placeholder */}
                                 <h3 className="font-pixel mb-4">Создание Гильдии</h3>
                                 <input 
                                     className="w-full bg-black/20 border p-2 mb-2" 

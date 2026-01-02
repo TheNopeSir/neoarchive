@@ -517,16 +517,18 @@ export default function App() {
                     {feedMode === 'ARTIFACTS' && (
                         <div key="ARTIFACTS_TAB" className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                             {/* Categories for standard themes */}
-                            {theme !== 'winamp' && (
-                                <div className="space-y-4">
-                                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                                        <button onClick={() => { setSelectedCategory('ВСЕ'); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
-                                        {Object.values(DefaultCategory).map(cat => (
-                                            <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
-                                        ))}
-                                    </div>
+                            <div className="space-y-4">
+                                <div className={`flex gap-2 overflow-x-auto pb-2 scrollbar-hide ${theme === 'winamp' ? 'border-b border-[#505050]' : ''}`}>
+                                    <button onClick={() => { setSelectedCategory('ВСЕ'); setSelectedSubcategory('ВСЕ'); }} className={`whitespace-nowrap transition-all ${theme === 'winamp' ? `px-2 py-1 text-[10px] font-winamp ${selectedCategory === 'ВСЕ' ? 'text-wa-gold' : 'text-wa-green'}` : `px-5 py-2 rounded-xl font-pixel text-[10px] font-bold border ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}`}>
+                                        {theme === 'winamp' ? '[ ALL ]' : 'ВСЕ'}
+                                    </button>
+                                    {Object.values(DefaultCategory).map(cat => (
+                                        <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubcategory('ВСЕ'); }} className={`whitespace-nowrap transition-all ${theme === 'winamp' ? `px-2 py-1 text-[10px] font-winamp ${selectedCategory === cat ? 'text-wa-gold' : 'text-wa-green'}` : `px-5 py-2 rounded-xl font-pixel text-[10px] font-bold border ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}`}>
+                                            {theme === 'winamp' ? `[ ${cat} ]` : cat}
+                                        </button>
+                                    ))}
                                 </div>
-                            )}
+                            </div>
 
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
                                 {globalExhibits.map(item => (
