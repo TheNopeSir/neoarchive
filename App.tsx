@@ -1010,7 +1010,7 @@ export default function App() {
                             setUser(updated); 
                             setIsEditingProfile(false); 
                         }} 
-                        onProfileImageUpload={async (e) => { 
+                        onProfileImageUpload={async (e: React.ChangeEvent<HTMLInputElement>) => { 
                             if(e.target.files && e.target.files[0] && user) { 
                                 const b64 = await db.fileToBase64(e.target.files[0]); 
                                 const updated = { ...user, avatarUrl: b64 }; 
@@ -1018,7 +1018,7 @@ export default function App() {
                                 await db.updateUserProfile(updated); 
                             } 
                         }} 
-                        onProfileCoverUpload={async (e) => {
+                        onProfileCoverUpload={async (e: React.ChangeEvent<HTMLInputElement>) => {
                             if(e.target.files && e.target.files[0] && user) {
                                  const b64 = await db.fileToBase64(e.target.files[0]);
                                  const updated = { ...user, coverUrl: b64 };

@@ -15,10 +15,11 @@ interface CollectionDetailPageProps {
     currentUser: string;
     onEdit?: () => void;
     onDelete?: (id: string) => void;
+    onLike: (id: string, e?: React.MouseEvent) => void;
 }
 
 const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ 
-    collection, artifacts, theme, onBack, onExhibitClick, onAuthorClick, currentUser, onEdit, onDelete 
+    collection, artifacts, theme, onBack, onExhibitClick, onAuthorClick, currentUser, onEdit, onDelete, onLike 
 }) => {
     const isOwner = currentUser === collection.owner;
 
@@ -86,10 +87,9 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                             key={item.id} 
                             item={item} 
                             theme={theme} 
-                            // Fixed: changed handleExhibitClick to onExhibitClick
                             onClick={onExhibitClick} 
                             isLiked={item.likedBy?.includes(currentUser)} 
-                            onLike={() => {}} 
+                            onLike={(e) => onLike(item.id, e)} 
                             onAuthorClick={onAuthorClick} 
                         />
                     ))}

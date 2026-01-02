@@ -1,12 +1,10 @@
 
 import React, { useState } from 'react';
-import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Users, Palette, Settings, Volume2, Bell, Shield, Database, Monitor, Sun, Moon, Terminal, Search } from 'lucide-react';
+import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Camera, Palette, Settings, Search, Terminal, Sun } from 'lucide-react';
 import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus, AppSettings, WishlistItem } from '../types';
-import { STATUS_OPTIONS, BADGE_CONFIG } from '../constants';
+import { STATUS_OPTIONS } from '../constants';
 import * as db from '../services/storageService';
 import { getUserAvatar } from '../services/storageService';
-import ExhibitCard from './ExhibitCard';
-import CollectionCard from './CollectionCard';
 import WishlistCard from './WishlistCard';
 import SEO from './SEO';
 
@@ -33,6 +31,8 @@ interface UserProfileViewProps {
     setIsEditingProfile: (v: boolean) => void;
     editTagline: string;
     setEditTagline: (v: string) => void;
+    editBio: string;
+    setEditBio: (v: string) => void;
     editStatus: UserStatus;
     setEditStatus: (v: UserStatus) => void;
     editTelegram: string;
@@ -41,6 +41,7 @@ interface UserProfileViewProps {
     setEditPassword: (v: string) => void;
     onSaveProfile: () => void;
     onProfileImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onProfileCoverUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
     guestbookInput: string;
     setGuestbookInput: (v: string) => void;
     guestbookInputRef: React.RefObject<HTMLInputElement>;
@@ -55,9 +56,9 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     user, viewedProfileUsername, exhibits, collections, guestbook, theme, 
     onBack, onLogout, onFollow, onChat, onExhibitClick, onLike, onAuthorClick, 
     onCollectionClick, onShareCollection, onViewHallOfFame, onGuestbookPost, 
-    isEditingProfile, setIsEditingProfile, editTagline, setEditTagline, editStatus, setEditStatus, editTelegram, setEditTelegram, 
+    isEditingProfile, setIsEditingProfile, editTagline, setEditTagline, editBio, setEditBio, editStatus, setEditStatus, editTelegram, setEditTelegram, 
     editPassword, setEditPassword,
-    onSaveProfile, onProfileImageUpload, guestbookInput, setGuestbookInput, guestbookInputRef, profileTab, setProfileTab, refreshData,
+    onSaveProfile, onProfileImageUpload, onProfileCoverUpload, guestbookInput, setGuestbookInput, guestbookInputRef, profileTab, setProfileTab, refreshData,
     onOpenSocialList, onThemeChange, onWishlistClick
 }) => {
     const profileUser = db.getFullDatabase().users.find(u => u.username === viewedProfileUsername) || { 
@@ -162,81 +163,133 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
             <button onClick={onBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
                  <ArrowLeft size={16} /> НАЗАД
             </button>
-            <div className={`p-6 rounded-xl border-2 flex flex-col md:flex-row items-center gap-6 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : theme === 'xp' ? 'bg-white border-[#245DDA] shadow-lg rounded-t-lg' : 'bg-white border-light-dim'}`}>
-                {theme === 'xp' && <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-r from-[#0058EE] to-[#3F8CF3] rounded-t-lg flex items-center px-4"><span className="text-white font-bold text-sm drop-shadow-md italic">User Properties</span></div>}
-                
-                <div className={`relative ${theme === 'xp' ? 'mt-6' : ''}`}>
-                    <div className={`w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 ${theme === 'xp' ? 'border-[#245DDA]' : 'border-green-500/30'}`}>
-                        <img src={profileUser.avatarUrl} alt={profileUser.username || ''} className="w-full h-full object-cover"/>
-                    </div>
-                    {isCurrentUser && (
-                        <label className="absolute bottom-0 right-0 bg-gray-800 p-2 rounded-full cursor-pointer hover:bg-gray-700 text-white border border-gray-600">
-                            <Edit2 size={14} />
-                            <input type="file" accept="image/*" className="hidden" onChange={onProfileImageUpload} />
-                        </label>
+            
+            <div className={`rounded-3xl border overflow-hidden relative ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : theme === 'xp' ? 'bg-white border-[#245DDA] shadow-lg' : 'bg-white border-light-dim'}`}>
+                {/* Banner Image */}
+                <div className="h-40 md:h-52 bg-gray-800 relative">
+                    {profileUser.coverUrl ? (
+                         <img src={profileUser.coverUrl} className="w-full h-full object-cover" alt="Cover" />
+                    ) : (
+                         <div className={`w-full h-full ${theme === 'dark' ? 'bg-gradient-to-r from-green-900/20 to-black' : 'bg-gradient-to-r from-gray-100 to-gray-300'}`}></div>
+                    )}
+                    {theme === 'xp' && <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-r from-[#0058EE] to-[#3F8CF3] flex items-center px-4"><span className="text-white font-bold text-sm drop-shadow-md italic">User Properties</span></div>}
+                    
+                    {isEditingProfile && isCurrentUser && (
+                         <label className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-xl cursor-pointer hover:bg-black/70 border border-white/20 flex items-center gap-2 backdrop-blur-sm">
+                            <Camera size={16} /> <span className="text-[10px] font-pixel">BANNER</span>
+                            <input type="file" accept="image/*" className="hidden" onChange={onProfileCoverUpload} />
+                         </label>
                     )}
                 </div>
-                <div className={`flex-1 text-center md:text-left space-y-2 ${theme === 'xp' ? 'mt-6' : ''}`}>
-                    {isEditingProfile && isCurrentUser ? (
-                        <div className="space-y-2 max-w-sm mx-auto md:mx-0">
-                            <input value={editTagline} onChange={(e) => setEditTagline(e.target.value)} placeholder="Статус..." className="w-full bg-transparent border-b p-1 font-mono text-sm" />
-                            <input value={editTelegram} onChange={(e) => setEditTelegram(e.target.value)} placeholder="Telegram (без @)" className="w-full bg-transparent border-b p-1 font-mono text-sm" />
-                            <div className="flex items-center gap-2 border-b p-1">
-                                <input value={editPassword} onChange={(e) => setEditPassword(e.target.value)} placeholder="Новый пароль" type={showPassword ? "text" : "password"} className="w-full bg-transparent font-mono text-sm focus:outline-none" />
-                                <button type="button" onClick={generateSecurePassword} title="Generate" className="opacity-50 hover:opacity-100 hover:text-green-500"><Wand2 size={14} /></button>
-                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100">{showPassword ? <EyeOff size={14}/> : <Eye size={14}/>}</button>
-                            </div>
-                            <div className="flex gap-2 justify-center md:justify-start">
-                                <button onClick={onSaveProfile} className="bg-green-600 text-white px-3 py-1 rounded text-xs">OK</button>
-                                <button onClick={() => setIsEditingProfile(false)} className="bg-gray-600 text-white px-3 py-1 rounded text-xs">CANCEL</button>
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="flex items-center justify-center md:justify-start gap-4">
-                                <h2 className={`text-2xl font-pixel font-bold ${theme === 'xp' ? 'text-black' : ''}`}>@{profileUser.username}</h2>
-                                {isCurrentUser && (
-                                    <button onClick={onLogout} className="text-red-500 opacity-50 hover:opacity-100" title="ВЫХОД"><LogOut size={18}/></button>
-                                )}
-                            </div>
-                            <p className="font-mono opacity-70 flex items-center justify-center md:justify-start gap-2">
-                                {profileUser.tagline}
-                                {isCurrentUser && (
-                                    <button onClick={() => { setEditTagline(user?.tagline || ''); setEditStatus(user?.status || 'ONLINE'); setEditTelegram(user?.telegram || ''); setEditPassword(''); setIsEditingProfile(true); }} className="opacity-50 hover:opacity-100"><Edit2 size={12} /></button>
-                                )}
-                            </p>
-                            
-                            <div className="flex items-center justify-center md:justify-start gap-6 pt-2 pb-2">
-                                <button onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="flex flex-col items-center md:items-start group">
-                                    <span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.followers?.length || 0}</span>
-                                    <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Followers</span>
-                                </button>
-                                <button onClick={() => onOpenSocialList(profileUser.username, 'following')} className="flex flex-col items-center md:items-start group">
-                                    <span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.following?.length || 0}</span>
-                                    <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Following</span>
-                                </button>
-                                <button onClick={onViewHallOfFame} className="flex flex-col items-center md:items-start group">
-                                    <Trophy size={18} className="group-hover:text-yellow-500 transition-colors" />
-                                    <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Achievements</span>
-                                </button>
-                            </div>
 
-                            {profileUser.status && (
-                                <div className={`flex items-center gap-1 text-xs font-bold ${STATUS_OPTIONS[profileUser.status].color} justify-center md:justify-start`}>
-                                    {React.createElement(STATUS_OPTIONS[profileUser.status].icon, { size: 12 })}
-                                    {STATUS_OPTIONS[profileUser.status].label}
-                                </div>
+                <div className="px-6 pb-6 relative">
+                    {/* Header Row: Avatar + Stats */}
+                    <div className="flex flex-col md:flex-row items-start md:items-end -mt-16 md:-mt-12 gap-6 mb-4">
+                         <div className="relative group">
+                            <div className={`w-32 h-32 rounded-3xl overflow-hidden border-4 bg-black ${theme === 'xp' ? 'border-white shadow-lg' : 'border-dark-surface'}`}>
+                                <img src={profileUser.avatarUrl} alt={profileUser.username} className="w-full h-full object-cover"/>
+                            </div>
+                            {isEditingProfile && isCurrentUser && (
+                                <label className="absolute inset-0 bg-black/60 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
+                                    <Camera size={24} className="text-white" />
+                                    <input type="file" accept="image/*" className="hidden" onChange={onProfileImageUpload} />
+                                </label>
                             )}
-                        </>
-                    )}
-                    {!isCurrentUser && (
-                        <div className="flex gap-2 justify-center md:justify-start pt-2">
-                            <button onClick={() => onFollow(profileUser.username)} className={`px-4 py-2 rounded font-bold font-pixel text-xs ${isSubscribed ? 'border border-gray-500 opacity-70' : (theme === 'dark' ? 'bg-dark-primary text-black' : 'bg-light-accent text-white')}`}>
-                                {isSubscribed ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}
-                            </button>
-                            <button onClick={() => onChat(profileUser.username)} className="px-4 py-2 rounded border hover:bg-white/10"><MessageSquare size={16} /></button>
-                        </div>
-                    )}
+                         </div>
+
+                         <div className="flex-1 pt-2 md:pt-0">
+                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                 <div>
+                                     <h2 className={`text-3xl font-pixel font-bold flex items-center gap-2 ${theme === 'xp' ? 'text-black' : ''}`}>
+                                        @{profileUser.username}
+                                        {profileUser.status && (
+                                            <div className={`w-3 h-3 rounded-full ${STATUS_OPTIONS[profileUser.status].color.replace('text-', 'bg-')}`} title={STATUS_OPTIONS[profileUser.status].label} />
+                                        )}
+                                     </h2>
+                                     <p className="text-xs font-mono opacity-60">Joined {profileUser.joinedDate}</p>
+                                 </div>
+
+                                 <div className="flex items-center gap-6">
+                                    <button onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="flex flex-col items-center group">
+                                        <span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.followers?.length || 0}</span>
+                                        <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Followers</span>
+                                    </button>
+                                    <button onClick={() => onOpenSocialList(profileUser.username, 'following')} className="flex flex-col items-center group">
+                                        <span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.following?.length || 0}</span>
+                                        <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Following</span>
+                                    </button>
+                                    <button onClick={onViewHallOfFame} className="flex flex-col items-center group">
+                                        <Trophy size={18} className="group-hover:text-yellow-500 transition-colors" />
+                                        <span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Awards</span>
+                                    </button>
+                                 </div>
+                             </div>
+                         </div>
+                    </div>
+                    
+                    {/* Bio & Edit Section */}
+                    <div className="space-y-4">
+                        {isEditingProfile && isCurrentUser ? (
+                            <div className="space-y-4 bg-black/5 p-4 rounded-xl border border-dashed border-white/10">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-pixel opacity-50 uppercase">Статус (Кратко)</label>
+                                    <input value={editTagline} onChange={(e) => setEditTagline(e.target.value)} placeholder="Короткий статус..." className="w-full bg-transparent border-b p-2 font-mono text-sm focus:border-green-500 outline-none" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-pixel opacity-50 uppercase">Биография (Подробно)</label>
+                                    <textarea value={editBio} onChange={(e) => setEditBio(e.target.value)} placeholder="Расскажите о себе..." rows={3} className="w-full bg-transparent border p-2 rounded font-mono text-sm focus:border-green-500 outline-none" />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <input value={editTelegram} onChange={(e) => setEditTelegram(e.target.value)} placeholder="Telegram (без @)" className="w-full bg-transparent border-b p-2 font-mono text-sm focus:border-green-500 outline-none" />
+                                    <div className="flex items-center gap-2 border-b p-1">
+                                        <input value={editPassword} onChange={(e) => setEditPassword(e.target.value)} placeholder="Новый пароль" type={showPassword ? "text" : "password"} className="w-full bg-transparent font-mono text-sm focus:outline-none" />
+                                        <button type="button" onClick={generateSecurePassword} title="Generate" className="opacity-50 hover:opacity-100 hover:text-green-500"><Wand2 size={14} /></button>
+                                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="opacity-50 hover:opacity-100">{showPassword ? <EyeOff size={14}/> : <Eye size={14}/>}</button>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                    <button onClick={onSaveProfile} className="flex-1 bg-green-600 text-white px-4 py-2 rounded font-bold text-xs uppercase hover:bg-green-500">Сохранить</button>
+                                    <button onClick={() => setIsEditingProfile(false)} className="px-4 py-2 rounded border hover:bg-white/10 text-xs uppercase">Отмена</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <p className="font-mono font-bold text-sm">{profileUser.tagline}</p>
+                                    <div className="flex gap-2">
+                                        {isCurrentUser ? (
+                                             <>
+                                                <button onClick={() => { 
+                                                    setEditTagline(user?.tagline || ''); 
+                                                    setEditBio(user?.bio || '');
+                                                    setEditStatus(user?.status || 'ONLINE'); 
+                                                    setEditTelegram(user?.telegram || ''); 
+                                                    setEditPassword(''); 
+                                                    setIsEditingProfile(true); 
+                                                }} className="px-3 py-1.5 border rounded-lg text-[10px] uppercase font-bold hover:bg-white/10 flex items-center gap-2">
+                                                    <Edit2 size={12} /> Edit Profile
+                                                </button>
+                                                <button onClick={onLogout} className="px-3 py-1.5 border border-red-500/30 text-red-500 rounded-lg text-[10px] uppercase font-bold hover:bg-red-500/10">
+                                                    <LogOut size={12} />
+                                                </button>
+                                             </>
+                                        ) : (
+                                            <>
+                                                <button onClick={() => onFollow(profileUser.username)} className={`px-4 py-1.5 rounded-lg font-bold font-pixel text-[10px] uppercase transition-all ${isSubscribed ? 'border border-white/20 opacity-60' : 'bg-green-500 text-black border-green-500'}`}>
+                                                    {isSubscribed ? 'Following' : 'Follow'}
+                                                </button>
+                                                <button onClick={() => onChat(profileUser.username)} className="px-3 py-1.5 border rounded-lg hover:bg-white/10"><MessageSquare size={14} /></button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                
+                                {profileUser.bio && (
+                                    <p className="font-mono text-sm opacity-70 whitespace-pre-wrap leading-relaxed max-w-2xl">{profileUser.bio}</p>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -290,7 +343,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
             {/* SETTINGS PANEL */}
             {isCurrentUser && activeSection === 'CONFIG' && (
                 <div className={`p-6 rounded-xl border flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : theme === 'xp' ? 'bg-white border-[#245DDA] shadow-lg' : 'bg-white border-light-dim'}`}>
-                    {/* (Existing Settings UI Omitted for Brevity - it remains unchanged but logic is handled) */}
                     <div>
                         <h3 className={`font-pixel text-[10px] uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'xp' ? 'text-blue-800' : 'opacity-70'}`}>
                             <Palette size={14}/> Интерфейс / Visuals
@@ -309,22 +361,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                 <span className="font-pixel text-[10px]">LUNA</span>
                             </button>
                         </div>
-                    </div>
-                    <div className="w-full h-[1px] bg-gray-500/20" />
-                    <div>
-                        <h3 className={`font-pixel text-[10px] uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'xp' ? 'text-blue-800' : 'opacity-70'}`}>
-                            <Database size={14}/> Данные / Data
-                        </h3>
-                        <button 
-                            onClick={() => {
-                                if(confirm("Это удалит локальный кэш изображений и данных. Вы не выйдете из аккаунта. Продолжить?")) {
-                                    db.clearLocalCache();
-                                }
-                            }}
-                            className="w-full py-3 border border-red-500/50 text-red-500 hover:bg-red-500/10 rounded-xl font-pixel text-xs flex items-center justify-center gap-2 transition-all"
-                        >
-                            <Trash2 size={16} /> ОЧИСТИТЬ ЛОКАЛЬНЫЙ КЭШ
-                        </button>
                     </div>
                 </div>
             )}
