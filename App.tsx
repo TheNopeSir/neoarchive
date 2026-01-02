@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark, Sparkles
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark, Sparkles, ChevronDown, Filter
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -29,7 +29,7 @@ import SearchView from './components/SearchView';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem } from './types';
-import { DefaultCategory, calculateArtifactScore } from './constants';
+import { DefaultCategory, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from './constants';
 import useSwipe from './hooks/useSwipe';
 
 export default function App() {
@@ -53,7 +53,11 @@ export default function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [selectedWishlistItem, setSelectedWishlistItem] = useState<WishlistItem | null>(null);
   const [viewedProfileUsername, setViewedProfileUsername] = useState<string>('');
+  
+  // Filtering State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('ВСЕ'); // New Subcategory State
+
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'>('ARTIFACTS');
 
   // Pagination
@@ -68,6 +72,7 @@ export default function App() {
   // Profile states
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editTagline, setEditTagline] = useState('');
+  const [editBio, setEditBio] = useState(''); 
   const [editStatus, setEditStatus] = useState<any>('ONLINE');
   const [editTelegram, setEditTelegram] = useState('');
   const [editPassword, setEditPassword] = useState('');
@@ -89,7 +94,7 @@ export default function App() {
       // 3. Update Visual View
       setView(newView);
 
-      // 4. Update URL (Clean History API)
+      // 4. Update URL (Clean History API for SEO/Sharing)
       let path = '/';
       if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
       else if (newView === 'EXHIBIT') path = `/artifact/${params?.item?.id || selectedExhibit?.id}`;
@@ -133,13 +138,21 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // --- SWIPE LOGIC ---
-  const swipeHandlers = useSwipe({
+  // --- SWIPE LOGIC (GLOBAL & FEED) ---
+  const feedModes: Array<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'> = ['ARTIFACTS', 'COLLECTIONS', 'WISHLIST'];
+
+  // Global App Swipe
+  const globalSwipeHandlers = useSwipe({
     onSwipeLeft: () => {
-      // Swipe Left (<--) means "Next Tab" in order:
-      // FEED -> MY_COLLECTION -> ACTIVITY -> USER_PROFILE
       if (view === 'FEED') {
-          navigateTo('MY_COLLECTION');
+          // If on FEED, handle tabs internally first
+          const currIdx = feedModes.indexOf(feedMode);
+          if (currIdx < feedModes.length - 1) {
+              setFeedMode(feedModes[currIdx + 1]);
+          } else {
+              // If at end of feed tabs, go to My Collection
+              navigateTo('MY_COLLECTION');
+          }
       } else if (view === 'MY_COLLECTION') {
           navigateTo('ACTIVITY');
       } else if (view === 'ACTIVITY') {
@@ -147,8 +160,14 @@ export default function App() {
       }
     },
     onSwipeRight: () => {
-      // Swipe Right (-->) is standard "Back" gesture or "Previous Tab"
-      handleBack();
+      if (view === 'FEED') {
+          const currIdx = feedModes.indexOf(feedMode);
+          if (currIdx > 0) {
+              setFeedMode(feedModes[currIdx - 1]);
+          }
+      } else {
+          handleBack();
+      }
     },
   });
 
@@ -396,11 +415,17 @@ export default function App() {
       setIsAddingToCollection(null);
   };
 
-  const baseFilteredExhibits = exhibits.filter(e => {
-      if (e.isDraft && e.owner !== user?.username) return false;
-      if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
-      return true;
-  });
+  // --- ARTIFACT FILTERING LOGIC ---
+  const baseFilteredExhibits = useMemo(() => {
+      return exhibits.filter(e => {
+          if (e.isDraft && e.owner !== user?.username) return false;
+          
+          const catMatch = selectedCategory === 'ВСЕ' || e.category === selectedCategory;
+          const subcatMatch = selectedSubcategory === 'ВСЕ' || e.subcategory === selectedSubcategory;
+          
+          return catMatch && subcatMatch;
+      });
+  }, [exhibits, user, selectedCategory, selectedSubcategory]);
 
   const followingExhibits = user ? baseFilteredExhibits.filter(e => user.following.includes(e.owner)) : [];
 
@@ -537,6 +562,43 @@ export default function App() {
       refreshData();
   };
 
+  // --- DYNAMIC SEO DATA ---
+  const getSeoData = () => {
+      if (view === 'EXHIBIT' && selectedExhibit) {
+          return {
+              title: `${selectedExhibit.title} | NeoArchive`,
+              desc: selectedExhibit.description ? selectedExhibit.description.slice(0, 150) + '...' : `Артефакт из коллекции @${selectedExhibit.owner}`,
+              image: selectedExhibit.imageUrls[0],
+              path: `/artifact/${selectedExhibit.id}`
+          };
+      }
+      if (view === 'COLLECTION_DETAIL' && selectedCollection) {
+          return {
+              title: `${selectedCollection.title} | NeoArchive`,
+              desc: selectedCollection.description || `Коллекция от @${selectedCollection.owner}`,
+              image: selectedCollection.coverImage,
+              path: `/collection/${selectedCollection.id}`
+          };
+      }
+      if (view === 'USER_PROFILE' && viewedProfileUsername) {
+          const u = db.getFullDatabase().users.find(u => u.username === viewedProfileUsername);
+          return {
+              title: `@${viewedProfileUsername} | NeoArchive Profile`,
+              desc: u?.tagline || `Профиль коллекционера ${viewedProfileUsername}`,
+              image: u?.avatarUrl,
+              path: `/u/${viewedProfileUsername}`
+          };
+      }
+      return {
+          title: "NeoArchive | Цифровая полка коллекционера",
+          desc: "Создайте красивый каталог своих вещей. Делитесь коллекциями и находите редкие экземпляры в сообществе.",
+          image: "https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=1200&font-size=0.5&bold=true",
+          path: "/"
+      };
+  };
+
+  const seoData = getSeoData();
+
   if (showSplash) {
     return (
       <div className={`fixed inset-0 z-[1000] bg-black flex items-center justify-center text-green-500 overflow-hidden transition-opacity duration-700 ${!isInitializing ? 'opacity-0 scale-105 pointer-events-none' : ''}`}>
@@ -550,7 +612,7 @@ export default function App() {
     );
   }
 
-  const swipeProps = view !== 'AUTH' ? swipeHandlers : {};
+  const swipeProps = view !== 'AUTH' ? globalSwipeHandlers : {};
   let bgClass = '';
   if (theme === 'dark') bgClass = 'bg-black text-gray-200';
   else if (theme === 'light') bgClass = 'bg-gray-100 text-gray-900';
@@ -561,7 +623,14 @@ export default function App() {
         {...swipeProps}
         className={`min-h-screen transition-colors duration-500 ${theme === 'xp' ? 'font-sans' : 'font-sans'} ${bgClass} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}
     >
-        <SEO title="NeoArchive | Цифровая полка коллекционера" />
+        {/* Dynamic SEO Injection */}
+        <SEO 
+            title={seoData.title}
+            description={seoData.desc}
+            image={seoData.image}
+            path={seoData.path}
+        />
+
         {theme !== 'xp' && <MatrixRain theme={theme} />}
         {theme !== 'xp' && <PixelSnow theme={theme} />}
         <CRTOverlay />
@@ -584,6 +653,15 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2 md:gap-4">
+                      {/* Desktop "My Collection" Link */}
+                      <button 
+                          onClick={() => navigateTo('MY_COLLECTION')}
+                          className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${theme === 'dark' ? 'hover:bg-white/10' : theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-gray-200'}`}
+                      >
+                          <Package size={16} className="opacity-70" />
+                          <span className="font-pixel text-[10px] tracking-widest font-bold">МОЯ ПОЛКА</span>
+                      </button>
+
                       <button 
                           onClick={() => setShowCreateMenu(true)} 
                           className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}
@@ -621,41 +699,72 @@ export default function App() {
             }} />}
 
             {view === 'SEARCH' && (
-                <SearchView 
-                    theme={theme}
-                    exhibits={exhibits}
-                    collections={collections}
-                    users={db.getFullDatabase().users}
-                    onBack={handleBack}
-                    onExhibitClick={handleExhibitClick}
-                    onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })}
-                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
-                    onLike={handleLike}
-                    currentUser={user}
-                />
+                <div key="SEARCH" className="animate-in fade-in duration-300">
+                    <SearchView 
+                        theme={theme}
+                        exhibits={exhibits}
+                        collections={collections}
+                        users={db.getFullDatabase().users}
+                        onBack={handleBack}
+                        onExhibitClick={handleExhibitClick}
+                        onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })}
+                        onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                        onLike={handleLike}
+                        currentUser={user}
+                    />
+                </div>
             )}
 
             {view === 'FEED' && (
-                <div className="space-y-8 animate-in fade-in zoom-in-95">
+                <div key="FEED" className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
+                    {/* Categories */}
                     {feedMode === 'ARTIFACTS' && (
-                        <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
-                             <button onClick={() => setSelectedCategory('ВСЕ')} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
-                             {Object.values(DefaultCategory).map(cat => (
-                                 <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
-                             ))}
+                        <div className="space-y-4">
+                            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                                <button onClick={() => { setSelectedCategory('ВСЕ'); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
+                                {Object.values(DefaultCategory).map(cat => (
+                                    <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
+                                ))}
+                            </div>
+
+                            {/* Subcategory Dropdown - Filters the displayed items */}
+                            {selectedCategory !== 'ВСЕ' && CATEGORY_SUBCATEGORIES[selectedCategory] && (
+                                <div className={`relative inline-block w-full md:w-64 animate-in slide-in-from-top-2 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Filter size={12} className="opacity-50"/>
+                                    </div>
+                                    <select
+                                        value={selectedSubcategory}
+                                        onChange={(e) => setSelectedSubcategory(e.target.value)}
+                                        className={`block w-full pl-10 pr-10 py-2 text-[10px] font-pixel uppercase rounded-xl border appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 transition-all ${
+                                            theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-white border-black/10'
+                                        }`}
+                                    >
+                                        <option value="ВСЕ">Все подкатегории</option>
+                                        {CATEGORY_SUBCATEGORIES[selectedCategory].map(sub => (
+                                            <option key={sub} value={sub}>{sub}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <ChevronDown size={14} className="opacity-50" />
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                     
                     <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                        <div className="flex gap-6 overflow-x-auto scrollbar-hide">
-                            <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
-                            <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
-                            <button onClick={() => setFeedMode('WISHLIST')} className={`flex items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100 transition-all'}`}><Sparkles size={14} /> ВИШЛИСТЫ</button>
+                        <div className="flex gap-6 overflow-x-auto scrollbar-hide w-full">
+                            <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
+                            <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
+                            <button onClick={() => setFeedMode('WISHLIST')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Sparkles size={14} /> ВИШЛИСТЫ</button>
                         </div>
                     </div>
                     
+                    {/* Content Container (Smooth Transition) */}
+                    <div className="min-h-[50vh]">
                     {feedMode === 'ARTIFACTS' && (
-                        <div className="space-y-10">
+                        <div key="ARTIFACTS_TAB" className="space-y-10 animate-in slide-in-from-right-4 duration-300">
                             {followingExhibits.length > 0 && (
                                 <div>
                                     <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Zap size={14} className="text-yellow-500" /> ПОДПИСКИ</h2>
@@ -672,7 +781,9 @@ export default function App() {
                                 {globalExhibits.length === 0 ? (
                                     <div className="py-20 flex flex-col items-center justify-center opacity-50">
                                         <RetroLoader text="NO_DATA_FOUND" />
-                                        <p className="mt-4 text-xs font-mono">База данных пуста или недоступна</p>
+                                        <p className="mt-4 text-xs font-mono">
+                                            {selectedSubcategory !== 'ВСЕ' ? 'В этой подкатегории пусто' : 'База данных пуста или недоступна'}
+                                        </p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
@@ -689,7 +800,7 @@ export default function App() {
                     )}
 
                     {feedMode === 'COLLECTIONS' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <div key="COLLECTIONS_TAB" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in slide-in-from-right-4 duration-300">
                             {collections.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Коллекций пока нет</div> :
                             collections.map(col => ( 
                                 <CollectionCard 
@@ -706,7 +817,7 @@ export default function App() {
                     )}
 
                     {feedMode === 'WISHLIST' && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div key="WISHLIST_TAB" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in slide-in-from-right-4 duration-300">
                             {wishlist.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Список желаемого пуст</div> :
                             wishlist.map(item => (
                                 <WishlistCard 
@@ -719,182 +830,234 @@ export default function App() {
                             ))}
                         </div>
                     )}
+                    </div>
                 </div>
             )}
 
             {view === 'CREATE_ARTIFACT' && (
-              <CreateArtifactView 
-                theme={theme} 
-                onBack={handleBack} 
-                onSave={handleSaveArtifact} 
-                userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
-              />
+              <div key="CREATE_ARTIFACT" className="animate-in fade-in slide-in-from-bottom-4">
+                  <CreateArtifactView 
+                    theme={theme} 
+                    onBack={handleBack} 
+                    onSave={handleSaveArtifact} 
+                    userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
+                  />
+              </div>
             )}
 
             {view === 'CREATE_WISHLIST' && (
-                <CreateWishlistItemView
-                    theme={theme}
-                    onBack={handleBack}
-                    onSave={handleSaveWishlist}
-                />
+                <div key="CREATE_WISHLIST" className="animate-in fade-in slide-in-from-bottom-4">
+                    <CreateWishlistItemView
+                        theme={theme}
+                        onBack={handleBack}
+                        onSave={handleSaveWishlist}
+                    />
+                </div>
             )}
 
             {view === 'EDIT_ARTIFACT' && selectedExhibit && (
-               <CreateArtifactView 
-                theme={theme} 
-                onBack={handleBack} 
-                onSave={handleSaveArtifact} 
-                initialData={selectedExhibit} 
-                userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
-               />
+               <div key="EDIT_ARTIFACT" className="animate-in fade-in">
+                   <CreateArtifactView 
+                    theme={theme} 
+                    onBack={handleBack} 
+                    onSave={handleSaveArtifact} 
+                    initialData={selectedExhibit} 
+                    userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
+                   />
+               </div>
             )}
 
             {(view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') && user && (
-                <CreateCollectionView
-                    theme={theme}
-                    userArtifacts={exhibits.filter(e => e.owner === user.username && !e.isDraft)}
-                    initialData={view === 'EDIT_COLLECTION' ? selectedCollection : null}
-                    onBack={handleBack}
-                    onSave={handleSaveCollection}
-                    onDelete={handleDeleteCollection}
-                />
+                <div key="CREATE_COLLECTION" className="animate-in fade-in">
+                    <CreateCollectionView
+                        theme={theme}
+                        userArtifacts={exhibits.filter(e => e.owner === user.username && !e.isDraft)}
+                        initialData={view === 'EDIT_COLLECTION' ? selectedCollection : null}
+                        onBack={handleBack}
+                        onSave={handleSaveCollection}
+                        onDelete={handleDeleteCollection}
+                    />
+                </div>
             )}
 
             {view === 'EXHIBIT' && selectedExhibit && (
-                <ExhibitDetailPage 
-                    key={selectedExhibit.id}
-                    exhibit={selectedExhibit} 
-                    theme={theme} 
-                    onBack={handleBack} 
-                    onShare={() => {}} 
-                    onFavorite={() => {}} 
-                    onLike={(id: string) => handleLike(id)} 
-                    isFavorited={false} 
-                    isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} 
-                    onPostComment={handlePostComment}
-                    onCommentLike={handleCommentLike} 
-                    onDeleteComment={handleDeleteComment}
-                    onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} 
-                    onFollow={handleFollow} 
-                    onMessage={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
-                    currentUser={user?.username || ''} 
-                    isAdmin={user?.isAdmin || false} 
-                    isFollowing={user?.following.includes(selectedExhibit.owner) || false} 
-                    onAddToCollection={(id) => setIsAddingToCollection(id)}
-                    onEdit={(item: Exhibit) => navigateTo('EDIT_ARTIFACT', { item })}
-                    onDelete={(id: string) => handleDeleteArtifact(id)}
-                    onExhibitClick={handleExhibitClick} 
-                    users={db.getFullDatabase().users}
-                    allExhibits={exhibits}
-                />
+                <div key={`EXHIBIT_${selectedExhibit.id}`} className="animate-in fade-in zoom-in-95">
+                    <ExhibitDetailPage 
+                        key={selectedExhibit.id}
+                        exhibit={selectedExhibit} 
+                        theme={theme} 
+                        onBack={handleBack} 
+                        onShare={() => {}} 
+                        onFavorite={() => {}} 
+                        onLike={(id: string) => handleLike(id)} 
+                        isFavorited={false} 
+                        isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} 
+                        onPostComment={handlePostComment}
+                        onCommentLike={handleCommentLike} 
+                        onDeleteComment={handleDeleteComment}
+                        onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} 
+                        onFollow={handleFollow} 
+                        onMessage={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
+                        currentUser={user?.username || ''} 
+                        isAdmin={user?.isAdmin || false} 
+                        isFollowing={user?.following.includes(selectedExhibit.owner) || false} 
+                        onAddToCollection={(id) => setIsAddingToCollection(id)}
+                        onEdit={(item: Exhibit) => navigateTo('EDIT_ARTIFACT', { item })}
+                        onDelete={(id: string) => handleDeleteArtifact(id)}
+                        onExhibitClick={handleExhibitClick} 
+                        users={db.getFullDatabase().users}
+                        allExhibits={exhibits}
+                    />
+                </div>
             )}
             
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
-                <CollectionDetailPage
-                    key={selectedCollection.id}
-                    collection={selectedCollection}
-                    artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))}
-                    theme={theme}
-                    onBack={handleBack}
-                    onExhibitClick={handleExhibitClick}
-                    onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
-                    currentUser={user?.username || ''}
-                    onEdit={() => navigateTo('EDIT_COLLECTION')}
-                    onDelete={handleDeleteCollection}
-                />
+                <div key={`COLLECTION_${selectedCollection.id}`} className="animate-in fade-in zoom-in-95">
+                    <CollectionDetailPage
+                        key={selectedCollection.id}
+                        collection={selectedCollection}
+                        artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))}
+                        theme={theme}
+                        onBack={handleBack}
+                        onExhibitClick={handleExhibitClick}
+                        onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
+                        currentUser={user?.username || ''}
+                        onEdit={() => navigateTo('EDIT_COLLECTION')}
+                        onDelete={handleDeleteCollection}
+                        onLike={handleLike}
+                    />
+                </div>
             )}
 
             {view === 'WISHLIST_DETAIL' && selectedWishlistItem && (
-                <WishlistDetailView
-                    item={selectedWishlistItem}
-                    theme={theme}
-                    onBack={handleBack}
-                    onDelete={handleDeleteWishlist}
-                    onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
-                    currentUser={user?.username || ''}
-                />
+                <div key="WISHLIST_DETAIL" className="animate-in fade-in zoom-in-95">
+                    <WishlistDetailView
+                        item={selectedWishlistItem}
+                        theme={theme}
+                        onBack={handleBack}
+                        onDelete={handleDeleteWishlist}
+                        onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
+                        currentUser={user?.username || ''}
+                    />
+                </div>
             )}
 
             {view === 'DIRECT_CHAT' && user && viewedProfileUsername && (
-                <DirectChat 
-                    theme={theme} 
-                    currentUser={user} 
-                    partnerUsername={viewedProfileUsername} 
-                    messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} 
-                    onBack={handleBack} 
-                    onSendMessage={handleSendMessage} 
-                />
+                <div key="DIRECT_CHAT" className="animate-in fade-in">
+                    <DirectChat 
+                        theme={theme} 
+                        currentUser={user} 
+                        partnerUsername={viewedProfileUsername} 
+                        messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} 
+                        onBack={handleBack} 
+                        onSendMessage={handleSendMessage} 
+                    />
+                </div>
             )}
 
             {view === 'SOCIAL_LIST' && viewedProfileUsername && (
-                <SocialListView 
-                    type={socialListType} 
-                    username={viewedProfileUsername} 
-                    currentUserUsername={user?.username}
-                    theme={theme} 
-                    onBack={handleBack} 
-                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} 
-                />
+                <div key="SOCIAL_LIST" className="animate-in fade-in">
+                    <SocialListView 
+                        type={socialListType} 
+                        username={viewedProfileUsername} 
+                        currentUserUsername={user?.username}
+                        theme={theme} 
+                        onBack={handleBack} 
+                        onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} 
+                    />
+                </div>
             )}
 
             {view === 'USER_PROFILE' && user && (
-                <UserProfileView 
-                    key={viewedProfileUsername}
-                    user={user} 
-                    viewedProfileUsername={viewedProfileUsername} 
-                    exhibits={exhibits} 
-                    collections={collections} 
-                    guestbook={guestbook} 
-                    theme={theme} 
-                    onBack={handleBack} 
-                    onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} 
-                    onFollow={handleFollow} 
-                    onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
-                    onExhibitClick={handleExhibitClick} 
-                    onLike={handleLike} 
-                    onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} 
-                    onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} 
-                    onShareCollection={() => {}} 
-                    onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} 
-                    onGuestbookPost={() => {}} 
-                    refreshData={refreshData} 
-                    isEditingProfile={isEditingProfile} 
-                    setIsEditingProfile={setIsEditingProfile} 
-                    editTagline={editTagline} 
-                    setEditTagline={setEditTagline} 
-                    editStatus={editStatus} 
-                    setEditStatus={setEditStatus} 
-                    editTelegram={editTelegram} 
-                    setEditTelegram={setEditTelegram} 
-                    editPassword={editPassword} 
-                    setEditPassword={setEditPassword} 
-                    onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} 
-                    onProfileImageUpload={async (e) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} 
-                    guestbookInput={guestbookInput} 
-                    setGuestbookInput={setGuestbookInput} 
-                    guestbookInputRef={guestbookInputRef} 
-                    profileTab={profileTab} 
-                    setProfileTab={setProfileTab} 
-                    onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} 
-                    onThemeChange={(t) => setTheme(t)}
-                    onWishlistClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })}
-                />
+                <div key={`PROFILE_${viewedProfileUsername}`} className="animate-in slide-in-from-right-4 fade-in duration-300">
+                    <UserProfileView 
+                        key={viewedProfileUsername}
+                        user={user} 
+                        viewedProfileUsername={viewedProfileUsername} 
+                        exhibits={exhibits} 
+                        collections={collections} 
+                        guestbook={guestbook} 
+                        theme={theme} 
+                        onBack={handleBack} 
+                        onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} 
+                        onFollow={handleFollow} 
+                        onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
+                        onExhibitClick={handleExhibitClick} 
+                        onLike={handleLike} 
+                        onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} 
+                        onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} 
+                        onShareCollection={() => {}} 
+                        onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} 
+                        onGuestbookPost={() => {}} 
+                        refreshData={refreshData} 
+                        isEditingProfile={isEditingProfile} 
+                        setIsEditingProfile={setIsEditingProfile} 
+                        editTagline={editTagline} 
+                        setEditTagline={setEditTagline} 
+                        editBio={editBio} 
+                        setEditBio={setEditBio} 
+                        editStatus={editStatus} 
+                        setEditStatus={setEditStatus} 
+                        editTelegram={editTelegram} 
+                        setEditTelegram={setEditTelegram} 
+                        editPassword={editPassword} 
+                        setEditPassword={setEditPassword} 
+                        onSaveProfile={async () => { 
+                            if(!user) return; 
+                            const updated = { ...user, tagline: editTagline, bio: editBio, status: editStatus, telegram: editTelegram }; 
+                            if(editPassword) updated.password = editPassword; 
+                            await db.updateUserProfile(updated); 
+                            setUser(updated); 
+                            setIsEditingProfile(false); 
+                        }} 
+                        onProfileImageUpload={async (e) => { 
+                            if(e.target.files && e.target.files[0] && user) { 
+                                const b64 = await db.fileToBase64(e.target.files[0]); 
+                                const updated = { ...user, avatarUrl: b64 }; 
+                                setUser(updated); 
+                                await db.updateUserProfile(updated); 
+                            } 
+                        }} 
+                        onProfileCoverUpload={async (e) => {
+                            if(e.target.files && e.target.files[0] && user) {
+                                 const b64 = await db.fileToBase64(e.target.files[0]);
+                                 const updated = { ...user, coverUrl: b64 };
+                                 setUser(updated);
+                                 await db.updateUserProfile(updated);
+                            }
+                        }}
+                        guestbookInput={guestbookInput} 
+                        setGuestbookInput={setGuestbookInput} 
+                        guestbookInputRef={guestbookInputRef} 
+                        profileTab={profileTab} 
+                        setProfileTab={setProfileTab} 
+                        onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} 
+                        onThemeChange={(t) => setTheme(t)}
+                        onWishlistClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })}
+                    />
+                </div>
             )}
 
             {view === 'HALL_OF_FAME' && user && (
-                <HallOfFame 
-                    theme={theme} 
-                    achievements={user.achievements || []} 
-                    onBack={handleBack} 
-                />
+                <div key="HALL_OF_FAME" className="animate-in fade-in">
+                    <HallOfFame 
+                        theme={theme} 
+                        achievements={user.achievements || []} 
+                        onBack={handleBack} 
+                    />
+                </div>
             )}
 
             {view === 'ACTIVITY' && user && (
-                <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} />
+                <div key="ACTIVITY" className="animate-in fade-in">
+                    <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} />
+                </div>
             )}
             
             {view === 'MY_COLLECTION' && user && (
-                <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
+                <div key="MY_COLLECTION" className="animate-in slide-in-from-right-4 fade-in duration-300">
+                    <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
+                </div>
             )}
 
         </main>
