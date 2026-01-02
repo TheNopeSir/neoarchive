@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ChevronLeft, ChevronRight, Heart, Share2, MessageSquare, Trash2, 
-  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2, Link2, Sparkles, Video
+  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2, Link2, Sparkles, Video, Pin
 } from 'lucide-react';
 import { Exhibit, Comment, UserProfile } from '../types';
 import { getArtifactTier, TIER_CONFIG, TRADE_STATUS_CONFIG, getSimilarArtifacts } from '../constants';
@@ -151,10 +151,12 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
   const handleShare = (platform: string) => {
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(`NeoArchive Artifact: ${exhibit.title}`);
+    const media = encodeURIComponent(slides[currentSlideIndex].url);
     
     switch(platform) {
         case 'tg': window.open(`https://t.me/share/url?url=${url}&text=${text}`); break;
         case 'wa': window.open(`https://api.whatsapp.com/send?text=${text}%20${url}`); break;
+        case 'pin': window.open(`https://pinterest.com/pin/create/button/?url=${url}&media=${media}&description=${text}`); break;
         case 'copy': navigator.clipboard.writeText(window.location.href); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); break;
     }
     setShowShareMenu(false);
@@ -215,6 +217,7 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                 <div className="absolute right-0 top-8 w-48 bg-dark-surface border border-white/10 rounded-xl shadow-2xl z-50 p-2 animate-in slide-in-from-top-2">
                     <button onClick={() => handleShare('tg')} className="w-full text-left p-3 hover:bg-white/5 rounded-lg text-xs font-pixel flex items-center gap-3"><Send size={14} className="text-blue-400"/> TELEGRAM</button>
                     <button onClick={() => handleShare('wa')} className="w-full text-left p-3 hover:bg-white/5 rounded-lg text-xs font-pixel flex items-center gap-3"><MessageCircle size={14} className="text-green-500"/> WHATSAPP</button>
+                    <button onClick={() => handleShare('pin')} className="w-full text-left p-3 hover:bg-white/5 rounded-lg text-xs font-pixel flex items-center gap-3"><Pin size={14} className="text-red-500"/> PINTEREST</button>
                     <button onClick={() => handleShare('copy')} className="w-full text-left p-3 hover:bg-white/5 rounded-lg text-xs font-pixel flex items-center gap-3"><Share2 size={14}/> COPY LINK</button>
                 </div>
             )}

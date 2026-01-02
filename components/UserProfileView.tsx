@@ -149,6 +149,11 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                             <div className="flex-1 space-y-1">
                                 <div className="text-[14px] text-wa-gold">{profileUser.username}</div>
                                 <div className="text-[12px] opacity-80">{profileUser.tagline}</div>
+                                {profileUser.telegram && (
+                                    <a href={`https://t.me/${profileUser.telegram}`} target="_blank" rel="noopener noreferrer" className="text-[12px] text-blue-300 hover:text-blue-200 hover:underline block">
+                                        TG: @{profileUser.telegram}
+                                    </a>
+                                )}
                                 <div className="text-[12px] flex gap-2 mt-2">
                                     <span onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="cursor-pointer hover:text-white">Подписчики: {profileUser.followers?.length || 0}</span>
                                     <span onClick={() => onOpenSocialList(profileUser.username, 'following')} className="cursor-pointer hover:text-white">Подписки: {profileUser.following?.length || 0}</span>
@@ -189,7 +194,19 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                         <div>
                                             <h2 className={`text-3xl font-pixel font-bold flex items-center gap-2 ${theme === 'xp' ? 'text-black' : ''}`}>@{profileUser.username}{profileUser.status && (<div className={`w-3 h-3 rounded-full ${STATUS_OPTIONS[profileUser.status].color.replace('text-', 'bg-')}`} title={STATUS_OPTIONS[profileUser.status].label} />)}</h2>
-                                            <p className="text-xs font-mono opacity-60">Регистрация: {profileUser.joinedDate}</p>
+                                            <div className="flex flex-col gap-1 mt-1">
+                                                <p className="text-xs font-mono opacity-60">Регистрация: {profileUser.joinedDate}</p>
+                                                {profileUser.telegram && (
+                                                    <a 
+                                                        href={`https://t.me/${profileUser.telegram}`} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer" 
+                                                        className={`text-xs font-mono flex items-center gap-1 hover:underline ${theme === 'xp' ? 'text-blue-600' : 'text-blue-400'}`}
+                                                    >
+                                                        <Send size={12}/> t.me/{profileUser.telegram}
+                                                    </a>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-6">
                                             <button onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="flex flex-col items-center group"><span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.followers?.length || 0}</span><span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Подписчики</span></button>
