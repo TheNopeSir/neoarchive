@@ -165,6 +165,7 @@ export default function App() {
           if (currIdx > 0) {
               setFeedMode(feedModes[currIdx - 1]);
           }
+          // Do not back out of Feed with Swipe Right on first tab, user might expect menu or nothing
       } else {
           handleBack();
       }
@@ -720,34 +721,40 @@ export default function App() {
                     {/* Categories */}
                     {feedMode === 'ARTIFACTS' && (
                         <div className="space-y-4">
-                            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                                 <button onClick={() => { setSelectedCategory('ВСЕ'); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
                                 {Object.values(DefaultCategory).map(cat => (
                                     <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
                                 ))}
                             </div>
 
-                            {/* Subcategory Dropdown - Filters the displayed items */}
+                            {/* Subcategory Tiles - Replaced Dropdown */}
                             {selectedCategory !== 'ВСЕ' && CATEGORY_SUBCATEGORIES[selectedCategory] && (
-                                <div className={`relative inline-block w-full md:w-64 animate-in slide-in-from-top-2 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Filter size={12} className="opacity-50"/>
-                                    </div>
-                                    <select
-                                        value={selectedSubcategory}
-                                        onChange={(e) => setSelectedSubcategory(e.target.value)}
-                                        className={`block w-full pl-10 pr-10 py-2 text-[10px] font-pixel uppercase rounded-xl border appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 transition-all ${
-                                            theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-white border-black/10'
+                                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-in slide-in-from-top-2 fade-in">
+                                    <button 
+                                        onClick={() => setSelectedSubcategory('ВСЕ')}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-pixel text-[9px] font-bold whitespace-nowrap border transition-all ${
+                                            selectedSubcategory === 'ВСЕ' 
+                                            ? (theme === 'xp' ? 'bg-blue-100 text-blue-900 border-blue-300' : 'bg-white/20 text-white border-white/30') 
+                                            : (theme === 'xp' ? 'bg-white border-gray-300 text-gray-500' : 'bg-transparent border-white/10 text-white/40 hover:bg-white/5')
                                         }`}
                                     >
-                                        <option value="ВСЕ">Все подкатегории</option>
-                                        {CATEGORY_SUBCATEGORIES[selectedCategory].map(sub => (
-                                            <option key={sub} value={sub}>{sub}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                        <ChevronDown size={14} className="opacity-50" />
-                                    </div>
+                                        <Filter size={10} /> ВСЕ
+                                    </button>
+
+                                    {CATEGORY_SUBCATEGORIES[selectedCategory].map(sub => (
+                                        <button 
+                                            key={sub} 
+                                            onClick={() => setSelectedSubcategory(sub)}
+                                            className={`px-4 py-2 rounded-lg font-pixel text-[9px] font-bold whitespace-nowrap border transition-all ${
+                                                selectedSubcategory === sub
+                                                ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_10px_rgba(74,222,128,0.1)]')
+                                                : (theme === 'xp' ? 'bg-white border-gray-300 text-gray-500 hover:text-blue-900' : 'bg-transparent border-white/10 text-white/40 hover:bg-white/5 hover:text-white')
+                                            }`}
+                                        >
+                                            {sub}
+                                        </button>
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -762,7 +769,7 @@ export default function App() {
                     </div>
                     
                     {/* Content Container (Smooth Transition) */}
-                    <div className="min-h-[50vh]">
+                    <div className="min-h-[50vh] transition-all duration-300">
                     {feedMode === 'ARTIFACTS' && (
                         <div key="ARTIFACTS_TAB" className="space-y-10 animate-in slide-in-from-right-4 duration-300">
                             {followingExhibits.length > 0 && (

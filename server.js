@@ -7,6 +7,7 @@ import pg from 'pg';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -564,8 +565,83 @@ app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API Endpoint ${req.path} not found` });
 });
 
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// Helper for SEO Injection
+const injectMeta = (html, data) => {
+    if (!data) return html;
+    const title = data.title || 'NeoArchive';
+    const desc = data.description || 'Digital Collection Manager';
+    const image = data.image || 'https://neoarchive.ru/default-og.png';
+    
+    return html
+        .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
+        .replace(/content="NeoArchive: Ваша цифровая полка"/g, `content="${title}"`) // Fallback replacement
+        .replace(/property="og:title" content=".*?"/, `property="og:title" content="${title}"`)
+        .replace(/property="twitter:title" content=".*?"/, `property="twitter:title" content="${title}"`)
+        .replace(/name="description" content=".*?"/, `name="description" content="${desc}"`)
+        .replace(/property="og:description" content=".*?"/, `property="og:description" content="${desc}"`)
+        .replace(/property="twitter:description" content=".*?"/, `property="twitter:description" content="${desc}"`)
+        .replace(/property="og:image" content=".*?"/, `property="og:image" content="${image}"`)
+        .replace(/property="twitter:image" content=".*?"/, `property="twitter:image" content="${image}"`);
+};
+
+// Catch-all route to serve Index.html with Dynamic Meta Tags
+app.get('*', async (req, res) => {
+    const filePath = path.join(__dirname, 'dist', 'index.html');
+    
+    fs.readFile(filePath, 'utf8', async (err, htmlData) => {
+        if (err) {
+            console.error('Error reading index.html', err);
+            return res.status(500).send('Server Error');
+        }
+
+        const path = req.path;
+        let metaData = null;
+
+        try {
+            if (path.startsWith('/artifact/')) {
+                const id = path.split('/')[2];
+                const result = await query('SELECT data FROM exhibits WHERE id = $1', [id]);
+                if (result.rows.length > 0) {
+                    const item = result.rows[0].data;
+                    metaData = {
+                        title: `${item.title} | NeoArchive`,
+                        description: item.description?.slice(0, 150) || `Артефакт из коллекции @${item.owner}`,
+                        image: item.imageUrls?.[0]
+                    };
+                }
+            } else if (path.startsWith('/collection/')) {
+                const id = path.split('/')[2];
+                const result = await query('SELECT data FROM collections WHERE id = $1', [id]);
+                if (result.rows.length > 0) {
+                    const col = result.rows[0].data;
+                    metaData = {
+                        title: `${col.title} | NeoArchive Collection`,
+                        description: col.description || `Коллекция от @${col.owner}`,
+                        image: col.coverImage
+                    };
+                }
+            } else if (path.startsWith('/u/') || path.startsWith('/profile/')) {
+                const username = path.split('/')[2];
+                const result = await query('SELECT data FROM users WHERE username = $1', [username]);
+                if (result.rows.length > 0) {
+                    const u = result.rows[0].data;
+                    metaData = {
+                        title: `@${u.username} | NeoArchive Profile`,
+                        description: u.tagline || `Профиль коллекционера ${u.username}`,
+                        image: u.avatarUrl
+                    };
+                }
+            }
+        } catch (e) {
+            console.error("SEO Injection Error:", e);
+        }
+
+        if (metaData) {
+            res.send(injectMeta(htmlData, metaData));
+        } else {
+            res.send(htmlData);
+        }
+    });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
