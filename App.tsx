@@ -301,6 +301,9 @@ export default function App() {
       setIsAddingToCollection(null);
   };
 
+  // MAIN FEED LOGIC: 
+  // 1. Filter by Category/Subcategory
+  // 2. Sort by date (newest first)
   const baseFilteredExhibits = useMemo(() => exhibits.filter(e => {
       if (e.isDraft && e.owner !== user?.username) return false;
       const catMatch = selectedCategory === 'ВСЕ' || e.category === selectedCategory;
@@ -308,8 +311,11 @@ export default function App() {
       return catMatch && subcatMatch;
   }), [exhibits, user, selectedCategory, selectedSubcategory]);
 
-  const followingExhibits = user ? baseFilteredExhibits.filter(e => user.following.includes(e.owner)) : [];
-  const globalExhibits = user ? baseFilteredExhibits.filter(e => !user.following.includes(e.owner) && e.owner !== user.username).sort((a,b) => calculateArtifactScore(b, user.preferences) - calculateArtifactScore(a, user.preferences)) : [];
+  const displayExhibits = useMemo(() => {
+      return [...baseFilteredExhibits].sort((a,b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+  }, [baseFilteredExhibits]);
   
   // MERGED WISHLIST SORTING
   const sortedWishlist = useMemo(() => {
@@ -431,16 +437,34 @@ export default function App() {
               : 'bg-white/80 border-b border-white/10 backdrop-blur-xl h-16'
           }`}>
               <div className="max-w-7xl mx-auto px-2 h-full flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                      {theme === 'winamp' ? (
-                          // WINAMP HEADER
-                          <div className="flex items-center gap-2 w-full" onClick={() => navigateTo('FEED')}>
+                  {theme === 'winamp' ? (
+                      // WINAMP HEADER WITH NAV
+                      <div className="flex items-center justify-between w-full h-full pr-1">
+                          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigateTo('FEED')}>
                               <div className="w-3 h-3 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050]"></div>
-                              <span className="font-winamp text-[14px] tracking-widest text-white drop-shadow-[1px_1px_0_#000]">NEOARCHIVE MAIN WINDOW</span>
+                              <span className="font-winamp text-[14px] tracking-widest text-white drop-shadow-[1px_1px_0_#000]">NEOARCHIVE</span>
                           </div>
-                      ) : (
-                          // STANDARD HEADER
-                          <>
+                          
+                          {/* Desktop Winamp Navigation */}
+                          <div className="hidden md:flex gap-2 font-winamp text-[10px] text-wa-gold">
+                              <button onClick={() => user && navigateTo('USER_PROFILE', { username: user.username })} className="hover:text-white">[ PROFILE ]</button>
+                              <button onClick={() => navigateTo('COMMUNITY_HUB')} className="hover:text-white">[ NETWORK ]</button>
+                              <button onClick={() => navigateTo('ACTIVITY')} className="hover:text-white relative">
+                                  [ LOGS ]
+                                  {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute -top-1 -right-1 text-red-500">*</span>}
+                              </button>
+                              <button onClick={() => navigateTo('SEARCH')} className="hover:text-white">[ SEARCH ]</button>
+                          </div>
+
+                          <div className="flex gap-1">
+                              <div className="w-3 h-3 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050] flex items-center justify-center text-[8px] text-black font-bold cursor-pointer hover:bg-white">_</div>
+                              <div className="w-3 h-3 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050] flex items-center justify-center text-[8px] text-black font-bold cursor-pointer hover:bg-white">X</div>
+                          </div>
+                      </div>
+                  ) : (
+                      // STANDARD HEADER (Shared for Dark/Light/XP)
+                      <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-4">
                             <div className={`font-pixel text-lg font-black tracking-widest cursor-pointer group ${theme === 'xp' ? 'text-white italic drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]' : ''}`} onClick={() => navigateTo('FEED')}>
                                 NEO<span className={`${theme === 'xp' ? 'text-white' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
                             </div>
@@ -451,32 +475,23 @@ export default function App() {
                                 <Search size={14} className={`${theme === 'xp' ? 'opacity-100 text-blue-600' : 'opacity-40'} mr-2`} />
                                 <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК ПО БАЗЕ...</span>
                             </button>
-                          </>
-                      )}
-                  </div>
-                  
-                  {theme === 'winamp' ? (
-                      // WINAMP CONTROLS (FAKE)
-                      <div className="flex gap-1">
-                          <div className="w-3 h-3 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050] flex items-center justify-center text-[8px] text-black font-bold cursor-pointer hover:bg-white">_</div>
-                          <div className="w-3 h-3 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050] flex items-center justify-center text-[8px] text-black font-bold cursor-pointer hover:bg-white">X</div>
-                      </div>
-                  ) : (
-                      // STANDARD CONTROLS
-                      <div className="flex items-center gap-2 md:gap-4">
-                          <button onClick={() => setShowCreateMenu(true)} className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}>
-                              <PlusCircle size={14} /> ДОБАВИТЬ
-                          </button>
-                          <button onClick={async () => { await db.forceSync(); refreshData(); }} className={`hidden md:block p-2 rounded-xl transition-all ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}><RefreshCw size={18} /></button>
-                          <button onClick={() => navigateTo('ACTIVITY')} className={`hidden md:block relative p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
-                              <Bell size={20} />
-                              {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
-                          </button>
-                          {user && (
-                              <div className={`hidden md:block w-10 h-10 rounded-full p-0.5 cursor-pointer hover:scale-105 transition-all ${theme === 'xp' ? 'border-2 border-white/50' : 'border-2 border-green-500/30'}`} onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
-                                  <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
-                              </div>
-                          )}
+                          </div>
+                          
+                          <div className="flex items-center gap-2 md:gap-4">
+                              <button onClick={() => setShowCreateMenu(true)} className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}>
+                                  <PlusCircle size={14} /> ДОБАВИТЬ
+                              </button>
+                              <button onClick={async () => { await db.forceSync(); refreshData(); }} className={`hidden md:block p-2 rounded-xl transition-all ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}><RefreshCw size={18} /></button>
+                              <button onClick={() => navigateTo('ACTIVITY')} className={`hidden md:block relative p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
+                                  <Bell size={20} />
+                                  {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
+                              </button>
+                              {user && (
+                                  <div className={`hidden md:block w-10 h-10 rounded-full p-0.5 cursor-pointer hover:scale-105 transition-all ${theme === 'xp' ? 'border-2 border-white/50' : 'border-2 border-green-500/30'}`} onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
+                                      <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
+                                  </div>
+                              )}
+                          </div>
                       </div>
                   )}
               </div>
@@ -531,7 +546,7 @@ export default function App() {
                             </div>
 
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
-                                {globalExhibits.map(item => (
+                                {displayExhibits.map(item => (
                                     <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
                                 ))}
                             </div>
