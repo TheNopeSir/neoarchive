@@ -114,8 +114,10 @@ export interface UserProfile {
   username: string;
   email: string;
   tagline: string;
+  bio?: string; // Extended biography
   status?: UserStatus;
   avatarUrl: string;
+  coverUrl?: string; // Profile Banner
   joinedDate: string;
   following: string[];
   followers: string[]; 
@@ -125,6 +127,7 @@ export interface UserProfile {
   password?: string;
   isAdmin?: boolean;
   telegram?: string;
+  telegramId?: string;
 }
 
 export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_WISHLIST' | 'EDIT_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'MY_COLLECTION' | 'SOCIAL_LIST' | 'WISHLIST_DETAIL';
