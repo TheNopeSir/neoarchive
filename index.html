@@ -43,8 +43,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Changed fonts to Orbitron (Headers) and Exo 2 (Body) for legibility and style -->
-    <link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,100..900;1,100..900&family=Orbitron:wght@400..900&display=swap" rel="stylesheet">
+    <!-- Font Stack: Orbitron (Headers), Exo 2 (Body), VT323 (Winamp) -->
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,100..900;1,100..900&family=Orbitron:wght@400..900&family=VT323&display=swap" rel="stylesheet">
     
     <script>
       tailwind.config = {
@@ -62,16 +62,20 @@
               'light-primary': '#111827',
               'light-accent': '#059669',
               'light-dim': '#9ca3af',
-              // Winamp colors
-              'wa-base': '#191919',
-              'wa-title': '#282828',
+              // Winamp authentic colors
+              'wa-base': '#292929',
+              'wa-gray': '#DCDCDC',
+              'wa-dark': '#1a1a1a',
               'wa-green': '#00EA00',
               'wa-gold': '#FFD700',
+              'wa-blue-dark': '#000040',
+              'wa-blue-light': '#0000A0',
             },
             fontFamily: {
               'mono': ['"Exo 2"', 'monospace'], 
               'pixel': ['"Orbitron"', 'sans-serif'],
-              'sans': ['"Exo 2"', 'sans-serif'], 
+              'sans': ['"Exo 2"', 'sans-serif'],
+              'winamp': ['"VT323"', 'monospace'],
             },
             animation: {
               'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -97,6 +101,13 @@
       .light ::-webkit-scrollbar-track { background: #e5e7eb; }
       .light ::-webkit-scrollbar-thumb { background: #9ca3af; }
       .light ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+      
+      /* Winamp Scrollbar */
+      .winamp-scroll ::-webkit-scrollbar { width: 10px; height: 10px; }
+      .winamp-scroll ::-webkit-scrollbar-track { background: #292929; border-left: 1px solid #505050; }
+      .winamp-scroll ::-webkit-scrollbar-thumb { background: #505050; border: 1px solid #fff; border-right: 1px solid #000; border-bottom: 1px solid #000; }
+      .winamp-scroll ::-webkit-scrollbar-thumb:active { background: #292929; }
+
       .scrollbar-hide::-webkit-scrollbar { display: none; }
       .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       .pb-safe { padding-bottom: env(safe-area-inset-bottom); }

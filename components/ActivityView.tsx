@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Bell, MessageCircle, ChevronDown, ChevronUp, User, Heart, MessageSquare, UserPlus, BookOpen } from 'lucide-react';
+import { Bell, MessageCircle, ChevronDown, ChevronUp, User, Heart, MessageSquare, UserPlus, BookOpen, CheckCheck } from 'lucide-react';
 import { Notification, Message, UserProfile, Exhibit } from '../types';
-import { getUserAvatar } from '../services/storageService';
+import { getUserAvatar, markNotificationsRead } from '../services/storageService';
 
 interface ActivityViewProps {
     notifications: Notification[];
@@ -23,6 +23,11 @@ const ActivityView: React.FC<ActivityViewProps> = ({
 
     const myNotifs = notifications.filter(n => n.recipient === currentUser.username);
     const myMessages = messages.filter(m => m.sender === currentUser.username || m.receiver === currentUser.username);
+
+    // Auto-mark logic could go here, but manual button is better for UX control
+    const handleMarkAllRead = () => {
+        markNotificationsRead(currentUser.username);
+    };
 
     const groupedNotifs = myNotifs.reduce((acc, notif) => {
         const key = notif.targetId 
@@ -52,6 +57,7 @@ const ActivityView: React.FC<ActivityViewProps> = ({
         const first = group[0];
         const isExpanded = expandedGroups[key];
         const count = group.length;
+        const hasUnread = group.some(n => !n.isRead);
         const uniqueActors = Array.from(new Set(group.map(n => n.actor)));
         
         let title = '';
@@ -65,7 +71,7 @@ const ActivityView: React.FC<ActivityViewProps> = ({
             : <span className="font-bold">@{uniqueActors[0]} и еще {uniqueActors.length - 1}</span>;
 
         return (
-            <div key={key} className={`border rounded mb-3 overflow-hidden transition-all ${theme === 'dark' ? 'border-gray-700 bg-gray-900/50' : theme === 'winamp' ? 'border-[#505050] bg-[#191919] text-[#00ff00]' : 'border-gray-200 bg-white'}`}>
+            <div key={key} className={`border rounded mb-3 overflow-hidden transition-all ${theme === 'dark' ? 'border-gray-700 bg-gray-900/50' : theme === 'winamp' ? 'border-[#505050] bg-[#191919] text-[#00ff00]' : 'border-gray-200 bg-white'} ${hasUnread ? 'border-l-4 border-l-green-500' : 'opacity-70'}`}>
                 <div 
                     onClick={() => toggleGroup(key)}
                     className="p-4 flex items-center justify-between cursor-pointer hover:bg-white/5"
@@ -84,6 +90,7 @@ const ActivityView: React.FC<ActivityViewProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                         {count > 1 && <span className="text-[10px] bg-green-500 text-black px-1.5 rounded-full font-bold">+{count}</span>}
+                        {hasUnread && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
                         {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </div>
                 </div>
@@ -91,7 +98,7 @@ const ActivityView: React.FC<ActivityViewProps> = ({
                 {isExpanded && (
                     <div className={`border-t ${theme === 'dark' ? 'border-gray-700 bg-black/20' : theme === 'winamp' ? 'border-[#505050] bg-black' : 'border-gray-200 bg-gray-50'}`}>
                         {group.map(notif => (
-                            <div key={notif.id} className="p-3 flex items-center gap-3 hover:bg-white/5 border-b border-dashed border-gray-500/20 last:border-0">
+                            <div key={notif.id} className={`p-3 flex items-center gap-3 hover:bg-white/5 border-b border-dashed border-gray-500/20 last:border-0 ${!notif.isRead ? 'bg-green-500/5' : ''}`}>
                                 <div onClick={() => onAuthorClick(notif.actor)} className="cursor-pointer w-6 h-6 rounded-full overflow-hidden flex-shrink-0">
                                     <img src={getUserAvatar(notif.actor)} className="w-full h-full object-cover" />
                                 </div>
@@ -143,6 +150,13 @@ const ActivityView: React.FC<ActivityViewProps> = ({
             <div className="space-y-4">
                 {activeTab === 'NOTIFICATIONS' && (
                     <div>
+                        {myNotifs.length > 0 && (
+                            <div className="flex justify-end mb-4">
+                                <button onClick={handleMarkAllRead} className="flex items-center gap-2 text-[10px] font-pixel opacity-50 hover:opacity-100">
+                                    <CheckCheck size={14}/> ПРОЧИТАТЬ ВСЕ
+                                </button>
+                            </div>
+                        )}
                         {Object.keys(groupedNotifs).length === 0 ? (
                             <div className="text-center opacity-50 font-mono py-10">НЕТ НОВЫХ СОБЫТИЙ</div>
                         ) : (

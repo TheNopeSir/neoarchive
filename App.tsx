@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark, Sparkles, ChevronDown, Filter, Radar, Globe
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark, Sparkles, ChevronDown, Filter, Radar, Globe, Play, Square as SquareIcon, SkipBack, SkipForward, Menu
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -11,7 +11,7 @@ import ExhibitCard from './components/ExhibitCard';
 import UserProfileView from './components/UserProfileView';
 import ExhibitDetailPage from './components/ExhibitDetailPage';
 import MyCollection from './components/MyCollection';
-import CommunityHub from './components/CommunityHub'; // New Component
+import CommunityHub from './components/CommunityHub'; 
 import RetroLoader from './components/RetroLoader';
 import CollectionCard from './components/CollectionCard';
 import PixelSnow from './components/PixelSnow';
@@ -204,10 +204,25 @@ export default function App() {
     }
   }, [view, loadMore]);
 
-  const handleExhibitClick = (item: Exhibit) => {
-    const updated = { ...item, views: (item.views || 0) + 1 };
-    db.updateExhibit(updated);
-    navigateTo('EXHIBIT', { item: updated });
+  const handleExhibitClick = async (item: Exhibit) => {
+    // Unique View Counting Logic
+    const sessionKey = `neo_viewed_${item.id}`;
+    const hasViewed = sessionStorage.getItem(sessionKey);
+    
+    let updatedItem = item;
+
+    if (!hasViewed) {
+        // Increment view count
+        updatedItem = { ...item, views: (item.views || 0) + 1 };
+        // Optimistic UI update
+        setExhibits(prev => prev.map(e => e.id === item.id ? updatedItem : e));
+        // Mark as viewed in session
+        sessionStorage.setItem(sessionKey, '1');
+        // Persist
+        await db.updateExhibit(updatedItem);
+    }
+
+    navigateTo('EXHIBIT', { item: updatedItem });
   };
 
   const handleLike = async (id: string, e?: React.MouseEvent) => {
@@ -295,8 +310,12 @@ export default function App() {
 
   const followingExhibits = user ? baseFilteredExhibits.filter(e => user.following.includes(e.owner)) : [];
   const globalExhibits = user ? baseFilteredExhibits.filter(e => !user.following.includes(e.owner) && e.owner !== user.username).sort((a,b) => calculateArtifactScore(b, user.preferences) - calculateArtifactScore(a, user.preferences)) : [];
-  const grails = wishlist.filter(w => w.priority === 'GRAIL');
-  const otherWishlist = wishlist.filter(w => w.priority !== 'GRAIL');
+  
+  // MERGED WISHLIST SORTING
+  const sortedWishlist = useMemo(() => {
+      const priorityWeights = { 'GRAIL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+      return [...wishlist].sort((a,b) => priorityWeights[b.priority] - priorityWeights[a.priority]);
+  }, [wishlist]);
 
   const handleSaveArtifact = async (artifactData: Partial<Exhibit>) => {
       if (!user || !artifactData.title) return;
@@ -308,7 +327,7 @@ export default function App() {
               if (selectedExhibit?.id === updated.id) setSelectedExhibit(updated as Exhibit);
           }
       } else {
-          const ex: Exhibit = { id: crypto.randomUUID(), title: artifactData.title, description: artifactData.description || '', category: artifactData.category || DefaultCategory.MISC, subcategory: artifactData.subcategory, imageUrls: artifactData.imageUrls || [], videoUrl: artifactData.videoUrl, owner: user.username, timestamp: new Date().toISOString(), likes: 0, likedBy: [], views: 0, specs: artifactData.specs || {}, comments: [], isDraft: artifactData.isDraft, condition: artifactData.condition, quality: 'MINT', tradeStatus: artifactData.tradeStatus || 'NONE', relatedIds: artifactData.relatedIds || [] };
+          const ex: Exhibit = { id: crypto.randomUUID(), title: artifactData.title, description: artifactData.description || '', category: artifactData.category || DefaultCategory.MISC, subcategory: artifactData.subcategory, imageUrls: artifactData.imageUrls || [], videoUrl: artifactData.videoUrl, owner: user.username, timestamp: new Date().toISOString(), likes: 0, likedBy: [], views: 0, specs: artifactData.specs || {}, comments: [], isDraft: artifactData.isDraft, condition: artifactData.condition, quality: 'MINT', tradeStatus: artifactData.tradeStatus || 'NONE', relatedIds: artifactData.relatedIds || [], price: artifactData.price, currency: artifactData.currency, tradeRequest: artifactData.tradeRequest };
           await db.saveExhibit(ex);
       }
       navigateTo('FEED');
@@ -392,47 +411,79 @@ export default function App() {
   if (theme === 'dark') bgClass = 'bg-black text-gray-200';
   else if (theme === 'light') bgClass = 'bg-gray-100 text-gray-900';
   else if (theme === 'xp') bgClass = 'bg-gradient-to-b from-[#628dce] via-[#85aaee] to-[#e2e1d6] text-black font-sans';
-  else if (theme === 'winamp') bgClass = 'bg-[#191919] text-[#00ff00] font-mono';
+  else if (theme === 'winamp') bgClass = 'bg-[#202020] text-[#00EA00] font-winamp winamp-scroll'; // Authentic Winamp BG and Font
 
   return (
-    <div {...swipeProps} className={`min-h-screen transition-colors duration-500 ${theme === 'xp' ? 'font-sans' : 'font-sans'} ${bgClass} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}>
+    <div {...swipeProps} className={`min-h-screen transition-colors duration-500 ${theme === 'xp' ? 'font-sans' : ''} ${bgClass} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}>
         <SEO title={seoData.title} description={seoData.desc} image={seoData.image} path={seoData.path} />
         {theme !== 'xp' && theme !== 'winamp' && <MatrixRain theme={theme} />}
         {theme !== 'xp' && theme !== 'winamp' && <PixelSnow theme={theme} />}
         <CRTOverlay />
         
         {view !== 'AUTH' && (
-          <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${theme === 'winamp' ? 'bg-[#282828] border-b border-[#505050] text-[#00ff00]' : theme === 'dark' ? 'bg-black/60 border-b border-white/10 backdrop-blur-xl' : theme === 'xp' ? 'bg-gradient-to-b from-[#245DDA] to-[#2055C8] border-b-2 border-[#003c74] shadow-md' : 'bg-white/80 border-b border-white/10 backdrop-blur-xl'}`}>
-              <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-                  <div className="flex items-center gap-6">
-                      <div className={`font-pixel text-lg font-black tracking-widest cursor-pointer group ${theme === 'xp' ? 'text-white italic drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]' : ''}`} onClick={() => navigateTo('FEED')}>
-                          NEO<span className={`${theme === 'xp' ? 'text-white' : theme === 'winamp' ? 'text-[#00ff00]' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
-                      </div>
-                      <button onClick={() => navigateTo('SEARCH')} className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'winamp' ? 'bg-black border-[#505050] text-[#00ff00]' : theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}>
-                          <Search size={14} className={`${theme === 'xp' ? 'opacity-100 text-blue-600' : 'opacity-40'} mr-2`} />
-                          <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК ПО БАЗЕ...</span>
-                      </button>
-                  </div>
-                  <div className="flex items-center gap-2 md:gap-4">
-                      <button onClick={() => setShowCreateMenu(true)} className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}>
-                          <PlusCircle size={14} /> ДОБАВИТЬ
-                      </button>
-                      <button onClick={async () => { await db.forceSync(); refreshData(); }} className={`hidden md:block p-2 rounded-xl transition-all ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}><RefreshCw size={18} /></button>
-                      <button onClick={() => navigateTo('ACTIVITY')} className={`hidden md:block relative p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
-                          <Bell size={20} />
-                          {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
-                      </button>
-                      {user && (
-                          <div className={`hidden md:block w-10 h-10 rounded-full p-0.5 cursor-pointer hover:scale-105 transition-all ${theme === 'xp' ? 'border-2 border-white/50' : 'border-2 border-green-500/30'}`} onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
-                              <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
+          <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+              theme === 'winamp' 
+              ? 'bg-gradient-to-r from-wa-blue-light to-wa-blue-dark border-b-2 border-b-[#101010] h-8 text-white select-none shadow-md' 
+              : theme === 'dark' 
+              ? 'bg-black/60 border-b border-white/10 backdrop-blur-xl h-16' 
+              : theme === 'xp' 
+              ? 'bg-gradient-to-b from-[#245DDA] to-[#2055C8] border-b-2 border-[#003c74] shadow-md h-16' 
+              : 'bg-white/80 border-b border-white/10 backdrop-blur-xl h-16'
+          }`}>
+              <div className="max-w-7xl mx-auto px-2 h-full flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                      {theme === 'winamp' ? (
+                          // WINAMP HEADER
+                          <div className="flex items-center gap-2 w-full" onClick={() => navigateTo('FEED')}>
+                              <div className="w-3 h-3 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050]"></div>
+                              <span className="font-winamp text-[14px] tracking-widest text-white drop-shadow-[1px_1px_0_#000]">NEOARCHIVE MAIN WINDOW</span>
                           </div>
+                      ) : (
+                          // STANDARD HEADER
+                          <>
+                            <div className={`font-pixel text-lg font-black tracking-widest cursor-pointer group ${theme === 'xp' ? 'text-white italic drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]' : ''}`} onClick={() => navigateTo('FEED')}>
+                                NEO<span className={`${theme === 'xp' ? 'text-white' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
+                            </div>
+                            <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`hidden md:flex items-center px-4 py-1.5 rounded-2xl transition-all ${theme === 'dark' ? 'hover:bg-white/10 text-white/70' : 'hover:bg-black/10'}`}>
+                                <Globe size={14} className="mr-2"/> <span className="font-pixel text-xs">COMMUNITY</span>
+                            </button>
+                            <button onClick={() => navigateTo('SEARCH')} className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}>
+                                <Search size={14} className={`${theme === 'xp' ? 'opacity-100 text-blue-600' : 'opacity-40'} mr-2`} />
+                                <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК ПО БАЗЕ...</span>
+                            </button>
+                          </>
                       )}
                   </div>
+                  
+                  {theme === 'winamp' ? (
+                      // WINAMP CONTROLS (FAKE)
+                      <div className="flex gap-1">
+                          <div className="w-3 h-3 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050] flex items-center justify-center text-[8px] text-black font-bold cursor-pointer hover:bg-white">_</div>
+                          <div className="w-3 h-3 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050] flex items-center justify-center text-[8px] text-black font-bold cursor-pointer hover:bg-white">X</div>
+                      </div>
+                  ) : (
+                      // STANDARD CONTROLS
+                      <div className="flex items-center gap-2 md:gap-4">
+                          <button onClick={() => setShowCreateMenu(true)} className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}>
+                              <PlusCircle size={14} /> ДОБАВИТЬ
+                          </button>
+                          <button onClick={async () => { await db.forceSync(); refreshData(); }} className={`hidden md:block p-2 rounded-xl transition-all ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}><RefreshCw size={18} /></button>
+                          <button onClick={() => navigateTo('ACTIVITY')} className={`hidden md:block relative p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
+                              <Bell size={20} />
+                              {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
+                          </button>
+                          {user && (
+                              <div className={`hidden md:block w-10 h-10 rounded-full p-0.5 cursor-pointer hover:scale-105 transition-all ${theme === 'xp' ? 'border-2 border-white/50' : 'border-2 border-green-500/30'}`} onClick={() => navigateTo('USER_PROFILE', { username: user.username })}>
+                                  <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
+                              </div>
+                          )}
+                      </div>
+                  )}
               </div>
           </header>
         )}
 
-        <main className={`pt-20 pb-28 px-4 max-w-7xl mx-auto min-h-screen relative z-10 transition-all duration-700 ${!isInitializing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+        <main className={`${theme === 'winamp' ? 'pt-10 pb-20' : 'pt-20 pb-28'} px-4 max-w-7xl mx-auto min-h-screen relative z-10 transition-all duration-700 ${!isInitializing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             
             {view === 'AUTH' && <MatrixLogin theme={theme === 'xp' || theme === 'winamp' ? 'light' : theme} onLogin={(u) => { setUser(u); if(u.settings?.theme) setTheme(u.settings.theme); navigateTo('FEED'); refreshData(); }} />}
 
@@ -444,56 +495,45 @@ export default function App() {
 
             {view === 'FEED' && (
                 <div key="FEED" className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
-                    {feedMode === 'ARTIFACTS' && (
-                        <div className="space-y-4">
-                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                                <button onClick={() => { setSelectedCategory('ВСЕ'); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
-                                {Object.values(DefaultCategory).map(cat => (
-                                    <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
-                                ))}
+                    {/* Winamp doesn't need big tabs, it needs small buttons or a playlist switch */}
+                    {theme === 'winamp' ? (
+                        <div className="flex gap-1 mb-4 border-b border-[#505050] pb-2">
+                             <button onClick={() => setFeedMode('ARTIFACTS')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'ARTIFACTS' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ ARTIFACTS ]</button>
+                             <button onClick={() => setFeedMode('COLLECTIONS')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'COLLECTIONS' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ COLLECTIONS ]</button>
+                             <button onClick={() => setFeedMode('WISHLIST')} className={`px-2 py-1 text-[12px] font-winamp ${feedMode === 'WISHLIST' ? 'text-wa-gold' : 'text-wa-green'} hover:text-white`}>[ WISHLIST ]</button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                            <div className="flex gap-6 overflow-x-auto scrollbar-hide w-full">
+                                <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
+                                <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
+                                <button onClick={() => setFeedMode('WISHLIST')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Radar size={14} /> РАДАР (WISHLIST)</button>
                             </div>
-                            {selectedCategory !== 'ВСЕ' && CATEGORY_SUBCATEGORIES[selectedCategory] && (
-                                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-in slide-in-from-top-2 fade-in">
-                                    <button onClick={() => setSelectedSubcategory('ВСЕ')} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-pixel text-[9px] font-bold whitespace-nowrap border transition-all ${selectedSubcategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-blue-100 text-blue-900 border-blue-300' : 'bg-white/20 text-white border-white/30') : (theme === 'xp' ? 'bg-white border-gray-300 text-gray-500' : 'bg-transparent border-white/10 text-white/40 hover:bg-white/5')}`}><Filter size={10} /> ВСЕ</button>
-                                    {CATEGORY_SUBCATEGORIES[selectedCategory].map(sub => (
-                                        <button key={sub} onClick={() => setSelectedSubcategory(sub)} className={`px-4 py-2 rounded-lg font-pixel text-[9px] font-bold whitespace-nowrap border transition-all ${selectedSubcategory === sub ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_10px_rgba(74,222,128,0.1)]') : (theme === 'xp' ? 'bg-white border-gray-300 text-gray-500 hover:text-blue-900' : 'bg-transparent border-white/10 text-white/40 hover:bg-white/5 hover:text-white')}`}>{sub}</button>
-                                    ))}
-                                </div>
-                            )}
                         </div>
                     )}
                     
-                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                        <div className="flex gap-6 overflow-x-auto scrollbar-hide w-full">
-                            <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
-                            <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
-                            <button onClick={() => setFeedMode('WISHLIST')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Radar size={14} /> РАДАР (WISHLIST)</button>
-                        </div>
-                    </div>
-                    
+                    {/* FEED CONTENT */}
                     <div className="min-h-[50vh] transition-all duration-300">
                     {feedMode === 'ARTIFACTS' && (
-                        <div key="ARTIFACTS_TAB" className="space-y-10 animate-in slide-in-from-right-4 duration-300">
-                            {followingExhibits.length > 0 && (
-                                <div>
-                                    <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Zap size={14} className="text-yellow-500" /> ПОДПИСКИ</h2>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
-                                        {followingExhibits.map(item => (
-                                            <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
+                        <div key="ARTIFACTS_TAB" className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                            {/* Categories for standard themes */}
+                            {theme !== 'winamp' && (
+                                <div className="space-y-4">
+                                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                        <button onClick={() => { setSelectedCategory('ВСЕ'); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>ВСЕ</button>
+                                        {Object.values(DefaultCategory).map(cat => (
+                                            <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
                                         ))}
                                     </div>
                                 </div>
                             )}
-                            <div>
-                                <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Grid size={14} className={theme === 'xp' ? 'text-blue-600' : 'text-green-500'} /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}</h2>
-                                {globalExhibits.length === 0 ? <div className="py-20 flex flex-col items-center justify-center opacity-50"><RetroLoader text="NO_DATA_FOUND" /><p className="mt-4 text-xs font-mono">{selectedSubcategory !== 'ВСЕ' ? 'В этой подкатегории пусто' : 'База данных пуста или недоступна'}</p></div> : (
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
-                                        {globalExhibits.map(item => (
-                                            <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
-                                        ))}
-                                    </div>
-                                )}
+
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
+                                {globalExhibits.map(item => (
+                                    <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
+                                ))}
                             </div>
+                            
                             {isLoadingMore && <div className="flex justify-center py-10"><RetroLoader text="SYNCHRONIZING..." /></div>}
                         </div>
                     )}
@@ -504,24 +544,11 @@ export default function App() {
                     )}
                     {feedMode === 'WISHLIST' && (
                         <div key="WISHLIST_TAB" className="space-y-8 animate-in slide-in-from-right-4 duration-300">
-                            <div className="p-6 rounded-2xl border border-dashed border-white/20 flex flex-col items-center justify-center text-center bg-white/5">
-                                <Radar size={32} className="mb-2 opacity-50 animate-pulse" />
-                                <h2 className="font-pixel text-sm uppercase tracking-widest mb-1">ГЛОБАЛЬНЫЙ РОЗЫСК</h2>
-                                <p className="font-mono text-[10px] opacity-60 max-w-md">База данных разыскиваемых предметов. Если у вас есть что-то из этого списка — свяжитесь с коллекционером.</p>
-                            </div>
-                            {grails.length > 0 && (
-                                <div>
-                                    <h3 className="font-pixel text-[10px] text-yellow-500 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Sparkles size={14} className="animate-spin-slow" /> Святой Грааль (Особый приоритет)</h3>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                                        {grails.map(item => ( <WishlistCard key={item.id} item={item} theme={theme} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })} /> ))}
-                                    </div>
-                                </div>
-                            )}
                             <div>
-                                <h3 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Search size={14} /> Текущий поиск</h3>
-                                {otherWishlist.length === 0 && grails.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Список желаемого пуст</div> : (
+                                <h3 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'winamp' ? 'font-winamp text-wa-green' : ''}`}><Search size={14} /> Глобальный розыск</h3>
+                                {sortedWishlist.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Список желаемого пуст</div> : (
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                        {otherWishlist.map(item => ( <WishlistCard key={item.id} item={item} theme={theme} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })} /> ))}
+                                        {sortedWishlist.map(item => ( <WishlistCard key={item.id} item={item} theme={theme} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })} /> ))}
                                     </div>
                                 )}
                             </div>
@@ -622,7 +649,8 @@ export default function App() {
             
             {view === 'MY_COLLECTION' && user && (
                 <div key="MY_COLLECTION" className="animate-in slide-in-from-right-4 fade-in duration-300">
-                    <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
+                    {/* Pass all exhibits so MyCollection can determine Favorites */}
+                    <MyCollection theme={theme} user={user} exhibits={exhibits.filter(e => e.owner === user.username)} allExhibits={exhibits} collections={collections.filter(c => c.owner === user.username)} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onLike={handleLike} />
                 </div>
             )}
 
@@ -666,12 +694,36 @@ export default function App() {
         )}
         
         {view !== 'AUTH' && (
-          <nav className={`fixed bottom-0 left-0 right-0 h-20 border-t backdrop-blur-2xl md:hidden flex justify-around items-center z-50 px-4 pb-safe ${theme === 'winamp' ? 'bg-[#282828] border-[#505050] text-[#00ff00]' : theme === 'dark' ? 'border-white/10 bg-black/60' : theme === 'xp' ? 'bg-[#245DDA]/90 border-[#003c74]' : 'bg-white/80 border-black/10'}`}>
-              <button onClick={() => navigateTo('FEED')} className={`p-2 transition-all ${view === 'FEED' ? (theme === 'xp' ? 'text-white scale-125' : theme === 'winamp' ? 'text-[#00ff00] scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><LayoutGrid size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
-              <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`p-2 transition-all ${view === 'COMMUNITY_HUB' ? (theme === 'xp' ? 'text-white scale-125' : theme === 'winamp' ? 'text-[#00ff00] scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><Globe size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
-              <div className="relative -top-5"><button onClick={() => setShowCreateMenu(true)} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${theme === 'xp' ? 'bg-green-600 border-4 border-[#245DDA] shadow-lg text-white font-serif italic' : theme === 'winamp' ? 'bg-[#00ff00] text-black border-4 border-[#505050]' : 'bg-green-500 text-black shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black'}`}><PlusCircle size={32} /></button></div>
-              <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? (theme === 'xp' ? 'text-white scale-125' : theme === 'winamp' ? 'text-[#00ff00] scale-125' : 'text-green-500 scale-125') : 'opacity-40'} relative`}><Bell size={24} className={theme === 'xp' ? 'text-white' : ''} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}</button>
-              <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? (theme === 'xp' ? 'text-white scale-125' : theme === 'winamp' ? 'text-[#00ff00] scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><User size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+          <nav className={`fixed bottom-0 left-0 right-0 h-16 border-t backdrop-blur-2xl md:hidden flex justify-around items-center z-50 px-4 pb-safe 
+            ${theme === 'winamp' 
+              ? 'bg-[#292929] border-t border-[#505050] text-[#00EA00]' 
+              : theme === 'dark' 
+              ? 'border-white/10 bg-black/60' 
+              : theme === 'xp' 
+              ? 'bg-[#245DDA]/90 border-[#003c74]' 
+              : 'bg-white/80 border-black/10'}`}>
+              
+              {/* Controls Style for Winamp */}
+              {theme === 'winamp' ? (
+                  <>
+                    <button onClick={() => navigateTo('FEED')} className={`p-2 rounded active:scale-95 active:bg-[#1a1a1a] border border-[#505050] ${view === 'FEED' ? 'text-wa-gold border-wa-gold' : ''}`}><SkipBack size={20} /></button>
+                    <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`p-2 rounded active:scale-95 active:bg-[#1a1a1a] border border-[#505050] ${view === 'COMMUNITY_HUB' ? 'text-wa-gold border-wa-gold' : ''}`}><Play size={20} /></button>
+                    <button onClick={() => setShowCreateMenu(true)} className={`p-2 rounded active:scale-95 active:bg-[#1a1a1a] border border-[#505050] text-wa-gold`}><PlusCircle size={20} /></button>
+                    <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 rounded active:scale-95 active:bg-[#1a1a1a] border border-[#505050] ${view === 'ACTIVITY' ? 'text-wa-gold border-wa-gold' : ''} relative`}>
+                        <SquareIcon size={20} fill={view === 'ACTIVITY' ? 'currentColor' : 'none'} />
+                        {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+                    </button>
+                    <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 rounded active:scale-95 active:bg-[#1a1a1a] border border-[#505050] ${view === 'USER_PROFILE' ? 'text-wa-gold border-wa-gold' : ''}`}><SkipForward size={20} /></button>
+                  </>
+              ) : (
+                  <>
+                    <button onClick={() => navigateTo('FEED')} className={`p-2 transition-all ${view === 'FEED' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><LayoutGrid size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+                    <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`p-2 transition-all ${view === 'COMMUNITY_HUB' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><Globe size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+                    <div className="relative -top-5"><button onClick={() => setShowCreateMenu(true)} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${theme === 'xp' ? 'bg-green-600 border-4 border-[#245DDA] shadow-lg text-white font-serif italic' : 'bg-green-500 text-black shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black'}`}><PlusCircle size={32} /></button></div>
+                    <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'} relative`}><Bell size={24} className={theme === 'xp' ? 'text-white' : ''} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}</button>
+                    <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><User size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+                  </>
+              )}
           </nav>
         )}
     </div>

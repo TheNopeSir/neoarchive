@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Camera, ArrowLeft, Save, X, Info, Archive, Video, RefreshCw, Link2, Award } from 'lucide-react';
+import { Camera, ArrowLeft, Save, X, Info, Archive, Video, RefreshCw, Link2, Award, DollarSign } from 'lucide-react';
 import { DefaultCategory, CATEGORY_SUBCATEGORIES, CATEGORY_SPECS_TEMPLATES, TRADE_STATUS_CONFIG, CATEGORY_CONDITIONS } from '../constants';
 import { fileToBase64 } from '../services/storageService';
 import { Exhibit, TradeStatus } from '../types';
@@ -25,6 +25,10 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
   const [tradeStatus, setTradeStatus] = useState<TradeStatus>(initialData?.tradeStatus || 'NONE');
   const [relatedIds, setRelatedIds] = useState<string[]>(initialData?.relatedIds || []);
   
+  const [price, setPrice] = useState<string>(initialData?.price ? initialData.price.toString() : '');
+  const [currency, setCurrency] = useState<'RUB' | 'USD' | 'ETH'>(initialData?.currency || 'RUB');
+  const [tradeRequest, setTradeRequest] = useState(initialData?.tradeRequest || '');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,6 +62,9 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
       imageUrls: images.length > 0 ? images : ['https://placehold.co/600x400?text=NO+IMAGE'],
       specs,
       tradeStatus,
+      price: price ? parseFloat(price) : undefined,
+      currency,
+      tradeRequest,
       relatedIds,
       isDraft: asDraft
     });
@@ -168,7 +175,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
               {/* Trade Status Selection */}
               <div>
                   <label className="text-[10px] font-pixel opacity-50 uppercase tracking-widest mb-2 flex items-center gap-2"><RefreshCw size={12}/> Статус (Торговый терминал)</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2 mb-4">
                       {Object.entries(TRADE_STATUS_CONFIG).filter(([k]) => k !== 'NONE').map(([k, cfg]) => {
                           const statusKey = k as TradeStatus;
                           const isSelected = tradeStatus === statusKey;
@@ -184,6 +191,38 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                           );
                       })}
                   </div>
+
+                  {tradeStatus === 'FOR_SALE' && (
+                      <div className="flex gap-2 animate-in slide-in-from-top-2">
+                          <input 
+                              type="number"
+                              value={price}
+                              onChange={e => setPrice(e.target.value)}
+                              placeholder="Цена..."
+                              className={`flex-1 bg-black/30 border border-white/10 rounded-xl px-4 py-3 font-mono text-sm focus:border-green-500 outline-none ${isWinamp ? 'text-[#00ff00]' : ''}`}
+                          />
+                          <select 
+                              value={currency}
+                              onChange={e => setCurrency(e.target.value as any)}
+                              className={`bg-black/30 border border-white/10 rounded-xl px-4 py-3 font-mono text-sm focus:border-green-500 outline-none ${isWinamp ? 'text-[#00ff00]' : ''}`}
+                          >
+                              <option value="RUB">RUB</option>
+                              <option value="USD">USD</option>
+                              <option value="ETH">ETH</option>
+                          </select>
+                      </div>
+                  )}
+
+                  {tradeStatus === 'FOR_TRADE' && (
+                      <div className="animate-in slide-in-from-top-2">
+                          <input 
+                              value={tradeRequest}
+                              onChange={e => setTradeRequest(e.target.value)}
+                              placeholder="Что хотите взамен? (например: Nintendo 3DS)"
+                              className={`w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 font-mono text-sm focus:border-green-500 outline-none ${isWinamp ? 'text-[#00ff00]' : ''}`}
+                          />
+                      </div>
+                  )}
               </div>
 
               <div>

@@ -46,6 +46,9 @@ export interface Exhibit {
   comments: Comment[];
   isDraft?: boolean;
   tradeStatus?: TradeStatus; 
+  price?: number;
+  currency?: 'RUB' | 'USD' | 'ETH';
+  tradeRequest?: string; // What they want in return
   relatedIds?: string[]; // IDs of connected items within user's collection
 }
 
@@ -129,6 +132,28 @@ export interface UserProfile {
   password?: string;
   isAdmin?: boolean;
   telegram?: string;
+  guildId?: string;
+}
+
+export interface Guild {
+    id: string;
+    name: string;
+    description: string;
+    leader: string;
+    members: string[];
+    bannerUrl?: string;
+    isPrivate: boolean;
+}
+
+export interface Duel {
+    id: string;
+    challenger: string;
+    opponent: string;
+    challengerItem: string; // Exhibit ID
+    opponentItem?: string; // Exhibit ID
+    winner?: string;
+    status: 'PENDING' | 'ACTIVE' | 'FINISHED';
+    logs: string[];
 }
 
 export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_WISHLIST' | 'EDIT_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'SOCIAL_LIST' | 'WISHLIST_DETAIL' | 'COMMUNITY_HUB' | 'MY_COLLECTION';

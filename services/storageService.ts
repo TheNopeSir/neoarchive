@@ -1,5 +1,5 @@
 
-import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem } from '../types';
+import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem, Guild, Duel } from '../types';
 
 // Internal Cache (In-Memory)
 let cache = {
@@ -10,15 +10,20 @@ let cache = {
     users: [] as UserProfile[],
     guestbook: [] as GuestbookEntry[],
     wishlist: [] as WishlistItem[],
+    guilds: [
+        { id: 'g1', name: 'Retro Keepers', description: 'Хранители старого железа', leader: 'SysAdmin', members: ['SysAdmin'], isPrivate: false },
+        { id: 'g2', name: 'Audiophiles', description: 'Клуб любителей винила', leader: 'SoundWave', members: ['SoundWave'], isPrivate: false }
+    ] as Guild[],
+    duels: [] as Duel[],
     deletedIds: [] as string[],
     isLoaded: false
 };
 
 const DB_NAME = 'NeoArchiveDB';
 const STORE_NAME = 'client_cache';
-const CACHE_KEY = 'neo_archive_v3'; // Bumped version for new schema
+const CACHE_KEY = 'neo_archive_v4'; // Bumped version
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '5.1.0-Wishlist'; 
+const CACHE_VERSION = '5.2.0-Community'; 
 
 let isOfflineMode = false;
 const API_BASE = '/api';
@@ -108,7 +113,6 @@ const loadFromCache = async (): Promise<boolean> => {
 
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
-    // Increase timeout to 60s for slow operations like SMTP emails
     const timeoutId = setTimeout(() => controller.abort(new Error("Timeout")), 60000);
     
     try {
@@ -139,14 +143,12 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
     }
 };
 
-// --- HELPER FOR ADMIN ---
 const checkSuperAdmin = (user: UserProfile) => {
     if (user.email && user.email.toLowerCase().trim() === 'kennyornope@gmail.com') {
         user.isAdmin = true;
     }
 };
 
-// --- PAGINATION & OPTIMIZED LOADING ---
 export const loadFeedBatch = async (page: number, limit: number = 10): Promise<Exhibit[]> => {
     try {
         const items: Exhibit[] = await apiCall(`/feed?page=${page}&limit=${limit}`);
@@ -157,13 +159,12 @@ export const loadFeedBatch = async (page: number, limit: number = 10): Promise<E
                 return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             });
             await saveToLocalCache();
-            notifyListeners(); // Notify app that we have more data
+            notifyListeners(); 
             return items;
         }
         return [];
     } catch (e) {
         console.warn("Feed Load Error, using local only", e);
-        // Fallback: Try to serve from local cache if API fails
         const start = (page - 1) * limit;
         const end = start + limit;
         if (cache.exhibits.length >= start) {
@@ -173,21 +174,15 @@ export const loadFeedBatch = async (page: number, limit: number = 10): Promise<E
     }
 };
 
-/**
- * Optimized Sync: First fetch critical user-specific data, then the rest.
- * Filters out items present in `deletedIds` to prevent resurrection of deleted items.
- */
 const performCloudSync = async () => {
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
     try {
-        // Priority 1: User Profile, Notifications, Messages (The "Social" pulse)
         const initData = await apiCall(activeUser ? `/sync?username=${activeUser}&priority=high` : '/sync?priority=high');
         
         let hasUpdates = false;
 
         if (initData.users) {
             cache.users = initData.users;
-            // Force re-check admin rights on sync
             cache.users.forEach(u => checkSuperAdmin(u));
             hasUpdates = true;
         }
@@ -202,19 +197,15 @@ const performCloudSync = async () => {
             hasUpdates = true;
         }
         
-        // Priority 2: Initial Feed
         if (initData.exhibits) {
             const serverMap = new Map((initData.exhibits as Exhibit[]).map(e => [e.id, e]));
             
-            // Add local items that are not on server yet (drafts or offline created)
-            // But skip if they are marked as deleted locally
             cache.exhibits.forEach(e => { 
                 if(!serverMap.has(e.id) && !cache.deletedIds.includes(e.id)) {
                     serverMap.set(e.id, e); 
                 }
             });
 
-            // Critical: Remove any items from serverMap that are in deletedIds
             cache.deletedIds.forEach(id => {
                 if(serverMap.has(id)) serverMap.delete(id);
             });
@@ -225,45 +216,31 @@ const performCloudSync = async () => {
             hasUpdates = true;
         }
 
-        // Priority 3: Collections
         if (initData.collections) {
              const colServerMap = new Map((initData.collections as Collection[]).map(c => [c.id, c]));
-             
              cache.collections.forEach(c => {
-                 if(!colServerMap.has(c.id) && !cache.deletedIds.includes(c.id)) {
-                     colServerMap.set(c.id, c);
-                 }
+                 if(!colServerMap.has(c.id) && !cache.deletedIds.includes(c.id)) colServerMap.set(c.id, c);
              });
-             
-             cache.deletedIds.forEach(id => {
-                 if(colServerMap.has(id)) colServerMap.delete(id);
-             });
-             
+             cache.deletedIds.forEach(id => { if(colServerMap.has(id)) colServerMap.delete(id); });
              cache.collections = Array.from(colServerMap.values());
              hasUpdates = true;
         }
 
-        // Priority 4: Wishlist
         if (initData.wishlist) {
             const wlMap = new Map((initData.wishlist as WishlistItem[]).map(w => [w.id, w]));
             cache.wishlist.forEach(w => {
                 if (!wlMap.has(w.id) && !cache.deletedIds.includes(w.id)) wlMap.set(w.id, w);
             });
-            cache.deletedIds.forEach(id => {
-                if(wlMap.has(id)) wlMap.delete(id);
-            });
+            cache.deletedIds.forEach(id => { if(wlMap.has(id)) wlMap.delete(id); });
             cache.wishlist = Array.from(wlMap.values());
             hasUpdates = true;
         }
 
-        if (initData.guestbook) {
-            cache.guestbook = initData.guestbook;
-            hasUpdates = true;
-        }
+        if (initData.guestbook) { cache.guestbook = initData.guestbook; hasUpdates = true; }
 
         if (hasUpdates) {
             await saveToLocalCache();
-            notifyListeners(); // CRITICAL: Tell App.tsx new data is here
+            notifyListeners(); 
         }
         isOfflineMode = false;
     } catch (e) {
@@ -274,18 +251,11 @@ const performCloudSync = async () => {
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
     await loadFromCache();
-    // Check admin on loaded cache
     cache.users.forEach(u => checkSuperAdmin(u));
     
-    // Smart Sync: If cache is empty, wait for sync to avoid "empty" screen for new users.
-    // If cache has data, sync in background.
     if (cache.exhibits.length === 0 && cache.collections.length === 0) {
         console.log("Cache empty, awaiting initial sync...");
-        // Wait up to 3 seconds for sync, then proceed anyway to show UI
-        await Promise.race([
-            performCloudSync(),
-            new Promise(resolve => setTimeout(resolve, 3000))
-        ]);
+        await Promise.race([performCloudSync(), new Promise(resolve => setTimeout(resolve, 3000))]);
     } else {
         performCloudSync();
     }
@@ -304,13 +274,12 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
 export const forceSync = performCloudSync;
 export const getFullDatabase = () => ({ ...cache });
 
-// --- UTILS FOR ADMIN & ACHIEVEMENTS ---
+// --- UTILS ---
 const checkAndAddHelloAchievement = async (user: UserProfile) => {
     if (!user.achievements) user.achievements = [];
     const hasHello = user.achievements.some(a => a.id === 'HELLO_WORLD');
     if (!hasHello) {
         user.achievements.push({ id: 'HELLO_WORLD', current: 1, target: 1, unlocked: true });
-        // Update user on server silently
         await apiCall('/users/update', 'POST', user);
     }
 };
@@ -320,7 +289,6 @@ export const loginUser = async (email: string, password: string): Promise<UserPr
     if (res.success && res.user) {
         checkSuperAdmin(res.user);
         await checkAndAddHelloAchievement(res.user);
-
         localStorage.setItem(SESSION_USER_KEY, res.user.username);
         const idx = cache.users.findIndex(u => u.username === res.user.username);
         if (idx !== -1) cache.users[idx] = res.user; else cache.users.push(res.user);
@@ -342,7 +310,6 @@ export const loginViaTelegram = async (user: any): Promise<UserProfile> => {
     if (res.success && res.user) {
         checkSuperAdmin(res.user);
         await checkAndAddHelloAchievement(res.user);
-
         localStorage.setItem(SESSION_USER_KEY, res.user.username);
         const idx = cache.users.findIndex(u => u.username === res.user.username);
         if (idx !== -1) cache.users[idx] = res.user; else cache.users.push(res.user);
@@ -355,9 +322,7 @@ export const loginViaTelegram = async (user: any): Promise<UserProfile> => {
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
     const profile = { username, email, tagline, avatarUrl: getUserAvatar(username), joinedDate: new Date().toLocaleString(), following: [], followers: [], achievements: [{id:'HELLO_WORLD', current:1, target:1, unlocked:true}], password, isAdmin: false };
-    
     checkSuperAdmin(profile);
-    
     const res = await apiCall('/auth/register', 'POST', { username, email, password, data: profile });
     if (res.success) return profile;
     throw new Error(res.error || "Registration failed");
@@ -372,7 +337,6 @@ export const toggleFollow = async (currentUsername: string, targetUsername: stri
     if (!target.followers) target.followers = [];
 
     const isFollowing = current.following.includes(targetUsername);
-    
     if (isFollowing) {
         current.following = current.following.filter(u => u !== targetUsername);
         target.followers = target.followers.filter(u => u !== currentUsername);
@@ -380,7 +344,6 @@ export const toggleFollow = async (currentUsername: string, targetUsername: stri
         current.following = [...current.following, targetUsername];
         target.followers = [...target.followers, currentUsername];
     }
-
     await saveToLocalCache();
     notifyListeners();
     apiCall('/users/update', 'POST', current).catch((e) => console.warn('Sync follow current failed', e));
@@ -435,7 +398,6 @@ export const updateCollection = async (c: Collection) => {
     notifyListeners();
     await syncItem('/collections', c);
 };
-
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
     if (!cache.deletedIds.includes(id)) cache.deletedIds.push(id);
@@ -450,7 +412,6 @@ export const saveWishlistItem = async (item: WishlistItem) => {
     notifyListeners();
     await syncItem('/wishlist', item);
 };
-
 export const deleteWishlistItem = async (id: string) => {
     cache.wishlist = cache.wishlist.filter(w => w.id !== id);
     if (!cache.deletedIds.includes(id)) cache.deletedIds.push(id);
@@ -469,9 +430,47 @@ export const saveMessage = async (msg: Message) => {
     }
 };
 
+export const markNotificationsRead = async (username: string) => {
+    let hasUpdates = false;
+    cache.notifications.forEach(n => {
+        if (n.recipient === username && !n.isRead) {
+            n.isRead = true;
+            hasUpdates = true;
+            // Optimistic update, no strict sync per item to avoid spamming
+            syncItem('/notifications', n);
+        }
+    });
+    if (hasUpdates) {
+        await saveToLocalCache();
+        notifyListeners();
+    }
+};
+
 export const saveGuestbookEntry = async (e: GuestbookEntry) => { cache.guestbook.push(e); await saveToLocalCache(); notifyListeners(); await syncItem('/guestbook', e); };
 export const updateGuestbookEntry = async (e: GuestbookEntry) => { const idx = cache.guestbook.findIndex(g => g.id === e.id); if (idx !== -1) cache.guestbook[idx] = e; await saveToLocalCache(); notifyListeners(); await syncItem('/guestbook', e); };
 export const deleteGuestbookEntry = async (id: string) => { cache.guestbook = cache.guestbook.filter(g => g.id !== id); await saveToLocalCache(); notifyListeners(); apiCall(`/guestbook/${id}`, 'DELETE').catch(()=>{}); };
+
+// -- GUILDS MOCK LOGIC --
+export const createGuild = async (guild: Guild) => {
+    cache.guilds.push(guild);
+    // Auto-update user profile to show guild membership
+    const leader = cache.users.find(u => u.username === guild.leader);
+    if(leader) { leader.guildId = guild.id; updateUserProfile(leader); }
+    await saveToLocalCache();
+    notifyListeners();
+};
+
+export const joinGuild = async (guildId: string, username: string) => {
+    const g = cache.guilds.find(g => g.id === guildId);
+    const u = cache.users.find(u => u.username === username);
+    if (g && u && !g.members.includes(username)) {
+        g.members.push(username);
+        u.guildId = guildId;
+        await saveToLocalCache();
+        notifyListeners();
+        // Sync not fully implemented for guilds yet
+    }
+};
 
 export const logoutUser = () => { localStorage.removeItem(SESSION_USER_KEY); notifyListeners(); };
 export const clearLocalCache = async () => { localStorage.removeItem(SESSION_USER_KEY); await idb.clear(); window.location.reload(); };
