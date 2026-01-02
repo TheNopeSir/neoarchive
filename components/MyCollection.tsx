@@ -6,7 +6,7 @@ import ExhibitCard from './ExhibitCard';
 import CollectionCard from './CollectionCard';
 
 interface MyCollectionProps {
-    theme: 'dark' | 'light' | 'xp';
+    theme: 'dark' | 'light' | 'xp' | 'winamp';
     user: UserProfile;
     exhibits: Exhibit[];
     collections: Collection[];
@@ -29,14 +29,15 @@ const MyCollection: React.FC<MyCollectionProps> = ({
     // Separate drafts and published items
     const drafts = exhibits.filter(e => e.isDraft);
     const published = exhibits.filter(e => !e.isDraft);
+    const isWinamp = theme === 'winamp';
 
     return (
-        <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
+        <div className={`max-w-4xl mx-auto animate-in fade-in pb-32 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
             <div className="flex items-center justify-between mb-8">
-                <button onClick={onBack} className="flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs">
+                <button onClick={onBack} className={`flex items-center gap-2 hover:underline opacity-70 font-pixel text-xs ${isWinamp ? 'text-[#00ff00]' : ''}`}>
                     <ArrowLeft size={16} /> НАЗАД
                 </button>
-                <div className="font-pixel text-lg flex items-center gap-2">
+                <div className={`font-pixel text-lg flex items-center gap-2 ${isWinamp ? 'text-[#00ff00]' : ''}`}>
                     <Package size={24} />
                     МОЯ ПОЛКА
                 </div>
@@ -72,7 +73,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({
                     <Package size={16} /> Ваши артефакты ({published.length})
                 </h3>
                 {published.length === 0 ? (
-                    <div className={`p-12 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center opacity-50 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
+                    <div className={`p-12 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center opacity-50 ${isWinamp ? 'border-[#505050]' : theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
                         <p className="font-mono text-sm uppercase">Ваша полка пуста</p>
                     </div>
                 ) : (
@@ -98,7 +99,7 @@ const MyCollection: React.FC<MyCollectionProps> = ({
                     <FolderPlus size={16} /> Коллекции ({collections.length})
                 </h3>
                 {collections.length === 0 ? (
-                    <div className={`p-8 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center opacity-50 ${theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
+                    <div className={`p-8 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center opacity-50 ${isWinamp ? 'border-[#505050]' : theme === 'dark' ? 'border-dark-dim' : 'border-light-dim'}`}>
                         <p className="font-mono text-xs uppercase">Нет созданных коллекций</p>
                     </div>
                 ) : (

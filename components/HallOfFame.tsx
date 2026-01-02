@@ -5,20 +5,22 @@ import { BADGE_CONFIG } from '../constants';
 import { AchievementProgress } from '../types';
 
 interface HallOfFameProps {
-  theme: 'dark' | 'light' | 'xp';
+  theme: 'dark' | 'light' | 'xp' | 'winamp';
   achievements: AchievementProgress[];
   onBack: () => void;
 }
 
 const HallOfFame: React.FC<HallOfFameProps> = ({ theme, achievements, onBack }) => {
+  const isWinamp = theme === 'winamp';
+  
   return (
-    <div className="max-w-4xl mx-auto animate-in fade-in pb-20 px-4">
-        <button onClick={onBack} className="flex items-center gap-2 mb-8 hover:underline opacity-70 font-pixel text-xs">
+    <div className={`max-w-4xl mx-auto animate-in fade-in pb-20 px-4 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
+        <button onClick={onBack} className={`flex items-center gap-2 mb-8 hover:underline opacity-70 font-pixel text-xs ${isWinamp ? 'text-[#00ff00]' : ''}`}>
              <ArrowLeft size={16} /> НАЗАД
         </button>
 
         <div className="text-center mb-12">
-            <h1 className="text-3xl md:text-5xl font-pixel font-black mb-4 flex items-center justify-center gap-4">
+            <h1 className={`text-3xl md:text-5xl font-pixel font-black mb-4 flex items-center justify-center gap-4 ${isWinamp ? 'text-[#00ff00]' : ''}`}>
                 <Trophy size={40} className="text-yellow-500" /> ЗАЛ СЛАВЫ
             </h1>
             <p className="font-mono text-sm opacity-60 uppercase tracking-widest">Прогресс синхронизации нейронных узлов.</p>
@@ -33,9 +35,12 @@ const HallOfFame: React.FC<HallOfFameProps> = ({ theme, achievements, onBack }) 
                     <div 
                         key={id}
                         className={`relative p-6 rounded-3xl border-2 transition-all group ${
-                            progress.unlocked 
-                             ? 'bg-dark-surface border-green-500/50 shadow-[0_0_20px_rgba(74,222,128,0.2)]'
-                             : 'bg-black/40 border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100'
+                            isWinamp 
+                             ? (progress.unlocked ? 'bg-[#191919] border-[#00ff00]' : 'bg-[#191919] border-[#505050] opacity-50')
+                             : (progress.unlocked 
+                                 ? 'bg-dark-surface border-green-500/50 shadow-[0_0_20px_rgba(74,222,128,0.2)]'
+                                 : 'bg-black/40 border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100'
+                               )
                         }`}
                     >
                         <div className="flex items-start gap-4 mb-6">
@@ -43,7 +48,7 @@ const HallOfFame: React.FC<HallOfFameProps> = ({ theme, achievements, onBack }) 
                                  <config.icon size={28} className={progress.unlocked ? 'text-black' : 'text-white/30'} />
                             </div>
                             <div className="flex-1">
-                                <h3 className="font-pixel text-sm font-black mb-1 flex items-center gap-2">
+                                <h3 className={`font-pixel text-sm font-black mb-1 flex items-center gap-2 ${isWinamp && progress.unlocked ? 'text-[#00ff00]' : ''}`}>
                                     {config.label}
                                     {progress.unlocked && <CheckCircle2 size={14} className="text-green-400" />}
                                 </h3>

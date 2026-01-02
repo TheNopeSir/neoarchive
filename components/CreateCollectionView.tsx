@@ -5,7 +5,7 @@ import { Collection, Exhibit } from '../types';
 import { fileToBase64 } from '../services/storageService';
 
 interface CreateCollectionViewProps {
-    theme: 'dark' | 'light' | 'xp';
+    theme: 'dark' | 'light' | 'xp' | 'winamp';
     userArtifacts: Exhibit[]; // Только артефакты текущего пользователя
     initialData?: Collection | null;
     onBack: () => void;
@@ -51,10 +51,12 @@ const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
         });
     };
 
+    const isWinamp = theme === 'winamp';
+
     return (
-        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in pb-32">
+        <div className={`max-w-4xl mx-auto space-y-8 animate-in fade-in pb-32 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
             <div className="flex items-center justify-between">
-                <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest">
+                <button onClick={onBack} className={`flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest ${isWinamp ? 'text-[#00ff00]' : ''}`}>
                     <ArrowLeft size={14} /> ОТМЕНА
                 </button>
                 <div className="flex gap-4">
@@ -63,7 +65,7 @@ const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
                             <Trash2 size={14} /> УДАЛИТЬ
                         </button>
                     )}
-                    <h2 className="font-pixel text-lg">{initialData ? 'РЕДАКТИРОВАНИЕ' : 'НОВАЯ_КОЛЛЕКЦИЯ'}</h2>
+                    <h2 className={`font-pixel text-lg ${isWinamp ? 'text-[#00ff00]' : ''}`}>{initialData ? 'РЕДАКТИРОВАНИЕ' : 'НОВАЯ_КОЛЛЕКЦИЯ'}</h2>
                 </div>
             </div>
 
@@ -72,7 +74,7 @@ const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
                     {/* Cover Image */}
                     <div 
                         onClick={() => fileInputRef.current?.click()}
-                        className={`aspect-video rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all relative overflow-hidden group ${theme === 'dark' ? 'border-white/10 hover:border-green-500/50 bg-white/5' : 'border-black/10 hover:border-black/30'}`}
+                        className={`aspect-video rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all relative overflow-hidden group ${isWinamp ? 'border-[#505050] bg-[#191919] text-[#00ff00]' : theme === 'dark' ? 'border-white/10 hover:border-green-500/50 bg-white/5' : 'border-black/10 hover:border-black/30'}`}
                     >
                         {coverImage ? (
                             <>
@@ -96,7 +98,7 @@ const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
                             <input 
                                 value={title} 
                                 onChange={e => setTitle(e.target.value)} 
-                                className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none" 
+                                className={`w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none ${isWinamp ? 'text-[#00ff00] placeholder-gray-600' : ''}`}
                                 placeholder="Например: Мои ретро консоли"
                             />
                         </div>
@@ -106,7 +108,7 @@ const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
                                 value={description} 
                                 onChange={e => setDescription(e.target.value)} 
                                 rows={4}
-                                className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none resize-none" 
+                                className={`w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none resize-none ${isWinamp ? 'text-[#00ff00] placeholder-gray-600' : ''}`}
                                 placeholder="О чем эта подборка..."
                             />
                         </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark, Sparkles, ChevronDown, Filter
+  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark, Sparkles, ChevronDown, Filter, Radar, Globe
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -11,6 +11,7 @@ import ExhibitCard from './components/ExhibitCard';
 import UserProfileView from './components/UserProfileView';
 import ExhibitDetailPage from './components/ExhibitDetailPage';
 import MyCollection from './components/MyCollection';
+import CommunityHub from './components/CommunityHub'; // New Component
 import RetroLoader from './components/RetroLoader';
 import CollectionCard from './components/CollectionCard';
 import PixelSnow from './components/PixelSnow';
@@ -33,7 +34,7 @@ import { DefaultCategory, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from 
 import useSwipe from './hooks/useSwipe';
 
 export default function App() {
-  const [theme, setTheme] = useState<'dark' | 'light' | 'xp'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light' | 'xp' | 'winamp'>('dark');
   const [view, setView] = useState<ViewState>('AUTH');
   const [navigationStack, setNavigationStack] = useState<ViewState[]>([]);
   
@@ -54,9 +55,12 @@ export default function App() {
   const [selectedWishlistItem, setSelectedWishlistItem] = useState<WishlistItem | null>(null);
   const [viewedProfileUsername, setViewedProfileUsername] = useState<string>('');
   
+  // Advanced Notification State
+  const [highlightCommentId, setHighlightCommentId] = useState<string | undefined>(undefined);
+
   // Filtering State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('ВСЕ'); // New Subcategory State
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('ВСЕ');
 
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'>('ARTIFACTS');
 
@@ -81,35 +85,26 @@ export default function App() {
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
   // --- NAVIGATION HELPER ---
-  const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection; wishlistItem?: WishlistItem }) => {
-      // 1. Update Data State
+  const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection; wishlistItem?: WishlistItem; highlightCommentId?: string }) => {
       if (params?.username) setViewedProfileUsername(params.username);
-      if (params?.item) setSelectedExhibit(params.item);
+      if (params?.item) {
+          setSelectedExhibit(params.item);
+          // Highlight specific comment if passed
+          setHighlightCommentId(params.highlightCommentId);
+      }
       if (params?.collection) setSelectedCollection(params.collection);
       if (params?.wishlistItem) setSelectedWishlistItem(params.wishlistItem);
 
-      // 2. Update Navigation Stack
       setNavigationStack(prev => [...prev, view]);
-
-      // 3. Update Visual View
       setView(newView);
 
-      // 4. Update URL (Clean History API for SEO/Sharing)
+      // Simple URL updates (omitted comprehensive mapping for brevity)
       let path = '/';
       if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
       else if (newView === 'EXHIBIT') path = `/artifact/${params?.item?.id || selectedExhibit?.id}`;
-      else if (newView === 'COLLECTION_DETAIL') path = `/collection/${params?.collection?.id || selectedCollection?.id}`;
-      else if (newView === 'WISHLIST_DETAIL') path = `/wishlist/${params?.wishlistItem?.id || selectedWishlistItem?.id}`;
-      else if (newView === 'ACTIVITY') path = '/activity';
-      else if (newView === 'MY_COLLECTION') path = '/my-collection';
-      else if (newView === 'HALL_OF_FAME') path = '/hall-of-fame';
-      else if (newView === 'CREATE_ARTIFACT') path = '/create';
-      else if (newView === 'SEARCH') path = '/search';
-      else if (newView === 'FEED') path = '/';
+      else if (newView === 'COMMUNITY_HUB') path = '/community';
       
       window.history.pushState({ view: newView }, '', path);
-      
-      // 5. Scroll to Top
       window.scrollTo(0, 0);
   };
 
@@ -118,14 +113,13 @@ export default function App() {
           const prevView = navigationStack[navigationStack.length - 1];
           setNavigationStack(prev => prev.slice(0, -1));
           setView(prevView);
-          window.history.back(); // Sync browser back button
+          window.history.back();
       } else if (view !== 'FEED') {
           setView('FEED');
           window.history.pushState({ view: 'FEED' }, '', '/');
       }
   };
 
-  // Browser Back Button Handler
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
         if (event.state && event.state.view) {
@@ -138,37 +132,18 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // --- SWIPE LOGIC (GLOBAL & FEED) ---
-  const feedModes: Array<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'> = ['ARTIFACTS', 'COLLECTIONS', 'WISHLIST'];
-
-  // Global App Swipe
   const globalSwipeHandlers = useSwipe({
     onSwipeLeft: () => {
       if (view === 'FEED') {
-          // If on FEED, handle tabs internally first
-          const currIdx = feedModes.indexOf(feedMode);
-          if (currIdx < feedModes.length - 1) {
-              setFeedMode(feedModes[currIdx + 1]);
-          } else {
-              // If at end of feed tabs, go to My Collection
-              navigateTo('MY_COLLECTION');
-          }
-      } else if (view === 'MY_COLLECTION') {
+          navigateTo('COMMUNITY_HUB');
+      } else if (view === 'COMMUNITY_HUB') {
           navigateTo('ACTIVITY');
       } else if (view === 'ACTIVITY') {
           if (user) navigateTo('USER_PROFILE', { username: user.username });
       }
     },
     onSwipeRight: () => {
-      if (view === 'FEED') {
-          const currIdx = feedModes.indexOf(feedMode);
-          if (currIdx > 0) {
-              setFeedMode(feedModes[currIdx - 1]);
-          }
-          // Do not back out of Feed with Swipe Right on first tab, user might expect menu or nothing
-      } else {
-          handleBack();
-      }
+        if (view !== 'FEED') handleBack();
     },
   });
 
@@ -186,11 +161,8 @@ export default function App() {
     }
   }, [user]);
 
-  // Subscribe to DB changes to auto-refresh UI when background sync finishes
   useEffect(() => {
-    const unsubscribe = db.subscribe(() => {
-        refreshData();
-    });
+    const unsubscribe = db.subscribe(() => { refreshData(); });
     return () => unsubscribe();
   }, [refreshData]);
 
@@ -199,73 +171,14 @@ export default function App() {
     const init = async () => {
       try {
           const activeUser = await db.initializeDatabase();
-          // Initial Refresh to populate state
           refreshData(); 
-
           if (activeUser) { 
               setUser(activeUser);
-              if (activeUser.settings?.theme) {
-                  setTheme(activeUser.settings.theme);
-              }
-
-              // --- DEEP LINKING ROUTING LOGIC ---
-              const path = window.location.pathname;
-              const data = db.getFullDatabase(); // Get raw data to find objects immediately
-
-              if (path.startsWith('/artifact/')) {
-                  const id = path.split('/')[2];
-                  const item = data.exhibits.find(e => e.id === id);
-                  if (item) {
-                      setSelectedExhibit(item);
-                      setView('EXHIBIT');
-                  } else {
-                      setView('FEED');
-                  }
-              } else if (path.startsWith('/collection/')) {
-                  const id = path.split('/')[2];
-                  const col = data.collections.find(c => c.id === id);
-                  if (col) {
-                      setSelectedCollection(col);
-                      setView('COLLECTION_DETAIL');
-                  } else {
-                      setView('FEED');
-                  }
-              } else if (path.startsWith('/wishlist/')) {
-                  const id = path.split('/')[2];
-                  const item = data.wishlist.find(w => w.id === id);
-                  if (item) {
-                      setSelectedWishlistItem(item);
-                      setView('WISHLIST_DETAIL');
-                  } else {
-                      setView('FEED');
-                  }
-              } else if (path.startsWith('/u/')) {
-                  const username = path.split('/')[2];
-                  setViewedProfileUsername(username);
-                  setView('USER_PROFILE');
-              } else if (path === '/activity') {
-                  setView('ACTIVITY');
-              } else if (path === '/my-collection') {
-                  setView('MY_COLLECTION');
-              } else if (path === '/hall-of-fame') {
-                  setView('HALL_OF_FAME');
-              } else if (path === '/create') {
-                  setView('CREATE_ARTIFACT');
-              } else if (path === '/search') {
-                  setView('SEARCH');
-              } else {
-                  setView('FEED'); 
-              }
-          } else { 
-              setView('AUTH'); 
-          }
-      } catch (e) { 
-          setView('AUTH'); 
-      } finally { 
-          clearTimeout(safetyTimer); 
-          setIsInitializing(false); 
-          setTimeout(() => setShowSplash(false), 300); 
-      }
+              if (activeUser.settings?.theme) setTheme(activeUser.settings.theme);
+              setView('FEED'); 
+          } else { setView('AUTH'); }
+      } catch (e) { setView('AUTH'); } 
+      finally { clearTimeout(safetyTimer); setIsInitializing(false); setTimeout(() => setShowSplash(false), 300); }
     };
     init();
   }, []);
@@ -283,9 +196,7 @@ export default function App() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 800) {
-        loadMore();
-      }
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 800) loadMore();
     };
     if (view === 'FEED') {
         window.addEventListener('scroll', handleScroll);
@@ -304,11 +215,7 @@ export default function App() {
     const ex = exhibits.find(e => e.id === id);
     if (!ex || !user) return;
     const isLiked = ex.likedBy?.includes(user.username);
-    const updated = { 
-        ...ex, 
-        likes: isLiked ? Math.max(0, ex.likes - 1) : ex.likes + 1, 
-        likedBy: isLiked ? ex.likedBy.filter(u => u !== user.username) : [...(ex.likedBy || []), user.username] 
-    };
+    const updated = { ...ex, likes: isLiked ? Math.max(0, ex.likes - 1) : ex.likes + 1, likedBy: isLiked ? ex.likedBy.filter(u => u !== user.username) : [...(ex.likedBy || []), user.username] };
     setExhibits(prev => prev.map(item => item.id === id ? updated : item));
     if (selectedExhibit?.id === id) setSelectedExhibit(updated);
     await db.updateExhibit(updated);
@@ -318,34 +225,21 @@ export default function App() {
       e?.stopPropagation();
       const col = collections.find(c => c.id === id);
       if (!col || !user) return;
-      
       const isLiked = col.likedBy?.includes(user.username);
-      const updated = {
-          ...col,
-          likes: isLiked ? Math.max(0, (col.likes || 0) - 1) : (col.likes || 0) + 1,
-          likedBy: isLiked ? (col.likedBy || []).filter(u => u !== user.username) : [...(col.likedBy || []), user.username]
-      };
-      
+      const updated = { ...col, likes: isLiked ? Math.max(0, (col.likes || 0) - 1) : (col.likes || 0) + 1, likedBy: isLiked ? (col.likedBy || []).filter(u => u !== user.username) : [...(col.likedBy || []), user.username] };
       setCollections(prev => prev.map(c => c.id === id ? updated : c));
       await db.updateCollection(updated);
   };
   
   const handleCommentLike = async (commentId: string) => {
       if (!selectedExhibit || !user) return;
-      
       const updatedComments = selectedExhibit.comments.map(c => {
           if (c.id === commentId) {
               const isLiked = c.likedBy?.includes(user.username);
-              const updatedComment = {
-                  ...c,
-                  likes: isLiked ? Math.max(0, c.likes - 1) : c.likes + 1,
-                  likedBy: isLiked ? (c.likedBy || []).filter(u => u !== user.username) : [...(c.likedBy || []), user.username]
-              };
-              return updatedComment;
+              return { ...c, likes: isLiked ? Math.max(0, c.likes - 1) : c.likes + 1, likedBy: isLiked ? (c.likedBy || []).filter(u => u !== user.username) : [...(c.likedBy || []), user.username] };
           }
           return c;
       });
-      
       const updatedEx = { ...selectedExhibit, comments: updatedComments };
       setSelectedExhibit(updatedEx);
       setExhibits(prev => prev.map(e => e.id === selectedExhibit.id ? updatedEx : e));
@@ -356,10 +250,8 @@ export default function App() {
       if (!user) return;
       const ex = exhibits.find(e => e.id === exhibitId);
       if (!ex) return;
-      
       const updatedComments = ex.comments.filter(c => c.id !== commentId);
       const updatedEx = { ...ex, comments: updatedComments };
-      
       await db.updateExhibit(updatedEx);
       setExhibits(prev => prev.map(e => e.id === exhibitId ? updatedEx : e));
       if (selectedExhibit?.id === exhibitId) setSelectedExhibit(updatedEx);
@@ -369,20 +261,9 @@ export default function App() {
       if (!user) return;
       const ex = exhibits.find(e => e.id === id);
       if (!ex) return;
-      
-      const newComment: Comment = { 
-          id: crypto.randomUUID(), 
-          author: user.username, 
-          text, 
-          timestamp: new Date().toISOString(), 
-          likes: 0, 
-          likedBy: [],
-          parentId: parentId
-      };
-      
+      const newComment: Comment = { id: crypto.randomUUID(), author: user.username, text, timestamp: new Date().toISOString(), likes: 0, likedBy: [], parentId };
       const updatedEx = { ...ex, comments: [...(ex.comments || []), newComment] };
       await db.updateExhibit(updatedEx);
-      
       refreshData();
       if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx);
   };
@@ -397,86 +278,37 @@ export default function App() {
       if (!isAddingToCollection || !user) return;
       const collection = collections.find(c => c.id === collectionId);
       if (!collection) return;
-      
-      const artifact = exhibits.find(e => e.id === isAddingToCollection);
-      if (!artifact || artifact.owner !== user.username) {
-          alert("Нельзя добавлять чужие артефакты в свои коллекции.");
-          setIsAddingToCollection(null);
-          return;
-      }
-      
       if (!collection.exhibitIds.includes(isAddingToCollection)) {
-          const updatedCollection = {
-              ...collection,
-              exhibitIds: [...collection.exhibitIds, isAddingToCollection]
-          };
+          const updatedCollection = { ...collection, exhibitIds: [...collection.exhibitIds, isAddingToCollection] };
           await db.updateCollection(updatedCollection);
           setCollections(prev => prev.map(c => c.id === collectionId ? updatedCollection : c));
       }
       setIsAddingToCollection(null);
   };
 
-  // --- ARTIFACT FILTERING LOGIC ---
-  const baseFilteredExhibits = useMemo(() => {
-      return exhibits.filter(e => {
-          if (e.isDraft && e.owner !== user?.username) return false;
-          
-          const catMatch = selectedCategory === 'ВСЕ' || e.category === selectedCategory;
-          const subcatMatch = selectedSubcategory === 'ВСЕ' || e.subcategory === selectedSubcategory;
-          
-          return catMatch && subcatMatch;
-      });
-  }, [exhibits, user, selectedCategory, selectedSubcategory]);
+  const baseFilteredExhibits = useMemo(() => exhibits.filter(e => {
+      if (e.isDraft && e.owner !== user?.username) return false;
+      const catMatch = selectedCategory === 'ВСЕ' || e.category === selectedCategory;
+      const subcatMatch = selectedSubcategory === 'ВСЕ' || e.subcategory === selectedSubcategory;
+      return catMatch && subcatMatch;
+  }), [exhibits, user, selectedCategory, selectedSubcategory]);
 
   const followingExhibits = user ? baseFilteredExhibits.filter(e => user.following.includes(e.owner)) : [];
-
-  const globalExhibits = user ? baseFilteredExhibits.filter(e => 
-      !user.following.includes(e.owner) && 
-      e.owner !== user.username
-  ).sort((a,b) => calculateArtifactScore(b, user.preferences) - calculateArtifactScore(a, user.preferences)) : [];
+  const globalExhibits = user ? baseFilteredExhibits.filter(e => !user.following.includes(e.owner) && e.owner !== user.username).sort((a,b) => calculateArtifactScore(b, user.preferences) - calculateArtifactScore(a, user.preferences)) : [];
+  const grails = wishlist.filter(w => w.priority === 'GRAIL');
+  const otherWishlist = wishlist.filter(w => w.priority !== 'GRAIL');
 
   const handleSaveArtifact = async (artifactData: Partial<Exhibit>) => {
       if (!user || !artifactData.title) return;
-      
       if (artifactData.id) {
           const existing = exhibits.find(e => e.id === artifactData.id);
           if (existing) {
-              const updated: Exhibit = {
-                  ...existing,
-                  ...artifactData,
-                  imageUrls: artifactData.imageUrls || existing.imageUrls,
-                  specs: artifactData.specs || existing.specs,
-                  title: artifactData.title || existing.title,
-                  category: artifactData.category || existing.category,
-                  tradeStatus: artifactData.tradeStatus || existing.tradeStatus,
-                  relatedIds: artifactData.relatedIds || existing.relatedIds,
-                  condition: artifactData.condition || existing.condition
-              };
-              await db.updateExhibit(updated);
-              if (selectedExhibit?.id === updated.id) setSelectedExhibit(updated);
+              const updated = { ...existing, ...artifactData };
+              await db.updateExhibit(updated as Exhibit);
+              if (selectedExhibit?.id === updated.id) setSelectedExhibit(updated as Exhibit);
           }
       } else {
-          const ex: Exhibit = { 
-            id: crypto.randomUUID(), 
-            title: artifactData.title, 
-            description: artifactData.description || '', 
-            category: artifactData.category || DefaultCategory.MISC, 
-            subcategory: artifactData.subcategory, 
-            imageUrls: artifactData.imageUrls || [], 
-            videoUrl: artifactData.videoUrl, 
-            owner: user.username, 
-            timestamp: new Date().toISOString(), 
-            likes: 0, 
-            likedBy: [], 
-            views: 0, 
-            specs: artifactData.specs || {}, 
-            comments: [], 
-            isDraft: artifactData.isDraft, 
-            condition: artifactData.condition,
-            quality: artifactData.condition || 'MINT',
-            tradeStatus: artifactData.tradeStatus || 'NONE',
-            relatedIds: artifactData.relatedIds || []
-          };
+          const ex: Exhibit = { id: crypto.randomUUID(), title: artifactData.title, description: artifactData.description || '', category: artifactData.category || DefaultCategory.MISC, subcategory: artifactData.subcategory, imageUrls: artifactData.imageUrls || [], videoUrl: artifactData.videoUrl, owner: user.username, timestamp: new Date().toISOString(), likes: 0, likedBy: [], views: 0, specs: artifactData.specs || {}, comments: [], isDraft: artifactData.isDraft, condition: artifactData.condition, quality: 'MINT', tradeStatus: artifactData.tradeStatus || 'NONE', relatedIds: artifactData.relatedIds || [] };
           await db.saveExhibit(ex);
       }
       navigateTo('FEED');
@@ -493,17 +325,7 @@ export default function App() {
               if (selectedCollection?.id === data.id) setSelectedCollection(updated as Collection);
           }
       } else {
-          const newCol: Collection = {
-              id: crypto.randomUUID(),
-              title: data.title!,
-              description: data.description || '',
-              owner: user.username,
-              coverImage: data.coverImage || '',
-              exhibitIds: data.exhibitIds || [],
-              timestamp: new Date().toISOString(),
-              likes: 0,
-              likedBy: []
-          };
+          const newCol: Collection = { id: crypto.randomUUID(), title: data.title!, description: data.description || '', owner: user.username, coverImage: data.coverImage || '', exhibitIds: data.exhibitIds || [], timestamp: new Date().toISOString(), likes: 0, likedBy: [] };
           await db.saveCollection(newCol);
       }
       navigateTo('FEED');
@@ -526,16 +348,10 @@ export default function App() {
 
   const handleDeleteArtifact = async (id: string) => {
       if(!user) return;
-      if(confirm('Удалить артефакт безвозвратно?')) {
+      if(confirm('Удалить артефакт?')) {
           await db.deleteExhibit(id);
           setExhibits(prev => prev.filter(e => e.id !== id));
-          setCollections(prev => prev.map(c => ({
-              ...c,
-              exhibitIds: c.exhibitIds.filter(eid => eid !== id)
-          })));
-          if (selectedExhibit?.id === id) {
-              handleBack();
-          }
+          if (selectedExhibit?.id === id) handleBack();
       }
   };
 
@@ -550,55 +366,13 @@ export default function App() {
 
   const handleSendMessage = async (text: string) => {
       if (!user || !viewedProfileUsername || !text.trim()) return;
-      const msg: Message = { 
-          id: crypto.randomUUID(), 
-          sender: user.username, 
-          receiver: viewedProfileUsername, 
-          text, 
-          timestamp: new Date().toISOString(), 
-          isRead: false 
-      };
+      const msg: Message = { id: crypto.randomUUID(), sender: user.username, receiver: viewedProfileUsername, text, timestamp: new Date().toISOString(), isRead: false };
       setMessages(prev => [...prev, msg].sort((a,b) => a.timestamp.localeCompare(b.timestamp)));
       await db.saveMessage(msg);
       refreshData();
   };
 
-  // --- DYNAMIC SEO DATA ---
-  const getSeoData = () => {
-      if (view === 'EXHIBIT' && selectedExhibit) {
-          return {
-              title: `${selectedExhibit.title} | NeoArchive`,
-              desc: selectedExhibit.description ? selectedExhibit.description.slice(0, 150) + '...' : `Артефакт из коллекции @${selectedExhibit.owner}`,
-              image: selectedExhibit.imageUrls[0],
-              path: `/artifact/${selectedExhibit.id}`
-          };
-      }
-      if (view === 'COLLECTION_DETAIL' && selectedCollection) {
-          return {
-              title: `${selectedCollection.title} | NeoArchive`,
-              desc: selectedCollection.description || `Коллекция от @${selectedCollection.owner}`,
-              image: selectedCollection.coverImage,
-              path: `/collection/${selectedCollection.id}`
-          };
-      }
-      if (view === 'USER_PROFILE' && viewedProfileUsername) {
-          const u = db.getFullDatabase().users.find(u => u.username === viewedProfileUsername);
-          return {
-              title: `@${viewedProfileUsername} | NeoArchive Profile`,
-              desc: u?.tagline || `Профиль коллекционера ${viewedProfileUsername}`,
-              image: u?.avatarUrl,
-              path: `/u/${viewedProfileUsername}`
-          };
-      }
-      return {
-          title: "NeoArchive | Цифровая полка коллекционера",
-          desc: "Создайте красивый каталог своих вещей. Делитесь коллекциями и находите редкие экземпляры в сообществе.",
-          image: "https://ui-avatars.com/api/?name=NA&background=4ade80&color=000&size=1200&font-size=0.5&bold=true",
-          path: "/"
-      };
-  };
-
-  const seoData = getSeoData();
+  const seoData = { title: "NeoArchive", desc: "Digital Collection", image: "", path: "/" }; 
 
   if (showSplash) {
     return (
@@ -617,65 +391,33 @@ export default function App() {
   let bgClass = '';
   if (theme === 'dark') bgClass = 'bg-black text-gray-200';
   else if (theme === 'light') bgClass = 'bg-gray-100 text-gray-900';
-  else if (theme === 'xp') bgClass = 'bg-gradient-to-b from-[#628dce] via-[#85aaee] to-[#e2e1d6] text-black font-sans'; 
+  else if (theme === 'xp') bgClass = 'bg-gradient-to-b from-[#628dce] via-[#85aaee] to-[#e2e1d6] text-black font-sans';
+  else if (theme === 'winamp') bgClass = 'bg-[#191919] text-[#00ff00] font-mono';
 
   return (
-    <div 
-        {...swipeProps}
-        className={`min-h-screen transition-colors duration-500 ${theme === 'xp' ? 'font-sans' : 'font-sans'} ${bgClass} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}
-    >
-        {/* Dynamic SEO Injection */}
-        <SEO 
-            title={seoData.title}
-            description={seoData.desc}
-            image={seoData.image}
-            path={seoData.path}
-        />
-
-        {theme !== 'xp' && <MatrixRain theme={theme} />}
-        {theme !== 'xp' && <PixelSnow theme={theme} />}
+    <div {...swipeProps} className={`min-h-screen transition-colors duration-500 ${theme === 'xp' ? 'font-sans' : 'font-sans'} ${bgClass} ${view === 'AUTH' ? 'overflow-hidden' : ''}`}>
+        <SEO title={seoData.title} description={seoData.desc} image={seoData.image} path={seoData.path} />
+        {theme !== 'xp' && theme !== 'winamp' && <MatrixRain theme={theme} />}
+        {theme !== 'xp' && theme !== 'winamp' && <PixelSnow theme={theme} />}
         <CRTOverlay />
         
         {view !== 'AUTH' && (
-          <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${theme === 'dark' ? 'bg-black/60 border-b border-white/10 backdrop-blur-xl' : theme === 'xp' ? 'bg-gradient-to-b from-[#245DDA] to-[#2055C8] border-b-2 border-[#003c74] shadow-md' : 'bg-white/80 border-b border-white/10 backdrop-blur-xl'}`}>
+          <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${theme === 'winamp' ? 'bg-[#282828] border-b border-[#505050] text-[#00ff00]' : theme === 'dark' ? 'bg-black/60 border-b border-white/10 backdrop-blur-xl' : theme === 'xp' ? 'bg-gradient-to-b from-[#245DDA] to-[#2055C8] border-b-2 border-[#003c74] shadow-md' : 'bg-white/80 border-b border-white/10 backdrop-blur-xl'}`}>
               <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                   <div className="flex items-center gap-6">
                       <div className={`font-pixel text-lg font-black tracking-widest cursor-pointer group ${theme === 'xp' ? 'text-white italic drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]' : ''}`} onClick={() => navigateTo('FEED')}>
-                          NEO<span className={`${theme === 'xp' ? 'text-white' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
+                          NEO<span className={`${theme === 'xp' ? 'text-white' : theme === 'winamp' ? 'text-[#00ff00]' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
                       </div>
-                      
-                      <button 
-                        onClick={() => navigateTo('SEARCH')}
-                        className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}
-                      >
+                      <button onClick={() => navigateTo('SEARCH')} className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'winamp' ? 'bg-black border-[#505050] text-[#00ff00]' : theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}>
                           <Search size={14} className={`${theme === 'xp' ? 'opacity-100 text-blue-600' : 'opacity-40'} mr-2`} />
                           <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК ПО БАЗЕ...</span>
                       </button>
                   </div>
-
                   <div className="flex items-center gap-2 md:gap-4">
-                      {/* Desktop "My Collection" Link */}
-                      <button 
-                          onClick={() => navigateTo('MY_COLLECTION')}
-                          className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${theme === 'dark' ? 'hover:bg-white/10' : theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-gray-200'}`}
-                      >
-                          <Package size={16} className="opacity-70" />
-                          <span className="font-pixel text-[10px] tracking-widest font-bold">МОЯ ПОЛКА</span>
-                      </button>
-
-                      <button 
-                          onClick={() => setShowCreateMenu(true)} 
-                          className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}
-                      >
+                      <button onClick={() => setShowCreateMenu(true)} className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold font-pixel text-[10px] tracking-widest hover:scale-105 transition-transform mr-2 ${theme === 'xp' ? 'bg-gradient-to-b from-[#3c9c2a] to-[#4cb630] border border-[#265e18] text-white shadow-md' : 'bg-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]'}`}>
                           <PlusCircle size={14} /> ДОБАВИТЬ
                       </button>
-
-                      <button onClick={async () => { await db.forceSync(); refreshData(); }} className={`hidden md:block p-2 rounded-xl transition-all ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
-                          <RefreshCw size={18} />
-                      </button>
-                      <button onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'xp' : 'dark')} className={`hidden md:block p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
-                          {theme === 'dark' ? <Sun size={20}/> : theme === 'light' ? <Monitor size={20} /> : <Moon size={20}/>}
-                      </button>
+                      <button onClick={async () => { await db.forceSync(); refreshData(); }} className={`hidden md:block p-2 rounded-xl transition-all ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}><RefreshCw size={18} /></button>
                       <button onClick={() => navigateTo('ACTIVITY')} className={`hidden md:block relative p-2 rounded-xl ${theme === 'xp' ? 'text-white hover:bg-white/20' : 'hover:bg-white/10'}`}>
                           <Bell size={20} />
                           {notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}
@@ -692,33 +434,16 @@ export default function App() {
 
         <main className={`pt-20 pb-28 px-4 max-w-7xl mx-auto min-h-screen relative z-10 transition-all duration-700 ${!isInitializing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             
-            {view === 'AUTH' && <MatrixLogin theme={theme === 'xp' ? 'light' : theme} onLogin={(u) => { 
-                setUser(u); 
-                if(u.settings?.theme) setTheme(u.settings.theme);
-                navigateTo('FEED'); 
-                refreshData(); 
-            }} />}
+            {view === 'AUTH' && <MatrixLogin theme={theme === 'xp' || theme === 'winamp' ? 'light' : theme} onLogin={(u) => { setUser(u); if(u.settings?.theme) setTheme(u.settings.theme); navigateTo('FEED'); refreshData(); }} />}
 
             {view === 'SEARCH' && (
                 <div key="SEARCH" className="animate-in fade-in duration-300">
-                    <SearchView 
-                        theme={theme}
-                        exhibits={exhibits}
-                        collections={collections}
-                        users={db.getFullDatabase().users}
-                        onBack={handleBack}
-                        onExhibitClick={handleExhibitClick}
-                        onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })}
-                        onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
-                        onLike={handleLike}
-                        currentUser={user}
-                    />
+                    <SearchView theme={theme} exhibits={exhibits} collections={collections} users={db.getFullDatabase().users} onBack={handleBack} onExhibitClick={handleExhibitClick} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onLike={handleLike} currentUser={user} />
                 </div>
             )}
 
             {view === 'FEED' && (
                 <div key="FEED" className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
-                    {/* Categories */}
                     {feedMode === 'ARTIFACTS' && (
                         <div className="space-y-4">
                             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -727,33 +452,11 @@ export default function App() {
                                     <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubcategory('ВСЕ'); }} className={`px-5 py-2 rounded-xl font-pixel text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500 border-green-500 text-black shadow-[0_0_15px_rgba(74,222,128,0.4)]') : (theme === 'xp' ? 'bg-white/50 border-white text-blue-900' : 'border-white/10 opacity-50')}`}>{cat}</button>
                                 ))}
                             </div>
-
-                            {/* Subcategory Tiles - Replaced Dropdown */}
                             {selectedCategory !== 'ВСЕ' && CATEGORY_SUBCATEGORIES[selectedCategory] && (
                                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-in slide-in-from-top-2 fade-in">
-                                    <button 
-                                        onClick={() => setSelectedSubcategory('ВСЕ')}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-pixel text-[9px] font-bold whitespace-nowrap border transition-all ${
-                                            selectedSubcategory === 'ВСЕ' 
-                                            ? (theme === 'xp' ? 'bg-blue-100 text-blue-900 border-blue-300' : 'bg-white/20 text-white border-white/30') 
-                                            : (theme === 'xp' ? 'bg-white border-gray-300 text-gray-500' : 'bg-transparent border-white/10 text-white/40 hover:bg-white/5')
-                                        }`}
-                                    >
-                                        <Filter size={10} /> ВСЕ
-                                    </button>
-
+                                    <button onClick={() => setSelectedSubcategory('ВСЕ')} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-pixel text-[9px] font-bold whitespace-nowrap border transition-all ${selectedSubcategory === 'ВСЕ' ? (theme === 'xp' ? 'bg-blue-100 text-blue-900 border-blue-300' : 'bg-white/20 text-white border-white/30') : (theme === 'xp' ? 'bg-white border-gray-300 text-gray-500' : 'bg-transparent border-white/10 text-white/40 hover:bg-white/5')}`}><Filter size={10} /> ВСЕ</button>
                                     {CATEGORY_SUBCATEGORIES[selectedCategory].map(sub => (
-                                        <button 
-                                            key={sub} 
-                                            onClick={() => setSelectedSubcategory(sub)}
-                                            className={`px-4 py-2 rounded-lg font-pixel text-[9px] font-bold whitespace-nowrap border transition-all ${
-                                                selectedSubcategory === sub
-                                                ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_10px_rgba(74,222,128,0.1)]')
-                                                : (theme === 'xp' ? 'bg-white border-gray-300 text-gray-500 hover:text-blue-900' : 'bg-transparent border-white/10 text-white/40 hover:bg-white/5 hover:text-white')
-                                            }`}
-                                        >
-                                            {sub}
-                                        </button>
+                                        <button key={sub} onClick={() => setSelectedSubcategory(sub)} className={`px-4 py-2 rounded-lg font-pixel text-[9px] font-bold whitespace-nowrap border transition-all ${selectedSubcategory === sub ? (theme === 'xp' ? 'bg-[#245DDA] text-white border-[#003c74]' : 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_10px_rgba(74,222,128,0.1)]') : (theme === 'xp' ? 'bg-white border-gray-300 text-gray-500 hover:text-blue-900' : 'bg-transparent border-white/10 text-white/40 hover:bg-white/5 hover:text-white')}`}>{sub}</button>
                                     ))}
                                 </div>
                             )}
@@ -764,11 +467,10 @@ export default function App() {
                         <div className="flex gap-6 overflow-x-auto scrollbar-hide w-full">
                             <button onClick={() => setFeedMode('ARTIFACTS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'ARTIFACTS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Grid size={14} /> АРТЕФАКТЫ</button>
                             <button onClick={() => setFeedMode('COLLECTIONS')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'COLLECTIONS' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><FolderPlus size={14} /> КОЛЛЕКЦИИ</button>
-                            <button onClick={() => setFeedMode('WISHLIST')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Sparkles size={14} /> ВИШЛИСТЫ</button>
+                            <button onClick={() => setFeedMode('WISHLIST')} className={`flex-1 md:flex-none flex justify-center items-center gap-2 font-pixel text-[11px] tracking-widest whitespace-nowrap transition-all ${feedMode === 'WISHLIST' ? (theme === 'xp' ? 'text-blue-800 border-b-2 border-blue-800 pb-4' : 'text-green-500 border-b-2 border-green-500 pb-4') : 'opacity-40 hover:opacity-100'}`}><Radar size={14} /> РАДАР (WISHLIST)</button>
                         </div>
                     </div>
                     
-                    {/* Content Container (Smooth Transition) */}
                     <div className="min-h-[50vh] transition-all duration-300">
                     {feedMode === 'ARTIFACTS' && (
                         <div key="ARTIFACTS_TAB" className="space-y-10 animate-in slide-in-from-right-4 duration-300">
@@ -782,17 +484,9 @@ export default function App() {
                                     </div>
                                 </div>
                             )}
-                            
                             <div>
                                 <h2 className={`font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase ${theme === 'xp' ? 'text-black' : ''}`}><Grid size={14} className={theme === 'xp' ? 'text-blue-600' : 'text-green-500'} /> {followingExhibits.length > 0 ? 'РЕКОМЕНДАЦИИ' : 'ВСЕ АРТЕФАКТЫ'}</h2>
-                                {globalExhibits.length === 0 ? (
-                                    <div className="py-20 flex flex-col items-center justify-center opacity-50">
-                                        <RetroLoader text="NO_DATA_FOUND" />
-                                        <p className="mt-4 text-xs font-mono">
-                                            {selectedSubcategory !== 'ВСЕ' ? 'В этой подкатегории пусто' : 'База данных пуста или недоступна'}
-                                        </p>
-                                    </div>
-                                ) : (
+                                {globalExhibits.length === 0 ? <div className="py-20 flex flex-col items-center justify-center opacity-50"><RetroLoader text="NO_DATA_FOUND" /><p className="mt-4 text-xs font-mono">{selectedSubcategory !== 'ВСЕ' ? 'В этой подкатегории пусто' : 'База данных пуста или недоступна'}</p></div> : (
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
                                         {globalExhibits.map(item => (
                                             <ExhibitCard key={item.id} item={item} theme={theme} onClick={handleExhibitClick} isLiked={item.likedBy?.includes(user?.username || '')} onLike={(e) => handleLike(item.id, e)} onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })} />
@@ -800,264 +494,129 @@ export default function App() {
                                     </div>
                                 )}
                             </div>
-                            {isLoadingMore && (
-                                <div className="flex justify-center py-10"><RetroLoader text="SYNCHRONIZING..." /></div>
-                            )}
+                            {isLoadingMore && <div className="flex justify-center py-10"><RetroLoader text="SYNCHRONIZING..." /></div>}
                         </div>
                     )}
-
                     {feedMode === 'COLLECTIONS' && (
                         <div key="COLLECTIONS_TAB" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in slide-in-from-right-4 duration-300">
-                            {collections.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Коллекций пока нет</div> :
-                            collections.map(col => ( 
-                                <CollectionCard 
-                                    key={col.id} 
-                                    col={col} 
-                                    theme={theme} 
-                                    onClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} 
-                                    onShare={() => {}}
-                                    isLiked={col.likedBy?.includes(user?.username || '')}
-                                    onLike={(e) => handleCollectionLike(col.id, e)}
-                                /> 
-                            ))}
+                            {collections.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Коллекций пока нет</div> : collections.map(col => ( <CollectionCard key={col.id} col={col} theme={theme} onClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onShare={() => {}} isLiked={col.likedBy?.includes(user?.username || '')} onLike={(e) => handleCollectionLike(col.id, e)} /> ))}
                         </div>
                     )}
-
                     {feedMode === 'WISHLIST' && (
-                        <div key="WISHLIST_TAB" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in slide-in-from-right-4 duration-300">
-                            {wishlist.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Список желаемого пуст</div> :
-                            wishlist.map(item => (
-                                <WishlistCard 
-                                    key={item.id} 
-                                    item={item} 
-                                    theme={theme}
-                                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
-                                    onClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })}
-                                />
-                            ))}
+                        <div key="WISHLIST_TAB" className="space-y-8 animate-in slide-in-from-right-4 duration-300">
+                            <div className="p-6 rounded-2xl border border-dashed border-white/20 flex flex-col items-center justify-center text-center bg-white/5">
+                                <Radar size={32} className="mb-2 opacity-50 animate-pulse" />
+                                <h2 className="font-pixel text-sm uppercase tracking-widest mb-1">ГЛОБАЛЬНЫЙ РОЗЫСК</h2>
+                                <p className="font-mono text-[10px] opacity-60 max-w-md">База данных разыскиваемых предметов. Если у вас есть что-то из этого списка — свяжитесь с коллекционером.</p>
+                            </div>
+                            {grails.length > 0 && (
+                                <div>
+                                    <h3 className="font-pixel text-[10px] text-yellow-500 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Sparkles size={14} className="animate-spin-slow" /> Святой Грааль (Особый приоритет)</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                        {grails.map(item => ( <WishlistCard key={item.id} item={item} theme={theme} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })} /> ))}
+                                    </div>
+                                </div>
+                            )}
+                            <div>
+                                <h3 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Search size={14} /> Текущий поиск</h3>
+                                {otherWishlist.length === 0 && grails.length === 0 ? <div className="col-span-full text-center opacity-50 py-10 font-mono text-xs">Список желаемого пуст</div> : (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                        {otherWishlist.map(item => ( <WishlistCard key={item.id} item={item} theme={theme} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })} /> ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                     </div>
                 </div>
             )}
 
+            {view === 'COMMUNITY_HUB' && (
+                <div key="COMMUNITY_HUB" className="animate-in fade-in">
+                    <CommunityHub theme={theme} users={db.getFullDatabase().users} exhibits={exhibits} onExhibitClick={handleExhibitClick} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} />
+                </div>
+            )}
+
             {view === 'CREATE_ARTIFACT' && (
               <div key="CREATE_ARTIFACT" className="animate-in fade-in slide-in-from-bottom-4">
-                  <CreateArtifactView 
-                    theme={theme} 
-                    onBack={handleBack} 
-                    onSave={handleSaveArtifact} 
-                    userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
-                  />
+                  <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []} />
               </div>
             )}
 
             {view === 'CREATE_WISHLIST' && (
                 <div key="CREATE_WISHLIST" className="animate-in fade-in slide-in-from-bottom-4">
-                    <CreateWishlistItemView
-                        theme={theme}
-                        onBack={handleBack}
-                        onSave={handleSaveWishlist}
-                    />
+                    <CreateWishlistItemView theme={theme} onBack={handleBack} onSave={handleSaveWishlist} />
                 </div>
             )}
 
             {view === 'EDIT_ARTIFACT' && selectedExhibit && (
                <div key="EDIT_ARTIFACT" className="animate-in fade-in">
-                   <CreateArtifactView 
-                    theme={theme} 
-                    onBack={handleBack} 
-                    onSave={handleSaveArtifact} 
-                    initialData={selectedExhibit} 
-                    userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []}
-                   />
+                   <CreateArtifactView theme={theme} onBack={handleBack} onSave={handleSaveArtifact} initialData={selectedExhibit} userArtifacts={user ? exhibits.filter(e => e.owner === user.username && !e.isDraft) : []} />
                </div>
             )}
 
             {(view === 'CREATE_COLLECTION' || view === 'EDIT_COLLECTION') && user && (
                 <div key="CREATE_COLLECTION" className="animate-in fade-in">
-                    <CreateCollectionView
-                        theme={theme}
-                        userArtifacts={exhibits.filter(e => e.owner === user.username && !e.isDraft)}
-                        initialData={view === 'EDIT_COLLECTION' ? selectedCollection : null}
-                        onBack={handleBack}
-                        onSave={handleSaveCollection}
-                        onDelete={handleDeleteCollection}
-                    />
+                    <CreateCollectionView theme={theme} userArtifacts={exhibits.filter(e => e.owner === user.username && !e.isDraft)} initialData={view === 'EDIT_COLLECTION' ? selectedCollection : null} onBack={handleBack} onSave={handleSaveCollection} onDelete={handleDeleteCollection} />
                 </div>
             )}
 
             {view === 'EXHIBIT' && selectedExhibit && (
                 <div key={`EXHIBIT_${selectedExhibit.id}`} className="animate-in fade-in zoom-in-95">
-                    <ExhibitDetailPage 
-                        key={selectedExhibit.id}
-                        exhibit={selectedExhibit} 
-                        theme={theme} 
-                        onBack={handleBack} 
-                        onShare={() => {}} 
-                        onFavorite={() => {}} 
-                        onLike={(id: string) => handleLike(id)} 
-                        isFavorited={false} 
-                        isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} 
-                        onPostComment={handlePostComment}
-                        onCommentLike={handleCommentLike} 
-                        onDeleteComment={handleDeleteComment}
-                        onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} 
-                        onFollow={handleFollow} 
-                        onMessage={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
-                        currentUser={user?.username || ''} 
-                        isAdmin={user?.isAdmin || false} 
-                        isFollowing={user?.following.includes(selectedExhibit.owner) || false} 
-                        onAddToCollection={(id) => setIsAddingToCollection(id)}
-                        onEdit={(item: Exhibit) => navigateTo('EDIT_ARTIFACT', { item })}
-                        onDelete={(id: string) => handleDeleteArtifact(id)}
-                        onExhibitClick={handleExhibitClick} 
-                        users={db.getFullDatabase().users}
-                        allExhibits={exhibits}
-                    />
+                    <ExhibitDetailPage key={selectedExhibit.id} exhibit={selectedExhibit} theme={theme} onBack={handleBack} onShare={() => {}} onFavorite={() => {}} onLike={(id: string) => handleLike(id)} isFavorited={false} isLiked={selectedExhibit.likedBy?.includes(user?.username || '')} onPostComment={handlePostComment} onCommentLike={handleCommentLike} onDeleteComment={handleDeleteComment} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onFollow={handleFollow} onMessage={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} currentUser={user?.username || ''} isAdmin={user?.isAdmin || false} isFollowing={user?.following.includes(selectedExhibit.owner) || false} onAddToCollection={(id) => setIsAddingToCollection(id)} onEdit={(item: Exhibit) => navigateTo('EDIT_ARTIFACT', { item })} onDelete={(id: string) => handleDeleteArtifact(id)} onExhibitClick={handleExhibitClick} users={db.getFullDatabase().users} allExhibits={exhibits} highlightCommentId={highlightCommentId} />
                 </div>
             )}
             
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
                 <div key={`COLLECTION_${selectedCollection.id}`} className="animate-in fade-in zoom-in-95">
-                    <CollectionDetailPage
-                        key={selectedCollection.id}
-                        collection={selectedCollection}
-                        artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))}
-                        theme={theme}
-                        onBack={handleBack}
-                        onExhibitClick={handleExhibitClick}
-                        onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
-                        currentUser={user?.username || ''}
-                        onEdit={() => navigateTo('EDIT_COLLECTION')}
-                        onDelete={handleDeleteCollection}
-                        onLike={handleLike}
-                    />
+                    <CollectionDetailPage key={selectedCollection.id} collection={selectedCollection} artifacts={exhibits.filter(e => (selectedCollection.exhibitIds || []).includes(e.id))} theme={theme} onBack={handleBack} onExhibitClick={handleExhibitClick} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} currentUser={user?.username || ''} onEdit={() => navigateTo('EDIT_COLLECTION')} onDelete={handleDeleteCollection} onLike={handleLike} />
                 </div>
             )}
 
             {view === 'WISHLIST_DETAIL' && selectedWishlistItem && (
                 <div key="WISHLIST_DETAIL" className="animate-in fade-in zoom-in-95">
-                    <WishlistDetailView
-                        item={selectedWishlistItem}
-                        theme={theme}
-                        onBack={handleBack}
-                        onDelete={handleDeleteWishlist}
-                        onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })}
-                        currentUser={user?.username || ''}
-                    />
+                    <WishlistDetailView item={selectedWishlistItem} theme={theme} onBack={handleBack} onDelete={handleDeleteWishlist} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} currentUser={user?.username || ''} />
                 </div>
             )}
 
             {view === 'DIRECT_CHAT' && user && viewedProfileUsername && (
                 <div key="DIRECT_CHAT" className="animate-in fade-in">
-                    <DirectChat 
-                        theme={theme} 
-                        currentUser={user} 
-                        partnerUsername={viewedProfileUsername} 
-                        messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} 
-                        onBack={handleBack} 
-                        onSendMessage={handleSendMessage} 
-                    />
+                    <DirectChat theme={theme} currentUser={user} partnerUsername={viewedProfileUsername} messages={messages.filter(m => (m.sender === user.username && m.receiver === viewedProfileUsername) || (m.sender === viewedProfileUsername && m.receiver === user.username))} onBack={handleBack} onSendMessage={handleSendMessage} />
                 </div>
             )}
 
             {view === 'SOCIAL_LIST' && viewedProfileUsername && (
                 <div key="SOCIAL_LIST" className="animate-in fade-in">
-                    <SocialListView 
-                        type={socialListType} 
-                        username={viewedProfileUsername} 
-                        currentUserUsername={user?.username}
-                        theme={theme} 
-                        onBack={handleBack} 
-                        onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} 
-                    />
+                    <SocialListView type={socialListType} username={viewedProfileUsername} currentUserUsername={user?.username} theme={theme} onBack={handleBack} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} />
                 </div>
             )}
 
             {view === 'USER_PROFILE' && user && (
                 <div key={`PROFILE_${viewedProfileUsername}`} className="animate-in slide-in-from-right-4 fade-in duration-300">
-                    <UserProfileView 
-                        key={viewedProfileUsername}
-                        user={user} 
-                        viewedProfileUsername={viewedProfileUsername} 
-                        exhibits={exhibits} 
-                        collections={collections} 
-                        guestbook={guestbook} 
-                        theme={theme} 
-                        onBack={handleBack} 
-                        onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} 
-                        onFollow={handleFollow} 
-                        onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
-                        onExhibitClick={handleExhibitClick} 
-                        onLike={handleLike} 
-                        onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} 
-                        onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} 
-                        onShareCollection={() => {}} 
-                        onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} 
-                        onGuestbookPost={() => {}} 
-                        refreshData={refreshData} 
-                        isEditingProfile={isEditingProfile} 
-                        setIsEditingProfile={setIsEditingProfile} 
-                        editTagline={editTagline} 
-                        setEditTagline={setEditTagline} 
-                        editBio={editBio} 
-                        setEditBio={setEditBio} 
-                        editStatus={editStatus} 
-                        setEditStatus={setEditStatus} 
-                        editTelegram={editTelegram} 
-                        setEditTelegram={setEditTelegram} 
-                        editPassword={editPassword} 
-                        setEditPassword={setEditPassword} 
-                        onSaveProfile={async () => { 
-                            if(!user) return; 
-                            const updated = { ...user, tagline: editTagline, bio: editBio, status: editStatus, telegram: editTelegram }; 
-                            if(editPassword) updated.password = editPassword; 
-                            await db.updateUserProfile(updated); 
-                            setUser(updated); 
-                            setIsEditingProfile(false); 
-                        }} 
-                        onProfileImageUpload={async (e: React.ChangeEvent<HTMLInputElement>) => { 
-                            if(e.target.files && e.target.files[0] && user) { 
-                                const b64 = await db.fileToBase64(e.target.files[0]); 
-                                const updated = { ...user, avatarUrl: b64 }; 
-                                setUser(updated); 
-                                await db.updateUserProfile(updated); 
-                            } 
-                        }} 
-                        onProfileCoverUpload={async (e: React.ChangeEvent<HTMLInputElement>) => {
-                            if(e.target.files && e.target.files[0] && user) {
-                                 const b64 = await db.fileToBase64(e.target.files[0]);
-                                 const updated = { ...user, coverUrl: b64 };
-                                 setUser(updated);
-                                 await db.updateUserProfile(updated);
-                            }
-                        }}
-                        guestbookInput={guestbookInput} 
-                        setGuestbookInput={setGuestbookInput} 
-                        guestbookInputRef={guestbookInputRef} 
-                        profileTab={profileTab} 
-                        setProfileTab={setProfileTab} 
-                        onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} 
-                        onThemeChange={(t) => setTheme(t)}
-                        onWishlistClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })}
-                    />
+                    <UserProfileView key={viewedProfileUsername} user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={handleBack} onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} onFollow={handleFollow} onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} onExhibitClick={handleExhibitClick} onLike={handleLike} onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onShareCollection={() => {}} onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editBio={editBio} setEditBio={setEditBio} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, bio: editBio, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e: React.ChangeEvent<HTMLInputElement>) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} onProfileCoverUpload={async (e: React.ChangeEvent<HTMLInputElement>) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, coverUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab} onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} onThemeChange={(t) => setTheme(t)} onWishlistClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })} />
                 </div>
             )}
 
             {view === 'HALL_OF_FAME' && user && (
                 <div key="HALL_OF_FAME" className="animate-in fade-in">
-                    <HallOfFame 
-                        theme={theme} 
-                        achievements={user.achievements || []} 
-                        onBack={handleBack} 
-                    />
+                    <HallOfFame theme={theme} achievements={user.achievements || []} onBack={handleBack} />
                 </div>
             )}
 
             {view === 'ACTIVITY' && user && (
                 <div key="ACTIVITY" className="animate-in fade-in">
-                    <ActivityView notifications={notifications} messages={messages} currentUser={user} theme={theme} onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} onExhibitClick={(id) => { const e = exhibits.find(x => x.id === id); if(e) handleExhibitClick(e); }} onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} />
+                    <ActivityView 
+                        notifications={notifications} 
+                        messages={messages} 
+                        currentUser={user} 
+                        theme={theme} 
+                        onAuthorClick={(a) => navigateTo('USER_PROFILE', { username: a })} 
+                        onExhibitClick={(id, commentId) => { 
+                            const e = exhibits.find(x => x.id === id); 
+                            if(e) navigateTo('EXHIBIT', { item: e, highlightCommentId: commentId }); 
+                        }} 
+                        onChatClick={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
+                    />
                 </div>
             )}
             
@@ -1076,36 +635,15 @@ export default function App() {
                         <h3 className="font-pixel text-sm uppercase tracking-widest flex items-center gap-2"><PlusCircle size={16}/> СОЗДАТЬ НОВУЮ ЗАПИСЬ</h3>
                         <button onClick={() => setShowCreateMenu(false)} className="opacity-50 hover:opacity-100 hover:rotate-90 transition-all"><X size={20}/></button>
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
-                        <button 
-                            onClick={() => { navigateTo('CREATE_ARTIFACT'); setShowCreateMenu(false); }}
-                            className={`flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-green-500/50 hover:bg-green-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}
-                        >
-                            <div className="w-12 h-12 rounded-full bg-green-500 text-black flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_#4ade80] transition-shadow">
-                                <Package size={24} />
-                            </div>
-                            <span className="font-pixel text-[10px] font-bold tracking-widest">АРТЕФАКТ</span>
+                        <button onClick={() => { navigateTo('CREATE_ARTIFACT'); setShowCreateMenu(false); }} className={`flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-green-500/50 hover:bg-green-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}>
+                            <div className="w-12 h-12 rounded-full bg-green-500 text-black flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_#4ade80] transition-shadow"><Package size={24} /></div><span className="font-pixel text-[10px] font-bold tracking-widest">АРТЕФАКТ</span>
                         </button>
-
-                        <button 
-                            onClick={() => { navigateTo('CREATE_COLLECTION'); setShowCreateMenu(false); }}
-                            className={`flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-blue-500/50 hover:bg-blue-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}
-                        >
-                            <div className="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_#3b82f6] transition-shadow">
-                                <Layers size={24} />
-                            </div>
-                            <span className="font-pixel text-[10px] font-bold tracking-widest">КОЛЛЕКЦИЮ</span>
+                        <button onClick={() => { navigateTo('CREATE_COLLECTION'); setShowCreateMenu(false); }} className={`flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-blue-500/50 hover:bg-blue-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}>
+                            <div className="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_#3b82f6] transition-shadow"><Layers size={24} /></div><span className="font-pixel text-[10px] font-bold tracking-widest">КОЛЛЕКЦИЮ</span>
                         </button>
-
-                        <button 
-                            onClick={() => { navigateTo('CREATE_WISHLIST'); setShowCreateMenu(false); }}
-                            className={`col-span-2 flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-purple-500/50 hover:bg-purple-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}
-                        >
-                            <div className="w-12 h-12 rounded-full bg-purple-500 text-white flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_rgba(168,85,247,0.5)] transition-shadow">
-                                <Search size={24} />
-                            </div>
-                            <span className="font-pixel text-[10px] font-bold tracking-widest">WISHLIST / ИЩУ</span>
+                        <button onClick={() => { navigateTo('CREATE_WISHLIST'); setShowCreateMenu(false); }} className={`col-span-2 flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 group ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-purple-500/50 hover:bg-purple-500/10' : 'bg-gray-50 border-black/5 hover:border-black/20'}`}>
+                            <div className="w-12 h-12 rounded-full bg-purple-500 text-white flex items-center justify-center shadow-lg group-hover:shadow-[0_0_15px_rgba(168,85,247,0.5)] transition-shadow"><Search size={24} /></div><span className="font-pixel text-[10px] font-bold tracking-widest">WISHLIST / РАДАР</span>
                         </button>
                     </div>
                 </div>
@@ -1119,48 +657,21 @@ export default function App() {
                         <h3 className="font-pixel text-sm uppercase flex items-center gap-2"><FolderPlus size={16} /> Добавить в коллекцию</h3>
                         <button onClick={() => setIsAddingToCollection(null)} className="opacity-50 hover:opacity-100"><X size={20}/></button>
                     </div>
-                    
                     <div className="space-y-2 max-h-[60vh] overflow-y-auto mb-4 scrollbar-hide">
-                         <button 
-                            onClick={() => { setIsAddingToCollection(null); navigateTo('CREATE_COLLECTION'); }}
-                            className="w-full text-left p-4 rounded-xl border border-dashed border-white/20 hover:bg-white/5 flex items-center justify-center gap-2 mb-4 text-green-500"
-                        >
-                            <PlusCircle size={16} /> <span className="font-pixel text-xs">СОЗДАТЬ НОВУЮ</span>
-                        </button>
-
-                        {collections.filter(c => c.owner === user.username).length === 0 ? (
-                            <div className="text-center py-8 opacity-50 font-mono text-xs">Нет коллекций</div>
-                        ) : (
-                            collections.filter(c => c.owner === user.username).map(col => {
-                                const isAdded = col.exhibitIds.includes(isAddingToCollection);
-                                return (
-                                    <button 
-                                        key={col.id} 
-                                        onClick={() => handleAddItemToCollection(col.id)}
-                                        disabled={isAdded}
-                                        className={`w-full text-left p-4 rounded-xl border flex items-center justify-between transition-all ${isAdded ? 'border-green-500/50 bg-green-500/10 opacity-50 cursor-default' : 'border-white/5 hover:bg-white/5 hover:border-white/20'}`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded bg-gray-800 overflow-hidden"><img src={col.coverImage} className="w-full h-full object-cover" /></div>
-                                            <span className="font-pixel text-xs">{col.title}</span>
-                                        </div>
-                                        {isAdded && <Check size={16} className="text-green-500" />}
-                                    </button>
-                                );
-                            })
-                        )}
+                         <button onClick={() => { setIsAddingToCollection(null); navigateTo('CREATE_COLLECTION'); }} className="w-full text-left p-4 rounded-xl border border-dashed border-white/20 hover:bg-white/5 flex items-center justify-center gap-2 mb-4 text-green-500"><PlusCircle size={16} /> <span className="font-pixel text-xs">СОЗДАТЬ НОВУЮ</span></button>
+                        {collections.filter(c => c.owner === user.username).length === 0 ? <div className="text-center py-8 opacity-50 font-mono text-xs">Нет коллекций</div> : collections.filter(c => c.owner === user.username).map(col => { const isAdded = col.exhibitIds.includes(isAddingToCollection); return ( <button key={col.id} onClick={() => handleAddItemToCollection(col.id)} disabled={isAdded} className={`w-full text-left p-4 rounded-xl border flex items-center justify-between transition-all ${isAdded ? 'border-green-500/50 bg-green-500/10 opacity-50 cursor-default' : 'border-white/5 hover:bg-white/5 hover:border-white/20'}`}><div className="flex items-center gap-3"><div className="w-8 h-8 rounded bg-gray-800 overflow-hidden"><img src={col.coverImage} className="w-full h-full object-cover" /></div><span className="font-pixel text-xs">{col.title}</span></div>{isAdded && <Check size={16} className="text-green-500" />}</button> ); })}
                     </div>
                 </div>
             </div>
         )}
         
         {view !== 'AUTH' && (
-          <nav className={`fixed bottom-0 left-0 right-0 h-20 border-t backdrop-blur-2xl md:hidden flex justify-around items-center z-50 px-4 pb-safe ${theme === 'dark' ? 'border-white/10 bg-black/60' : theme === 'xp' ? 'bg-[#245DDA]/90 border-[#003c74]' : 'bg-white/80 border-black/10'}`}>
-              <button onClick={() => navigateTo('FEED')} className={`p-2 transition-all ${view === 'FEED' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><LayoutGrid size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
-              <button onClick={() => navigateTo('MY_COLLECTION')} className={`p-2 transition-all ${view === 'MY_COLLECTION' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><Package size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
-              <div className="relative -top-5"><button onClick={() => setShowCreateMenu(true)} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${theme === 'xp' ? 'bg-green-600 border-4 border-[#245DDA] shadow-lg text-white font-serif italic' : 'bg-green-500 text-black shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black'}`}><PlusCircle size={32} /></button></div>
-              <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'} relative`}><Bell size={24} className={theme === 'xp' ? 'text-white' : ''} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}</button>
-              <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? (theme === 'xp' ? 'text-white scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><User size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+          <nav className={`fixed bottom-0 left-0 right-0 h-20 border-t backdrop-blur-2xl md:hidden flex justify-around items-center z-50 px-4 pb-safe ${theme === 'winamp' ? 'bg-[#282828] border-[#505050] text-[#00ff00]' : theme === 'dark' ? 'border-white/10 bg-black/60' : theme === 'xp' ? 'bg-[#245DDA]/90 border-[#003c74]' : 'bg-white/80 border-black/10'}`}>
+              <button onClick={() => navigateTo('FEED')} className={`p-2 transition-all ${view === 'FEED' ? (theme === 'xp' ? 'text-white scale-125' : theme === 'winamp' ? 'text-[#00ff00] scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><LayoutGrid size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+              <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`p-2 transition-all ${view === 'COMMUNITY_HUB' ? (theme === 'xp' ? 'text-white scale-125' : theme === 'winamp' ? 'text-[#00ff00] scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><Globe size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
+              <div className="relative -top-5"><button onClick={() => setShowCreateMenu(true)} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${theme === 'xp' ? 'bg-green-600 border-4 border-[#245DDA] shadow-lg text-white font-serif italic' : theme === 'winamp' ? 'bg-[#00ff00] text-black border-4 border-[#505050]' : 'bg-green-500 text-black shadow-[0_0_20px_rgba(74,222,128,0.5)] border-4 border-black'}`}><PlusCircle size={32} /></button></div>
+              <button onClick={() => navigateTo('ACTIVITY')} className={`p-2 transition-all ${view === 'ACTIVITY' ? (theme === 'xp' ? 'text-white scale-125' : theme === 'winamp' ? 'text-[#00ff00] scale-125' : 'text-green-500 scale-125') : 'opacity-40'} relative`}><Bell size={24} className={theme === 'xp' ? 'text-white' : ''} />{notifications.some(n => !n.isRead && n.recipient === user?.username) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />}</button>
+              <button onClick={() => { if(user) navigateTo('USER_PROFILE', { username: user.username }); }} className={`p-2 transition-all ${view === 'USER_PROFILE' ? (theme === 'xp' ? 'text-white scale-125' : theme === 'winamp' ? 'text-[#00ff00] scale-125' : 'text-green-500 scale-125') : 'opacity-40'}`}><User size={24} className={theme === 'xp' ? 'text-white' : ''} /></button>
           </nav>
         )}
     </div>

@@ -6,7 +6,7 @@ import { fileToBase64 } from '../services/storageService';
 import { Exhibit, TradeStatus } from '../types';
 
 interface CreateArtifactViewProps {
-  theme: 'dark' | 'light' | 'xp';
+  theme: 'dark' | 'light' | 'xp' | 'winamp';
   onBack: () => void;
   onSave: (artifact: any) => void;
   initialData?: Exhibit | null;
@@ -63,13 +63,15 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
     });
   };
 
+  const isWinamp = theme === 'winamp';
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in pb-32">
+    <div className={`max-w-4xl mx-auto space-y-8 animate-in fade-in pb-32 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest">
+        <button onClick={onBack} className={`flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest ${isWinamp ? 'text-[#00ff00]' : ''}`}>
           <ArrowLeft size={14} /> ОТМЕНА
         </button>
-        <h2 className="font-pixel text-lg">{initialData ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ_АРТЕФАКТ'}</h2>
+        <h2 className={`font-pixel text-lg ${isWinamp ? 'text-[#00ff00]' : ''}`}>{initialData ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ_АРТЕФАКТ'}</h2>
       </div>
 
       <div className="space-y-6">
@@ -89,7 +91,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
             ))}
             <button 
               onClick={() => fileInputRef.current?.click()}
-              className={`w-32 h-32 md:w-40 md:h-40 flex-shrink-0 flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl transition-all ${theme === 'dark' ? 'border-white/10 hover:border-green-500/50 bg-white/5' : 'border-black/10 hover:border-black/30'}`}
+              className={`w-32 h-32 md:w-40 md:h-40 flex-shrink-0 flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl transition-all ${isWinamp ? 'border-[#505050] bg-[#191919] text-[#00ff00]' : theme === 'dark' ? 'border-white/10 hover:border-green-500/50 bg-white/5' : 'border-black/10 hover:border-black/30'}`}
             >
               <Camera size={28} />
               <span className="text-[10px] font-pixel">ДОБАВИТЬ_ФОТО</span>
@@ -102,7 +104,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
         </div>
 
         {/* Basic Metadata */}
-        <div className={`p-8 rounded-3xl border ${theme === 'dark' ? 'bg-dark-surface border-white/10' : 'bg-white border-black/10 shadow-xl'}`}>
+        <div className={`p-8 rounded-3xl border ${isWinamp ? 'bg-[#191919] border-[#505050]' : theme === 'dark' ? 'bg-dark-surface border-white/10' : 'bg-white border-black/10 shadow-xl'}`}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="space-y-6">
               <div>
@@ -110,7 +112,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                 <input 
                   value={title} 
                   onChange={e => setTitle(e.target.value)} 
-                  className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none transition-colors" 
+                  className={`w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none transition-colors ${isWinamp ? 'text-[#00ff00] placeholder-gray-600' : ''}`} 
                   placeholder="Введите название или модель..."
                 />
               </div>
@@ -120,7 +122,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                   <input 
                       value={videoUrl} 
                       onChange={e => setVideoUrl(e.target.value)} 
-                      className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none transition-colors" 
+                      className={`w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none transition-colors ${isWinamp ? 'text-[#00ff00] placeholder-gray-600' : ''}`}
                       placeholder="https://youtube.com/watch?v=..."
                   />
               </div>
@@ -131,7 +133,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                   <select 
                     value={category} 
                     onChange={e => { setCategory(e.target.value); setSubcategory(''); setCondition(''); }}
-                    className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-green-500 outline-none appearance-none"
+                    className={`w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-green-500 outline-none appearance-none ${isWinamp ? 'text-[#00ff00]' : ''}`}
                   >
                     {Object.values(DefaultCategory).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
@@ -141,7 +143,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                   <select 
                     value={subcategory} 
                     onChange={e => setSubcategory(e.target.value)}
-                    className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-green-500 outline-none appearance-none disabled:opacity-30"
+                    className={`w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-green-500 outline-none appearance-none disabled:opacity-30 ${isWinamp ? 'text-[#00ff00]' : ''}`}
                     disabled={!CATEGORY_SUBCATEGORIES[category]}
                   >
                     <option value="">Не выбрано</option>
@@ -153,7 +155,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                     <select 
                         value={condition} 
                         onChange={e => setCondition(e.target.value)}
-                        className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-green-500 outline-none appearance-none"
+                        className={`w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-green-500 outline-none appearance-none ${isWinamp ? 'text-[#00ff00]' : ''}`}
                     >
                         <option value="">Не указано</option>
                         {(CATEGORY_CONDITIONS[category] || CATEGORY_CONDITIONS[DefaultCategory.MISC]).map(cond => (
@@ -190,7 +192,7 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                   value={description} 
                   onChange={e => setDescription(e.target.value)} 
                   rows={6}
-                  className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none resize-none leading-relaxed" 
+                  className={`w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-green-500 outline-none resize-none leading-relaxed ${isWinamp ? 'text-[#00ff00] placeholder-gray-600' : ''}`}
                   placeholder="Опишите артефакт, его происхождение и значение для коллекции..."
                 />
               </div>
@@ -203,14 +205,14 @@ const CreateArtifactView: React.FC<CreateArtifactViewProps> = ({ theme, onBack, 
                   <Info size={14} className="text-blue-400" /> ТЕХНИЧЕСКИЙ_ПАСПОРТ
                 </h3>
               </div>
-              <div className="grid grid-cols-1 gap-4 p-5 bg-black/20 rounded-2xl border border-white/5">
+              <div className={`grid grid-cols-1 gap-4 p-5 rounded-2xl border border-white/5 ${isWinamp ? 'bg-black' : 'bg-black/20'}`}>
                 {(CATEGORY_SPECS_TEMPLATES[category] || ['Производитель', 'Год', 'Модель']).map(spec => (
                   <div key={spec}>
                     <label className="text-[9px] font-mono opacity-40 uppercase mb-1 block">{spec}</label>
                     <input 
                       value={specs[spec] || ''} 
                       onChange={e => setSpecs(prev => ({...prev, [spec]: e.target.value}))}
-                      className="w-full bg-black/20 border border-white/5 rounded-lg px-4 py-3 font-mono text-xs focus:border-green-500 outline-none transition-all"
+                      className={`w-full bg-black/20 border border-white/5 rounded-lg px-4 py-3 font-mono text-xs focus:border-green-500 outline-none transition-all ${isWinamp ? 'text-[#00ff00]' : ''}`}
                       placeholder={`Укажите ${spec}...`}
                     />
                   </div>

@@ -7,7 +7,7 @@ interface SocialListViewProps {
     type: 'followers' | 'following';
     username: string;
     currentUserUsername?: string;
-    theme: 'dark' | 'light' | 'xp';
+    theme: 'dark' | 'light' | 'xp' | 'winamp';
     onBack: () => void;
     onUserClick: (username: string) => void;
 }
@@ -27,6 +27,7 @@ const SocialListView: React.FC<SocialListViewProps> = ({
 
     const list = type === 'followers' ? (targetUser.followers || []) : (targetUser.following || []);
     const title = type === 'followers' ? 'ПОДПИСЧИКИ' : 'ПОДПИСКИ';
+    const isWinamp = theme === 'winamp';
 
     // Helper to check if current user follows someone
     const isFollowing = (u: string) => {
@@ -46,12 +47,12 @@ const SocialListView: React.FC<SocialListViewProps> = ({
     };
 
     return (
-        <div className="max-w-2xl mx-auto animate-in fade-in pb-20 pt-4 px-4">
+        <div className={`max-w-2xl mx-auto animate-in fade-in pb-20 pt-4 px-4 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
              <div className="flex items-center gap-4 mb-6 border-b border-white/10 pb-4">
-                <button onClick={onBack} className="opacity-70 hover:opacity-100 flex items-center gap-2 font-pixel text-xs">
+                <button onClick={onBack} className={`opacity-70 hover:opacity-100 flex items-center gap-2 font-pixel text-xs ${isWinamp ? 'text-[#00ff00]' : ''}`}>
                     <ArrowLeft size={16} /> НАЗАД
                 </button>
-                <h2 className="font-pixel text-lg font-bold">{title} <span className="text-green-500">@{username}</span></h2>
+                <h2 className={`font-pixel text-lg font-bold ${isWinamp ? 'text-[#00ff00]' : ''}`}>{title} <span className="text-green-500">@{username}</span></h2>
              </div>
              
              <div className="space-y-3">
@@ -71,14 +72,14 @@ const SocialListView: React.FC<SocialListViewProps> = ({
                             <div 
                                 key={uName} 
                                 onClick={() => onUserClick(uName)}
-                                className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer hover:bg-white/5 ${theme === 'dark' ? 'bg-dark-surface border-white/10' : 'bg-white border-black/10'}`}
+                                className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer hover:bg-white/5 ${isWinamp ? 'bg-[#191919] border-[#505050]' : theme === 'dark' ? 'bg-dark-surface border-white/10' : 'bg-white border-black/10'}`}
                             >
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20">
                                         <img src={avatar} alt={uName} className="w-full h-full object-cover" />
                                     </div>
                                     <div>
-                                        <div className="font-bold font-pixel text-xs">@{uName}</div>
+                                        <div className={`font-bold font-pixel text-xs ${isWinamp ? 'text-[#00ff00]' : ''}`}>@{uName}</div>
                                         <div className="text-[10px] font-mono opacity-50 truncate max-w-[150px]">{tagline}</div>
                                     </div>
                                 </div>

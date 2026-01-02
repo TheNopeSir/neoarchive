@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
   <head>
@@ -61,11 +62,16 @@
               'light-primary': '#111827',
               'light-accent': '#059669',
               'light-dim': '#9ca3af',
+              // Winamp colors
+              'wa-base': '#191919',
+              'wa-title': '#282828',
+              'wa-green': '#00EA00',
+              'wa-gold': '#FFD700',
             },
             fontFamily: {
-              'mono': ['"Exo 2"', 'monospace'], // Readable tech font
-              'pixel': ['"Orbitron"', 'sans-serif'], // Thematic header font
-              'sans': ['"Exo 2"', 'sans-serif'], // Body text
+              'mono': ['"Exo 2"', 'monospace'], 
+              'pixel': ['"Orbitron"', 'sans-serif'],
+              'sans': ['"Exo 2"', 'sans-serif'], 
             },
             animation: {
               'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -93,7 +99,6 @@
       .light ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
       .scrollbar-hide::-webkit-scrollbar { display: none; }
       .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-      /* iOS safe area fix */
       .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     </style>
 <script type="importmap">
@@ -136,11 +141,10 @@
         ym(106078846, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", accurateTrackBounce:true, trackLinks:true});
     </script>
     <!-- /Yandex.Metrika counter -->
+<link rel="stylesheet" href="/index.css">
 </head>
   <body>
-    <!-- Yandex.Metrika counter noscript -->
     <noscript><div><img src="https://mc.yandex.ru/watch/106078846" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
-    <!-- /Yandex.Metrika counter noscript -->
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

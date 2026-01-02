@@ -6,7 +6,7 @@ import { fileToBase64 } from '../services/storageService';
 import { WishlistItem, WishlistPriority } from '../types';
 
 interface CreateWishlistItemViewProps {
-  theme: 'dark' | 'light' | 'xp';
+  theme: 'dark' | 'light' | 'xp' | 'winamp';
   onBack: () => void;
   onSave: (item: any) => void;
 }
@@ -40,13 +40,15 @@ const CreateWishlistItemView: React.FC<CreateWishlistItemViewProps> = ({ theme, 
     });
   };
 
+  const isWinamp = theme === 'winamp';
+
   return (
-    <div className="max-w-xl mx-auto space-y-8 animate-in fade-in pb-32">
+    <div className={`max-w-xl mx-auto space-y-8 animate-in fade-in pb-32 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
       <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-4">
-        <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest">
+        <button onClick={onBack} className={`flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest ${isWinamp ? 'text-[#00ff00]' : ''}`}>
           <ArrowLeft size={14} /> ОТМЕНА
         </button>
-        <h2 className="font-pixel text-lg flex items-center gap-2"><Search size={18} /> НОВОЕ ЖЕЛАНИЕ</h2>
+        <h2 className={`font-pixel text-lg flex items-center gap-2 ${isWinamp ? 'text-[#00ff00]' : ''}`}><Search size={18} /> НОВОЕ ЖЕЛАНИЕ</h2>
       </div>
 
       <div className="space-y-6">
@@ -54,7 +56,7 @@ const CreateWishlistItemView: React.FC<CreateWishlistItemViewProps> = ({ theme, 
         {/* Image Reference */}
         <div 
             onClick={() => fileInputRef.current?.click()}
-            className={`aspect-video rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all relative overflow-hidden group ${theme === 'dark' ? 'border-white/10 hover:border-purple-500/50 bg-white/5' : 'border-black/10 hover:border-black/30'}`}
+            className={`aspect-video rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all relative overflow-hidden group ${isWinamp ? 'border-[#505050] bg-[#191919] text-[#00ff00]' : theme === 'dark' ? 'border-white/10 hover:border-purple-500/50 bg-white/5' : 'border-black/10 hover:border-black/30'}`}
         >
             {image ? (
                 <>
@@ -77,7 +79,7 @@ const CreateWishlistItemView: React.FC<CreateWishlistItemViewProps> = ({ theme, 
                 <input 
                     value={title} 
                     onChange={e => setTitle(e.target.value)} 
-                    className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-purple-500 outline-none transition-colors" 
+                    className={`w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-purple-500 outline-none transition-colors ${isWinamp ? 'text-[#00ff00] placeholder-gray-600' : ''}`}
                     placeholder="Название консоли, игры, гаджета..."
                     autoFocus
                 />
@@ -88,7 +90,7 @@ const CreateWishlistItemView: React.FC<CreateWishlistItemViewProps> = ({ theme, 
                 <select 
                     value={category} 
                     onChange={e => setCategory(e.target.value)}
-                    className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-purple-500 outline-none appearance-none"
+                    className={`w-full bg-black/30 border border-white/10 rounded-xl px-4 py-4 font-mono text-sm focus:border-purple-500 outline-none appearance-none ${isWinamp ? 'text-[#00ff00]' : ''}`}
                 >
                     {Object.values(DefaultCategory).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
@@ -116,7 +118,7 @@ const CreateWishlistItemView: React.FC<CreateWishlistItemViewProps> = ({ theme, 
                     value={notes} 
                     onChange={e => setNotes(e.target.value)} 
                     rows={4}
-                    className="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-purple-500 outline-none resize-none" 
+                    className={`w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 font-mono text-sm focus:border-purple-500 outline-none resize-none ${isWinamp ? 'text-[#00ff00] placeholder-gray-600' : ''}`}
                     placeholder="Ищу в состоянии Mint, бюджет до 5000р..."
                 />
             </div>

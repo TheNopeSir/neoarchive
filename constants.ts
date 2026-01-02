@@ -1,6 +1,6 @@
 
 import { Exhibit, TierType, TradeStatus, WishlistPriority } from './types';
-import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle, Ghost, Terminal, Upload, Star, MessageSquare, Layers, Search, RefreshCw, DollarSign, Gift, Lock, Crown } from 'lucide-react';
+import { Zap, Flame, Award, User, Circle, Moon, MinusCircle, EyeOff, MessageCircle, Ghost, Terminal, Upload, Star, MessageSquare, Layers, Search, RefreshCw, DollarSign, Gift, Lock, Crown, Radar, Eye, Target } from 'lucide-react';
 
 export const DefaultCategory = {
   PHONES: 'ТЕЛЕФОНЫ',
@@ -47,10 +47,10 @@ export const TRADE_STATUS_CONFIG: Record<TradeStatus, any> = {
 };
 
 export const WISHLIST_PRIORITY_CONFIG: Record<WishlistPriority, any> = {
-    'LOW': { label: 'Интересно', color: 'text-gray-400 border-gray-500', icon: Circle },
-    'MEDIUM': { label: 'Нужно', color: 'text-blue-400 border-blue-500', icon: Star },
-    'HIGH': { label: 'Очень нужно', color: 'text-orange-400 border-orange-500', icon: Flame },
-    'GRAIL': { label: 'GRAIL (Святой Грааль)', color: 'text-yellow-400 border-yellow-500 bg-yellow-500/10 animate-pulse', icon: Crown, glow: true },
+    'LOW': { label: 'НАБЛЮДАЮ', desc: 'Присматриваюсь', color: 'text-gray-400 border-gray-500 bg-gray-500/10', icon: Eye, border: 'border-gray-500' },
+    'MEDIUM': { label: 'ИНТЕРЕС', desc: 'Куплю при случае', color: 'text-blue-400 border-blue-500 bg-blue-500/10', icon: Search, border: 'border-blue-500' },
+    'HIGH': { label: 'ОХОТА', desc: 'Активно ищу', color: 'text-orange-400 border-orange-500 bg-orange-500/10', icon: Target, border: 'border-orange-500' },
+    'GRAIL': { label: 'ГРААЛЬ', desc: 'Мечта коллекции', color: 'text-yellow-400 border-yellow-500 bg-yellow-500/10 animate-pulse', icon: Crown, glow: true, border: 'border-yellow-500' },
 };
 
 export const BADGE_CONFIG = {

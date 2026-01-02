@@ -7,7 +7,7 @@ import { getUserAvatar } from '../services/storageService';
 
 interface WishlistDetailViewProps {
     item: WishlistItem;
-    theme: 'dark' | 'light' | 'xp';
+    theme: 'dark' | 'light' | 'xp' | 'winamp';
     onBack: () => void;
     onDelete?: (id: string) => void;
     onAuthorClick: (username: string) => void;
@@ -20,11 +20,12 @@ const WishlistDetailView: React.FC<WishlistDetailViewProps> = ({
     const priorityConfig = WISHLIST_PRIORITY_CONFIG[item.priority];
     const isOwner = currentUser === item.owner;
     const isXP = theme === 'xp';
+    const isWinamp = theme === 'winamp';
 
     return (
-        <div className="max-w-2xl mx-auto animate-in fade-in pb-20 pt-4 px-4">
+        <div className={`max-w-2xl mx-auto animate-in fade-in pb-20 pt-4 px-4 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
             <div className="flex items-center justify-between mb-6 border-b border-white/10 pb-4">
-                <button onClick={onBack} className="flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest">
+                <button onClick={onBack} className={`flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest ${isWinamp ? 'text-[#00ff00]' : ''}`}>
                     <ArrowLeft size={14} /> НАЗАД
                 </button>
                 {isOwner && onDelete && (
@@ -37,7 +38,7 @@ const WishlistDetailView: React.FC<WishlistDetailViewProps> = ({
                 )}
             </div>
 
-            <div className={`p-1 rounded-3xl border-2 border-dashed ${isXP ? 'border-[#0058EE] bg-white' : `border-purple-500/30 ${theme === 'dark' ? 'bg-dark-surface' : 'bg-white'}`}`}>
+            <div className={`p-1 rounded-3xl border-2 border-dashed ${isXP ? 'border-[#0058EE] bg-white' : isWinamp ? 'border-[#505050] bg-[#191919]' : `border-purple-500/30 ${theme === 'dark' ? 'bg-dark-surface' : 'bg-white'}`}`}>
                 <div className="p-6 space-y-6">
                     {/* Header Badge */}
                     <div className="flex justify-center">
@@ -48,7 +49,7 @@ const WishlistDetailView: React.FC<WishlistDetailViewProps> = ({
                     </div>
 
                     {/* Image Area */}
-                    <div className={`aspect-video rounded-xl overflow-hidden border-2 relative flex items-center justify-center ${theme === 'dark' ? 'border-white/10 bg-black/20' : 'border-black/10 bg-gray-50'}`}>
+                    <div className={`aspect-video rounded-xl overflow-hidden border-2 relative flex items-center justify-center ${isWinamp ? 'border-[#505050] bg-black' : theme === 'dark' ? 'border-white/10 bg-black/20' : 'border-black/10 bg-gray-50'}`}>
                         {item.referenceImageUrl ? (
                             <img src={item.referenceImageUrl} className="w-full h-full object-contain" alt={item.title} />
                         ) : (
@@ -64,16 +65,16 @@ const WishlistDetailView: React.FC<WishlistDetailViewProps> = ({
 
                     {/* Content */}
                     <div className="text-center space-y-2">
-                        <div className="font-pixel text-[10px] opacity-50 uppercase tracking-widest">{item.category}</div>
-                        <h1 className="text-2xl md:text-3xl font-pixel font-black">{item.title}</h1>
+                        <div className={`font-pixel text-[10px] opacity-50 uppercase tracking-widest ${isWinamp ? 'text-[#00ff00]' : ''}`}>{item.category}</div>
+                        <h1 className={`text-2xl md:text-3xl font-pixel font-black ${isWinamp ? 'text-[#00ff00]' : ''}`}>{item.title}</h1>
                     </div>
 
                     {/* Notes Box */}
-                    <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-black/30 border-white/10' : 'bg-gray-100 border-black/5'}`}>
+                    <div className={`p-6 rounded-xl border ${isWinamp ? 'bg-black border-[#505050]' : theme === 'dark' ? 'bg-black/30 border-white/10' : 'bg-gray-100 border-black/5'}`}>
                         <h3 className="font-pixel text-[10px] opacity-50 mb-3 flex items-center gap-2 uppercase tracking-widest">
                             <Target size={14} /> Параметры поиска / Заметки
                         </h3>
-                        <p className="font-mono text-sm leading-relaxed whitespace-pre-wrap italic">
+                        <p className={`font-mono text-sm leading-relaxed whitespace-pre-wrap italic ${isWinamp ? 'text-[#00ff00]' : ''}`}>
                             {item.notes || "Автор не оставил дополнительных примечаний к поиску."}
                         </p>
                     </div>
