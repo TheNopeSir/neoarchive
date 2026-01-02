@@ -28,6 +28,7 @@ import WishlistDetailView from './components/WishlistDetailView';
 import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
 import GuildDetailView from './components/GuildDetailView';
+import UserWishlistView from './components/UserWishlistView';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem, Guild } from './types';
@@ -102,6 +103,7 @@ export default function App() {
 
       let path = '/';
       if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
+      else if (newView === 'USER_WISHLIST') path = `/u/${params?.username || viewedProfileUsername}/wishlist`;
       else if (newView === 'EXHIBIT') path = `/artifact/${params?.item?.id || selectedExhibit?.id}`;
       else if (newView === 'COLLECTION_DETAIL') path = `/collection/${params?.collection?.id || selectedCollection?.id}`;
       else if (newView === 'GUILD_DETAIL') path = `/guild/${params?.guild?.id || selectedGuild?.id}`;
@@ -188,10 +190,15 @@ export default function App() {
               const data = db.getFullDatabase(); // Get data from fresh init
 
               if (path.startsWith('/u/') || path.startsWith('/profile/')) {
-                  const username = path.split('/')[2];
+                  const segments = path.split('/');
+                  const username = segments[2];
                   if (username) {
                       setViewedProfileUsername(username);
-                      setView('USER_PROFILE');
+                      if (segments[3] === 'wishlist') {
+                          setView('USER_WISHLIST');
+                      } else {
+                          setView('USER_PROFILE');
+                      }
                   } else {
                       setView('FEED');
                   }
@@ -334,6 +341,13 @@ export default function App() {
       await db.updateExhibit(updatedEx);
       refreshData();
       if (selectedExhibit?.id === id) setSelectedExhibit(updatedEx);
+  };
+
+  const handleGuestbookPost = async (text: string) => {
+      if (!user || !viewedProfileUsername) return;
+      const entry: GuestbookEntry = { id: crypto.randomUUID(), author: user.username, targetUser: viewedProfileUsername, text, timestamp: new Date().toISOString(), isRead: false };
+      await db.saveGuestbookEntry(entry);
+      refreshData();
   };
 
   const handleFollow = async (username: string) => {
@@ -522,12 +536,11 @@ export default function App() {
                             <div className={`font-pixel text-lg font-black tracking-widest cursor-pointer group ${theme === 'xp' ? 'text-white italic drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]' : ''}`} onClick={() => navigateTo('FEED')}>
                                 NEO<span className={`${theme === 'xp' ? 'text-white' : 'text-green-500'} transition-colors group-hover:text-white`}>ARCHIVE</span>
                             </div>
+                            <button onClick={() => navigateTo('SEARCH')} className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}>
+                                <Search size={14} className={`${theme === 'xp' ? 'opacity-100 text-blue-600' : 'opacity-40'}`} />
+                            </button>
                             <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`hidden md:flex items-center px-4 py-1.5 rounded-2xl transition-all ${theme === 'dark' ? 'hover:bg-white/10 text-white/70' : 'hover:bg-black/10'}`}>
                                 <Globe size={14} className="mr-2"/> <span className="font-pixel text-xs">СООБЩЕСТВО</span>
-                            </button>
-                            <button onClick={() => navigateTo('SEARCH')} className={`flex items-center px-4 py-1.5 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'xp' ? 'bg-white text-black border-blue-800 shadow-inner' : 'bg-black/5 border-black/10 hover:bg-black/10'}`}>
-                                <Search size={14} className={`${theme === 'xp' ? 'opacity-100 text-blue-600' : 'opacity-40'} mr-2`} />
-                                <span className="text-xs font-mono opacity-50 hidden md:inline">ПОИСК...</span>
                             </button>
                           </div>
                           
@@ -597,6 +610,27 @@ export default function App() {
                                         </button>
                                     ))}
                                 </div>
+                                
+                                {/* EXPANDABLE SUBCATEGORIES */}
+                                {selectedCategory !== 'ВСЕ' && CATEGORY_SUBCATEGORIES[selectedCategory] && (
+                                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-in slide-in-from-top-2">
+                                        <button 
+                                            onClick={() => setSelectedSubcategory('ВСЕ')}
+                                            className={`whitespace-nowrap px-3 py-1.5 rounded-lg font-mono text-[9px] font-bold border transition-all ${selectedSubcategory === 'ВСЕ' ? 'bg-white/10 border-white/20 text-white' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                                        >
+                                            ВСЕ
+                                        </button>
+                                        {CATEGORY_SUBCATEGORIES[selectedCategory].map(sub => (
+                                            <button 
+                                                key={sub}
+                                                onClick={() => setSelectedSubcategory(sub)}
+                                                className={`whitespace-nowrap px-3 py-1.5 rounded-lg font-mono text-[9px] font-bold border transition-all ${selectedSubcategory === sub ? (theme === 'xp' ? 'bg-blue-100 border-blue-500 text-blue-900' : 'bg-green-500/10 border-green-500 text-green-500') : 'border-transparent opacity-50 hover:opacity-100'}`}
+                                            >
+                                                {sub}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
@@ -695,9 +729,66 @@ export default function App() {
                 </div>
             )}
 
+            {view === 'USER_WISHLIST' && viewedProfileUsername && (
+                <div key={`WISHLIST_${viewedProfileUsername}`} className="animate-in slide-in-from-right-4 fade-in">
+                    <UserWishlistView 
+                        ownerUsername={viewedProfileUsername} 
+                        currentUser={user}
+                        wishlistItems={wishlist.filter(w => w.owner === viewedProfileUsername)} 
+                        theme={theme} 
+                        onBack={handleBack} 
+                        onItemClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })}
+                        onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                    />
+                </div>
+            )}
+
             {view === 'USER_PROFILE' && user && (
                 <div key={`PROFILE_${viewedProfileUsername}`} className="animate-in slide-in-from-right-4 fade-in duration-300">
-                    <UserProfileView key={viewedProfileUsername} user={user} viewedProfileUsername={viewedProfileUsername} exhibits={exhibits} collections={collections} guestbook={guestbook} theme={theme} onBack={handleBack} onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} onFollow={handleFollow} onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} onExhibitClick={handleExhibitClick} onLike={handleLike} onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} onShareCollection={() => {}} onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} onGuestbookPost={() => {}} refreshData={refreshData} isEditingProfile={isEditingProfile} setIsEditingProfile={setIsEditingProfile} editTagline={editTagline} setEditTagline={setEditTagline} editBio={editBio} setEditBio={setEditBio} editStatus={editStatus} setEditStatus={setEditStatus} editTelegram={editTelegram} setEditTelegram={setEditTelegram} editPassword={editPassword} setEditPassword={setEditPassword} onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, bio: editBio, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} onProfileImageUpload={async (e: React.ChangeEvent<HTMLInputElement>) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} onProfileCoverUpload={async (e: React.ChangeEvent<HTMLInputElement>) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, coverUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} guestbookInput={guestbookInput} setGuestbookInput={setGuestbookInput} guestbookInputRef={guestbookInputRef} profileTab={profileTab} setProfileTab={setProfileTab} onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} onThemeChange={(t) => setTheme(t)} onWishlistClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })} />
+                    <UserProfileView 
+                        key={viewedProfileUsername} 
+                        user={user} 
+                        viewedProfileUsername={viewedProfileUsername} 
+                        exhibits={exhibits} 
+                        collections={collections} 
+                        guestbook={guestbook} 
+                        theme={theme} 
+                        onBack={handleBack} 
+                        onLogout={() => { db.logoutUser(); setUser(null); navigateTo('AUTH'); }} 
+                        onFollow={handleFollow} 
+                        onChat={(u) => { setViewedProfileUsername(u); navigateTo('DIRECT_CHAT', { username: u }); }} 
+                        onExhibitClick={handleExhibitClick} 
+                        onLike={handleLike} 
+                        onAuthorClick={(a) => { navigateTo('USER_PROFILE', { username: a }); }} 
+                        onCollectionClick={(c) => navigateTo('COLLECTION_DETAIL', { collection: c })} 
+                        onShareCollection={() => {}} 
+                        onViewHallOfFame={() => navigateTo('HALL_OF_FAME')} 
+                        onGuestbookPost={(text) => handleGuestbookPost(text)} 
+                        refreshData={refreshData} 
+                        isEditingProfile={isEditingProfile} 
+                        setIsEditingProfile={setIsEditingProfile} 
+                        editTagline={editTagline} 
+                        setEditTagline={setEditTagline} 
+                        editBio={editBio} 
+                        setEditBio={setEditBio} 
+                        editStatus={editStatus} 
+                        setEditStatus={setEditStatus} 
+                        editTelegram={editTelegram} 
+                        setEditTelegram={setEditTelegram} 
+                        editPassword={editPassword} 
+                        setEditPassword={setEditPassword} 
+                        onSaveProfile={async () => { if(!user) return; const updated = { ...user, tagline: editTagline, bio: editBio, status: editStatus, telegram: editTelegram }; if(editPassword) updated.password = editPassword; await db.updateUserProfile(updated); setUser(updated); setIsEditingProfile(false); }} 
+                        onProfileImageUpload={async (e: React.ChangeEvent<HTMLInputElement>) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, avatarUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} 
+                        onProfileCoverUpload={async (e: React.ChangeEvent<HTMLInputElement>) => { if(e.target.files && e.target.files[0] && user) { const b64 = await db.fileToBase64(e.target.files[0]); const updated = { ...user, coverUrl: b64 }; setUser(updated); await db.updateUserProfile(updated); } }} 
+                        guestbookInput={guestbookInput} 
+                        setGuestbookInput={setGuestbookInput} 
+                        guestbookInputRef={guestbookInputRef} 
+                        profileTab={profileTab} 
+                        setProfileTab={setProfileTab} 
+                        onOpenSocialList={(u, t) => { setViewedProfileUsername(u); setSocialListType(t); navigateTo('SOCIAL_LIST', { username: u }); }} 
+                        onThemeChange={(t) => setTheme(t)} 
+                        onWishlistClick={(item) => navigateTo('WISHLIST_DETAIL', { wishlistItem: item })} 
+                    />
                 </div>
             )}
 

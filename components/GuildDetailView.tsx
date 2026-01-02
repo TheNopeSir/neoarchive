@@ -50,6 +50,8 @@ const GuildDetailView: React.FC<GuildDetailViewProps> = ({
         }
     };
 
+    const canDelete = isLeader || currentUser.isAdmin;
+
     return (
         <div className={`max-w-4xl mx-auto animate-in fade-in pb-32 pt-4 px-4 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
             <button onClick={onBack} className={`flex items-center gap-2 mb-6 hover:underline opacity-70 font-pixel text-xs ${isWinamp ? 'text-[#00ff00]' : ''}`}>
@@ -90,7 +92,7 @@ const GuildDetailView: React.FC<GuildDetailViewProps> = ({
                             </button>
                         )}
 
-                        {isLeader && (
+                        {canDelete && (
                             <button onClick={handleDelete} className="px-4 py-2 border border-red-600 text-red-500 rounded-xl font-bold text-xs uppercase hover:bg-red-600 hover:text-white transition-all flex items-center gap-2">
                                 <Trash2 size={14}/> УДАЛИТЬ
                             </button>
