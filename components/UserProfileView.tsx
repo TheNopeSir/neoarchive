@@ -88,7 +88,9 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
 
     const userExhibits = exhibits.filter(e => e.owner === viewedProfileUsername);
     const userCollections = collections.filter(c => c.owner === viewedProfileUsername);
+    // Explicitly filter wishlist items for the viewed user
     const wishlistItems = db.getFullDatabase().wishlist.filter(w => w.owner === viewedProfileUsername);
+    
     const drafts = isCurrentUser ? userExhibits.filter(e => e.isDraft) : [];
     const publishedExhibits = userExhibits.filter(e => !e.isDraft);
 
@@ -130,17 +132,17 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                 <div className="text-[14px] text-wa-gold">{profileUser.username}</div>
                                 <div className="text-[12px] opacity-80">{profileUser.tagline}</div>
                                 <div className="text-[12px] flex gap-2 mt-2">
-                                    <span onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="cursor-pointer hover:text-white">Followers: {profileUser.followers?.length || 0}</span>
-                                    <span onClick={() => onOpenSocialList(profileUser.username, 'following')} className="cursor-pointer hover:text-white">Following: {profileUser.following?.length || 0}</span>
+                                    <span onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="cursor-pointer hover:text-white">Подписчики: {profileUser.followers?.length || 0}</span>
+                                    <span onClick={() => onOpenSocialList(profileUser.username, 'following')} className="cursor-pointer hover:text-white">Подписки: {profileUser.following?.length || 0}</span>
                                 </div>
                                 {!isCurrentUser && (
                                     <div className="flex gap-2 mt-2">
-                                        <button onClick={() => onFollow(profileUser.username)} className="px-2 border border-[#505050] bg-[#292929] text-[10px] hover:text-white">{isSubscribed ? 'UNSUBSCRIBE' : 'SUBSCRIBE'}</button>
-                                        <button onClick={() => onChat(profileUser.username)} className="px-2 border border-[#505050] bg-[#292929] text-[10px] hover:text-white">MSG</button>
+                                        <button onClick={() => onFollow(profileUser.username)} className="px-2 border border-[#505050] bg-[#292929] text-[10px] hover:text-white">{isSubscribed ? 'ОТПИСАТЬСЯ' : 'ПОДПИСАТЬСЯ'}</button>
+                                        <button onClick={() => onChat(profileUser.username)} className="px-2 border border-[#505050] bg-[#292929] text-[10px] hover:text-white">ЛС</button>
                                     </div>
                                 )}
                                 {isCurrentUser && (
-                                    <button onClick={onLogout} className="px-2 border border-[#505050] bg-[#292929] text-[10px] hover:text-red-500">LOGOUT</button>
+                                    <button onClick={onLogout} className="px-2 border border-[#505050] bg-[#292929] text-[10px] hover:text-red-500">ВЫЙТИ</button>
                                 )}
                             </div>
                         </div>
@@ -150,9 +152,9 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                     <>
                         <div className="h-40 md:h-52 bg-gray-800 relative">
                             {profileUser.coverUrl ? <img src={profileUser.coverUrl} className="w-full h-full object-cover" alt="Cover" /> : <div className={`w-full h-full ${theme === 'dark' ? 'bg-gradient-to-r from-green-900/20 to-black' : 'bg-gradient-to-r from-gray-100 to-gray-300'}`}></div>}
-                            {theme === 'xp' && <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-r from-[#0058EE] to-[#3F8CF3] flex items-center px-4"><span className="text-white font-bold text-sm drop-shadow-md italic">User Properties</span></div>}
+                            {theme === 'xp' && <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-r from-[#0058EE] to-[#3F8CF3] flex items-center px-4"><span className="text-white font-bold text-sm drop-shadow-md italic">Свойства пользователя</span></div>}
                             {isEditingProfile && isCurrentUser && (
-                                <label className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-xl cursor-pointer hover:bg-black/70 border border-white/20 flex items-center gap-2 backdrop-blur-sm"><Camera size={16} /> <span className="text-[10px] font-pixel">BANNER</span><input type="file" accept="image/*" className="hidden" onChange={onProfileCoverUpload} /></label>
+                                <label className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-xl cursor-pointer hover:bg-black/70 border border-white/20 flex items-center gap-2 backdrop-blur-sm"><Camera size={16} /> <span className="text-[10px] font-pixel">ОБЛОЖКА</span><input type="file" accept="image/*" className="hidden" onChange={onProfileCoverUpload} /></label>
                             )}
                         </div>
                         <div className="px-6 pb-6 relative">
@@ -169,12 +171,12 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                         <div>
                                             <h2 className={`text-3xl font-pixel font-bold flex items-center gap-2 ${theme === 'xp' ? 'text-black' : ''}`}>@{profileUser.username}{profileUser.status && (<div className={`w-3 h-3 rounded-full ${STATUS_OPTIONS[profileUser.status].color.replace('text-', 'bg-')}`} title={STATUS_OPTIONS[profileUser.status].label} />)}</h2>
-                                            <p className="text-xs font-mono opacity-60">Joined {profileUser.joinedDate}</p>
+                                            <p className="text-xs font-mono opacity-60">Регистрация: {profileUser.joinedDate}</p>
                                         </div>
                                         <div className="flex items-center gap-6">
-                                            <button onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="flex flex-col items-center group"><span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.followers?.length || 0}</span><span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Followers</span></button>
-                                            <button onClick={() => onOpenSocialList(profileUser.username, 'following')} className="flex flex-col items-center group"><span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.following?.length || 0}</span><span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Following</span></button>
-                                            <button onClick={onViewHallOfFame} className="flex flex-col items-center group"><Trophy size={18} className="group-hover:text-yellow-500 transition-colors" /><span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Awards</span></button>
+                                            <button onClick={() => onOpenSocialList(profileUser.username, 'followers')} className="flex flex-col items-center group"><span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.followers?.length || 0}</span><span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Подписчики</span></button>
+                                            <button onClick={() => onOpenSocialList(profileUser.username, 'following')} className="flex flex-col items-center group"><span className="font-pixel text-lg leading-none group-hover:text-green-500 transition-colors">{profileUser.following?.length || 0}</span><span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Подписки</span></button>
+                                            <button onClick={onViewHallOfFame} className="flex flex-col items-center group"><Trophy size={18} className="group-hover:text-yellow-500 transition-colors" /><span className="text-[9px] font-pixel opacity-50 uppercase group-hover:opacity-100">Награды</span></button>
                                         </div>
                                     </div>
                                 </div>
@@ -187,7 +189,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
-                                        <div className="flex items-center justify-between"><p className="font-mono font-bold text-sm">{profileUser.tagline}</p><div className="flex gap-2">{isCurrentUser ? (<><button onClick={() => { setEditTagline(user?.tagline || ''); setEditBio(user?.bio || ''); setEditStatus(user?.status || 'ONLINE'); setIsEditingProfile(true); }} className="px-3 py-1.5 border rounded-lg text-[10px] uppercase font-bold hover:bg-white/10 flex items-center gap-2"><Edit2 size={12} /> Edit</button><button onClick={onLogout} className="px-3 py-1.5 border border-red-500/30 text-red-500 rounded-lg"><LogOut size={12} /></button></>) : (<><button onClick={() => onFollow(profileUser.username)} className={`px-4 py-1.5 rounded-lg font-bold font-pixel text-[10px] uppercase transition-all ${isSubscribed ? 'border border-white/20 opacity-60' : 'bg-green-500 text-black border-green-500'}`}>{isSubscribed ? 'Following' : 'Follow'}</button><button onClick={() => onChat(profileUser.username)} className="px-3 py-1.5 border rounded-lg hover:bg-white/10"><MessageSquare size={14} /></button></>)}</div></div>
+                                        <div className="flex items-center justify-between"><p className="font-mono font-bold text-sm">{profileUser.tagline}</p><div className="flex gap-2">{isCurrentUser ? (<><button onClick={() => { setEditTagline(user?.tagline || ''); setEditBio(user?.bio || ''); setEditStatus(user?.status || 'ONLINE'); setIsEditingProfile(true); }} className="px-3 py-1.5 border rounded-lg text-[10px] uppercase font-bold hover:bg-white/10 flex items-center gap-2"><Edit2 size={12} /> Ред.</button><button onClick={onLogout} className="px-3 py-1.5 border border-red-500/30 text-red-500 rounded-lg"><LogOut size={12} /></button></>) : (<><button onClick={() => onFollow(profileUser.username)} className={`px-4 py-1.5 rounded-lg font-bold font-pixel text-[10px] uppercase transition-all ${isSubscribed ? 'border border-white/20 opacity-60' : 'bg-green-500 text-black border-green-500'}`}>{isSubscribed ? 'Подписан' : 'Подписаться'}</button><button onClick={() => onChat(profileUser.username)} className="px-3 py-1.5 border rounded-lg hover:bg-white/10"><MessageSquare size={14} /></button></>)}</div></div>
                                         {profileUser.bio && <p className="font-mono text-sm opacity-70 whitespace-pre-wrap leading-relaxed max-w-2xl">{profileUser.bio}</p>}
                                     </div>
                                 )}
@@ -209,14 +211,28 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 ) : (
                     <>
                         <button onClick={() => setActiveSection('SHELF')} className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'SHELF' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}><Package size={14} /> ПОЛКА</button>
-                        <button onClick={() => setActiveSection('LOGS')} className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'LOGS' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}><MessageSquare size={14} /> GUESTBOOK</button>
-                        <button onClick={() => setActiveSection('WISHLIST')} className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'WISHLIST' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}><Search size={14} /> WISHLIST</button>
-                        {isCurrentUser && <button onClick={() => setActiveSection('CONFIG')} className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'CONFIG' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}><Settings size={14} /> CONFIG</button>}
+                        <button onClick={() => setActiveSection('LOGS')} className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'LOGS' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}><MessageSquare size={14} /> ГОСТЕВАЯ</button>
+                        <button onClick={() => setActiveSection('WISHLIST')} className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'WISHLIST' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}><Search size={14} /> ВИШЛИСТ</button>
+                        {isCurrentUser && <button onClick={() => setActiveSection('CONFIG')} className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeSection === 'CONFIG' ? 'border-b-2 border-green-500 text-green-500 font-bold' : 'opacity-50 hover:opacity-100'}`}><Settings size={14} /> КОНФИГ</button>}
                     </>
                 )}
             </div>
 
             {/* CONTENT */}
+            {activeSection === 'WISHLIST' && (
+                <div className="space-y-4 animate-in fade-in">
+                    {wishlistItems.length === 0 ? (
+                        <div className="text-center opacity-50 py-10 font-mono text-xs uppercase">Вишлист пуст</div>
+                    ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {wishlistItems.map(item => (
+                                <WishlistCard key={item.id} item={item} theme={theme} onClick={onWishlistClick} onUserClick={onAuthorClick} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {activeSection === 'SHELF' && (
                 <div className="space-y-8 animate-in fade-in">
                     {isWinamp && (
@@ -234,6 +250,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
 
                     {profileTab === 'ARTIFACTS' && (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {publishedExhibits.length === 0 && <div className="col-span-full text-center opacity-50 text-xs">Нет предметов</div>}
                             {publishedExhibits.map(item => (
                                 <ExhibitCard key={item.id} item={item} theme={theme} onClick={onExhibitClick} isLiked={item.likedBy?.includes(user?.username || '') || false} onLike={(e) => onLike(item.id, e)} onAuthorClick={() => {}} />
                             ))}
@@ -241,6 +258,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                     )}
                     {profileTab === 'COLLECTIONS' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {userCollections.length === 0 && <div className="col-span-full text-center opacity-50 text-xs">Нет коллекций</div>}
                             {userCollections.map(col => (
                                 <CollectionCard key={col.id} col={col} theme={theme} onClick={onCollectionClick} onShare={onShareCollection} />
                             ))}

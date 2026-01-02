@@ -11,8 +11,7 @@ let cache = {
     guestbook: [] as GuestbookEntry[],
     wishlist: [] as WishlistItem[],
     guilds: [
-        { id: 'g1', name: 'Retro Keepers', description: 'Хранители старого железа', leader: 'SysAdmin', members: ['SysAdmin'], isPrivate: false },
-        { id: 'g2', name: 'Audiophiles', description: 'Клуб любителей винила', leader: 'SoundWave', members: ['SoundWave'], isPrivate: false }
+        { id: 'g1', name: 'Retro Keepers', description: 'Хранители старого железа', leader: 'SysAdmin', members: ['SysAdmin'], isPrivate: false, inviteCode: 'retro123' },
     ] as Guild[],
     duels: [] as Duel[],
     deletedIds: [] as string[],
@@ -450,25 +449,62 @@ export const saveGuestbookEntry = async (e: GuestbookEntry) => { cache.guestbook
 export const updateGuestbookEntry = async (e: GuestbookEntry) => { const idx = cache.guestbook.findIndex(g => g.id === e.id); if (idx !== -1) cache.guestbook[idx] = e; await saveToLocalCache(); notifyListeners(); await syncItem('/guestbook', e); };
 export const deleteGuestbookEntry = async (id: string) => { cache.guestbook = cache.guestbook.filter(g => g.id !== id); await saveToLocalCache(); notifyListeners(); apiCall(`/guestbook/${id}`, 'DELETE').catch(()=>{}); };
 
-// -- GUILDS MOCK LOGIC --
+// -- GUILDS LOGIC --
 export const createGuild = async (guild: Guild) => {
+    guild.inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     cache.guilds.push(guild);
     // Auto-update user profile to show guild membership
     const leader = cache.users.find(u => u.username === guild.leader);
     if(leader) { leader.guildId = guild.id; updateUserProfile(leader); }
     await saveToLocalCache();
     notifyListeners();
+    // In real app, sync to server
 };
 
-export const joinGuild = async (guildId: string, username: string) => {
-    const g = cache.guilds.find(g => g.id === guildId);
+export const updateGuild = async (guild: Guild) => {
+    const idx = cache.guilds.findIndex(g => g.id === guild.id);
+    if (idx !== -1) {
+        cache.guilds[idx] = guild;
+        await saveToLocalCache();
+        notifyListeners();
+    }
+};
+
+export const joinGuild = async (guildIdOrCode: string, username: string) => {
+    let g = cache.guilds.find(g => g.id === guildIdOrCode || g.inviteCode === guildIdOrCode);
+    
+    if (!g) return false;
+
     const u = cache.users.find(u => u.username === username);
     if (g && u && !g.members.includes(username)) {
         g.members.push(username);
-        u.guildId = guildId;
+        u.guildId = g.id;
         await saveToLocalCache();
         notifyListeners();
-        // Sync not fully implemented for guilds yet
+        return true;
+    }
+    return false;
+};
+
+export const leaveGuild = async (guildId: string, username: string) => {
+    const g = cache.guilds.find(g => g.id === guildId);
+    const u = cache.users.find(u => u.username === username);
+    if (g && u) {
+        g.members = g.members.filter(m => m !== username);
+        u.guildId = undefined;
+        await saveToLocalCache();
+        notifyListeners();
+    }
+};
+
+export const kickFromGuild = async (guildId: string, targetUsername: string) => {
+    const g = cache.guilds.find(g => g.id === guildId);
+    const u = cache.users.find(u => u.username === targetUsername);
+    if (g && u) {
+        g.members = g.members.filter(m => m !== targetUsername);
+        u.guildId = undefined;
+        await saveToLocalCache();
+        notifyListeners();
     }
 };
 

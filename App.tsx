@@ -27,9 +27,10 @@ import WishlistCard from './components/WishlistCard';
 import WishlistDetailView from './components/WishlistDetailView';
 import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
+import GuildDetailView from './components/GuildDetailView'; // Import new component
 
 import * as db from './services/storageService';
-import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem } from './types';
+import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem, Guild } from './types';
 import { DefaultCategory, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from './constants';
 import useSwipe from './hooks/useSwipe';
 
@@ -53,6 +54,7 @@ export default function App() {
   const [selectedExhibit, setSelectedExhibit] = useState<Exhibit | null>(null);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [selectedWishlistItem, setSelectedWishlistItem] = useState<WishlistItem | null>(null);
+  const [selectedGuild, setSelectedGuild] = useState<Guild | null>(null);
   const [viewedProfileUsername, setViewedProfileUsername] = useState<string>('');
   
   // Advanced Notification State
@@ -85,20 +87,19 @@ export default function App() {
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
   // --- NAVIGATION HELPER ---
-  const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection; wishlistItem?: WishlistItem; highlightCommentId?: string }) => {
+  const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection; wishlistItem?: WishlistItem; guild?: Guild; highlightCommentId?: string }) => {
       if (params?.username) setViewedProfileUsername(params.username);
       if (params?.item) {
           setSelectedExhibit(params.item);
-          // Highlight specific comment if passed
           setHighlightCommentId(params.highlightCommentId);
       }
       if (params?.collection) setSelectedCollection(params.collection);
       if (params?.wishlistItem) setSelectedWishlistItem(params.wishlistItem);
+      if (params?.guild) setSelectedGuild(params.guild);
 
       setNavigationStack(prev => [...prev, view]);
       setView(newView);
 
-      // Simple URL updates (omitted comprehensive mapping for brevity)
       let path = '/';
       if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
       else if (newView === 'EXHIBIT') path = `/artifact/${params?.item?.id || selectedExhibit?.id}`;
@@ -317,10 +318,11 @@ export default function App() {
       );
   }, [baseFilteredExhibits]);
   
-  // MERGED WISHLIST SORTING
+  // WISHLIST SORTING - Updated: No extra priority for Grail in main sorting
   const sortedWishlist = useMemo(() => {
-      const priorityWeights = { 'GRAIL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
-      return [...wishlist].sort((a,b) => priorityWeights[b.priority] - priorityWeights[a.priority]);
+      return [...wishlist].sort((a,b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
   }, [wishlist]);
 
   const handleSaveArtifact = async (artifactData: Partial<Exhibit>) => {
@@ -577,7 +579,13 @@ export default function App() {
 
             {view === 'COMMUNITY_HUB' && (
                 <div key="COMMUNITY_HUB" className="animate-in fade-in">
-                    <CommunityHub theme={theme} users={db.getFullDatabase().users} exhibits={exhibits} onExhibitClick={handleExhibitClick} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} />
+                    <CommunityHub theme={theme} users={db.getFullDatabase().users} exhibits={exhibits} onExhibitClick={handleExhibitClick} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} onGuildClick={(g) => navigateTo('GUILD_DETAIL', { guild: g })} />
+                </div>
+            )}
+
+            {view === 'GUILD_DETAIL' && selectedGuild && user && (
+                <div key="GUILD_DETAIL" className="animate-in fade-in">
+                    <GuildDetailView guild={selectedGuild} currentUser={user} theme={theme} onBack={handleBack} onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })} />
                 </div>
             )}
 
