@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Camera, Palette, Settings, Search, Terminal, Sun, Package, Archive, FolderPlus, BookOpen, Heart, Share2, ExternalLink, Link as LinkIcon } from 'lucide-react';
 import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus, AppSettings, WishlistItem } from '../types';
 import { STATUS_OPTIONS } from '../constants';
@@ -92,7 +93,45 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     const isSubscribed = user?.following?.includes(viewedProfileUsername) || false;
     const isWinamp = theme === 'winamp';
 
-    const [activeSection, setActiveSection] = useState<'SHELF' | 'FAVORITES' | 'LOGS' | 'CONFIG' | 'WISHLIST'>('SHELF');
+    // Parse URL params for internal tabs
+    const getInitialSection = () => {
+        const params = new URLSearchParams(window.location.search);
+        const section = params.get('section');
+        if (section === 'favorites') return 'FAVORITES';
+        if (section === 'logs') return 'LOGS';
+        if (section === 'wishlist') return 'WISHLIST';
+        if (section === 'config' && isCurrentUser) return 'CONFIG';
+        return 'SHELF';
+    };
+
+    const getInitialShelfTab = () => {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get('tab');
+        if (tab === 'collections') return 'COLLECTIONS';
+        return 'ARTIFACTS';
+    };
+
+    const [activeSection, setActiveSection] = useState<'SHELF' | 'FAVORITES' | 'LOGS' | 'CONFIG' | 'WISHLIST'>(getInitialSection);
+    const [localProfileTab, setLocalProfileTab] = useState<'ARTIFACTS' | 'COLLECTIONS'>(getInitialShelfTab);
+
+    // Sync URL with tabs
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        
+        if (activeSection === 'SHELF') params.delete('section');
+        else params.set('section', activeSection.toLowerCase());
+
+        if (activeSection === 'SHELF') {
+            if (localProfileTab === 'ARTIFACTS') params.delete('tab');
+            else params.set('tab', 'collections');
+        } else {
+            params.delete('tab');
+        }
+
+        const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+        window.history.replaceState({ ...window.history.state }, '', newUrl);
+    }, [activeSection, localProfileTab]);
+
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [editEntryText, setEditEntryText] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -416,18 +455,18 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <div className="space-y-8 animate-in fade-in">
                     {isWinamp && (
                         <div className="flex gap-4 mb-4 text-[12px]">
-                            <button onClick={() => setProfileTab('ARTIFACTS')} className={`${profileTab === 'ARTIFACTS' ? 'text-wa-gold' : ''}`}>[ ITEMS ]</button>
-                            <button onClick={() => setProfileTab('COLLECTIONS')} className={`${profileTab === 'COLLECTIONS' ? 'text-wa-gold' : ''}`}>[ ALBUMS ]</button>
+                            <button onClick={() => setLocalProfileTab('ARTIFACTS')} className={`${localProfileTab === 'ARTIFACTS' ? 'text-wa-gold' : ''}`}>[ ITEMS ]</button>
+                            <button onClick={() => setLocalProfileTab('COLLECTIONS')} className={`${localProfileTab === 'COLLECTIONS' ? 'text-wa-gold' : ''}`}>[ ALBUMS ]</button>
                         </div>
                     )}
                     {!isWinamp && (
                         <div className="flex items-center gap-4 mb-4">
-                            <button onClick={() => setProfileTab('ARTIFACTS')} className={`text-xs font-pixel uppercase ${profileTab === 'ARTIFACTS' ? 'text-green-500 font-bold' : 'opacity-50'}`}>Предметы ({publishedExhibits.length})</button>
-                            <button onClick={() => setProfileTab('COLLECTIONS')} className={`text-xs font-pixel uppercase ${profileTab === 'COLLECTIONS' ? 'text-green-500 font-bold' : 'opacity-50'}`}>Коллекции ({userCollections.length})</button>
+                            <button onClick={() => setLocalProfileTab('ARTIFACTS')} className={`text-xs font-pixel uppercase ${localProfileTab === 'ARTIFACTS' ? 'text-green-500 font-bold' : 'opacity-50'}`}>Предметы ({publishedExhibits.length})</button>
+                            <button onClick={() => setLocalProfileTab('COLLECTIONS')} className={`text-xs font-pixel uppercase ${localProfileTab === 'COLLECTIONS' ? 'text-green-500 font-bold' : 'opacity-50'}`}>Коллекции ({userCollections.length})</button>
                         </div>
                     )}
 
-                    {profileTab === 'ARTIFACTS' && (
+                    {localProfileTab === 'ARTIFACTS' && (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {publishedExhibits.length === 0 && <div className="col-span-full text-center opacity-50 text-xs">Нет предметов</div>}
                             {publishedExhibits.map(item => (
@@ -435,7 +474,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                             ))}
                         </div>
                     )}
-                    {profileTab === 'COLLECTIONS' && (
+                    {localProfileTab === 'COLLECTIONS' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {userCollections.length === 0 && <div className="col-span-full text-center opacity-50 text-xs">Нет коллекций</div>}
                             {userCollections.map(col => (

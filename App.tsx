@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  LayoutGrid, User, PlusCircle, Search, Bell, X, Package, Grid, RefreshCw, Sun, Moon, Zap, FolderPlus, ArrowLeft, Check, Folder, Plus, Layers, Monitor, Bookmark, Sparkles, ChevronDown, Filter, Radar, Globe, Play, Square as SquareIcon, SkipBack, SkipForward, Menu, LogOut
+  LayoutGrid, PlusCircle, Search, Bell, FolderPlus, ArrowLeft, Folder, Plus, Globe
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -10,7 +10,6 @@ import MatrixLogin from './components/MatrixLogin';
 import ExhibitCard from './components/ExhibitCard';
 import UserProfileView from './components/UserProfileView';
 import ExhibitDetailPage from './components/ExhibitDetailPage';
-import MyCollection from './components/MyCollection';
 import CommunityHub from './components/CommunityHub'; 
 import RetroLoader from './components/RetroLoader';
 import CollectionCard from './components/CollectionCard';
@@ -23,7 +22,6 @@ import DirectChat from './components/DirectChat';
 import CreateArtifactView from './components/CreateArtifactView';
 import CreateCollectionView from './components/CreateCollectionView';
 import CreateWishlistItemView from './components/CreateWishlistItemView';
-import WishlistCard from './components/WishlistCard';
 import WishlistDetailView from './components/WishlistDetailView';
 import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
@@ -32,13 +30,12 @@ import UserWishlistView from './components/UserWishlistView';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem, Guild } from './types';
-import { DefaultCategory, CATEGORY_SUBCATEGORIES, calculateArtifactScore } from './constants';
+import { DefaultCategory } from './constants';
 import useSwipe from './hooks/useSwipe';
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light' | 'xp' | 'winamp'>('dark');
   const [view, setView] = useState<ViewState>('AUTH');
-  const [navigationStack, setNavigationStack] = useState<ViewState[]>([]);
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
@@ -63,8 +60,6 @@ export default function App() {
 
   // Filtering State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('ВСЕ');
-
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'>('ARTIFACTS');
 
   // Pagination
@@ -74,7 +69,6 @@ export default function App() {
   // Social/Edit State
   const [socialListType, setSocialListType] = useState<'followers' | 'following'>('followers');
   const [isAddingToCollection, setIsAddingToCollection] = useState<string | null>(null);
-  const [showCreateMenu, setShowCreateMenu] = useState(false);
 
   // Profile states
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -87,8 +81,85 @@ export default function App() {
   const [guestbookInput, setGuestbookInput] = useState('');
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
-  // --- NAVIGATION HELPER ---
+  // --- ROUTING LOGIC ---
+
+  // Central function to sync state from URL
+  const syncFromUrl = useCallback(async () => {
+      const path = window.location.pathname;
+      // const search = new URLSearchParams(window.location.search);
+      const segments = path.split('/').filter(Boolean); // Remove empty strings
+      const root = segments[0];
+
+      if (!root) {
+          setView('FEED');
+          return;
+      }
+
+      if (root === 'community') {
+          setView('COMMUNITY_HUB');
+      } else if (root === 'activity') {
+          setView('ACTIVITY');
+      } else if (root === 'search') {
+          setView('SEARCH');
+      } else if (root === 'create') {
+          setView('CREATE_HUB');
+      } else if (root === 'u' || root === 'profile') {
+          const username = segments[1];
+          if (username) {
+              setViewedProfileUsername(username);
+              if (segments[2] === 'wishlist') {
+                  setView('USER_WISHLIST');
+              } else {
+                  setView('USER_PROFILE');
+              }
+          }
+      } else if (root === 'artifact') {
+          const id = segments[1];
+          // Explicitly type to allow both undefined (cache miss) and null (API miss)
+          let item: Exhibit | null | undefined = db.getFullDatabase().exhibits.find(e => e.id === id);
+          if (!item) {
+              try { item = await db.fetchExhibitById(id); } catch(e){}
+          }
+          if (item) {
+              setSelectedExhibit(item);
+              setView('EXHIBIT');
+          } else {
+              setView('FEED'); // Fallback if not found
+          }
+      } else if (root === 'collection') {
+          const id = segments[1];
+          // Explicitly type to allow both undefined (cache miss) and null (API miss)
+          let col: Collection | null | undefined = db.getFullDatabase().collections.find(c => c.id === id);
+          if (!col) {
+              try { col = await db.fetchCollectionById(id); } catch(e){}
+          }
+          if (col) {
+              setSelectedCollection(col);
+              setView('COLLECTION_DETAIL');
+          }
+      } else if (root === 'guild') {
+          const id = segments[1];
+          const guild = db.getFullDatabase().guilds.find(g => g.id === id);
+          if (guild) {
+              setSelectedGuild(guild);
+              setView('GUILD_DETAIL');
+          }
+      } else {
+          setView('FEED');
+      }
+  }, []);
+
+  // Handle Browser Back/Forward Buttons
+  useEffect(() => {
+      const handlePopState = () => {
+          syncFromUrl();
+      };
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+  }, [syncFromUrl]);
+
   const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection; wishlistItem?: WishlistItem; guild?: Guild; highlightCommentId?: string }) => {
+      // 1. Update State
       if (params?.username) setViewedProfileUsername(params.username);
       if (params?.item) {
           setSelectedExhibit(params.item);
@@ -97,10 +168,10 @@ export default function App() {
       if (params?.collection) setSelectedCollection(params.collection);
       if (params?.wishlistItem) setSelectedWishlistItem(params.wishlistItem);
       if (params?.guild) setSelectedGuild(params.guild);
-
-      setNavigationStack(prev => [...prev, view]);
+      
       setView(newView);
 
+      // 2. Push to History
       let path = '/';
       if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
       else if (newView === 'USER_WISHLIST') path = `/u/${params?.username || viewedProfileUsername}/wishlist`;
@@ -108,34 +179,23 @@ export default function App() {
       else if (newView === 'COLLECTION_DETAIL') path = `/collection/${params?.collection?.id || selectedCollection?.id}`;
       else if (newView === 'GUILD_DETAIL') path = `/guild/${params?.guild?.id || selectedGuild?.id}`;
       else if (newView === 'COMMUNITY_HUB') path = '/community';
+      else if (newView === 'ACTIVITY') path = '/activity';
+      else if (newView === 'SEARCH') path = '/search';
+      else if (newView === 'CREATE_HUB') path = '/create';
       
-      window.history.pushState({ view: newView }, '', path);
+      window.history.pushState({ view: newView, params }, '', path);
       window.scrollTo(0, 0);
   };
 
   const handleBack = () => {
-      if (navigationStack.length > 0) {
-          const prevView = navigationStack[navigationStack.length - 1];
-          setNavigationStack(prev => prev.slice(0, -1));
-          setView(prevView);
+      // Let the browser handle the stack. popstate will fire and syncRoute will update the view.
+      if (window.history.length > 1) {
           window.history.back();
-      } else if (view !== 'FEED') {
-          setView('FEED');
-          window.history.pushState({ view: 'FEED' }, '', '/');
+      } else {
+          // If no history (e.g., opened link directly), go to feed
+          navigateTo('FEED');
       }
   };
-
-  useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-        if (event.state && event.state.view) {
-            setView(event.state.view);
-        } else {
-            setView('FEED');
-        }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   const globalSwipeHandlers = useSwipe({
     onSwipeLeft: () => {
@@ -154,7 +214,6 @@ export default function App() {
 
   const refreshData = useCallback(() => {
     const data = db.getFullDatabase();
-    // Safety check: ensure arrays are never undefined to prevent crashes
     setExhibits(data.exhibits || []);
     setCollections(data.collections || []);
     setWishlist(data.wishlist || []);
@@ -177,10 +236,9 @@ export default function App() {
   }, [refreshData]);
 
   useEffect(() => {
-    // Add scroll overflow to body to prevent layout shift
     document.body.style.overflowY = 'scroll';
-
     const safetyTimer = setTimeout(() => { setIsInitializing(false); setShowSplash(false); }, 6000); 
+    
     const init = async () => {
       try {
           const activeUser = await db.initializeDatabase();
@@ -188,65 +246,18 @@ export default function App() {
           if (activeUser) { 
               setUser(activeUser);
               if (activeUser.settings?.theme) setTheme(activeUser.settings.theme);
-              
-              const path = window.location.pathname;
-              const data = db.getFullDatabase();
-
-              if (path.startsWith('/u/') || path.startsWith('/profile/')) {
-                  const segments = path.split('/');
-                  const username = segments[2];
-                  if (username) {
-                      setViewedProfileUsername(username);
-                      if (segments[3] === 'wishlist') {
-                          setView('USER_WISHLIST');
-                      } else {
-                          setView('USER_PROFILE');
-                      }
-                  } else {
-                      setView('FEED');
-                  }
-              } else if (path.startsWith('/artifact/')) {
-                  const id = path.split('/')[2];
-                  let item: Exhibit | null | undefined = data.exhibits.find(e => e.id === id);
-                  if (!item) {
-                      try { item = await db.fetchExhibitById(id); } catch(e){}
-                  }
-                  if (item) {
-                      setSelectedExhibit(item);
-                      setView('EXHIBIT');
-                  } else {
-                      setView('FEED');
-                  }
-              } else if (path.startsWith('/collection/')) {
-                  const id = path.split('/')[2];
-                  let col: Collection | null | undefined = data.collections.find(c => c.id === id);
-                  if (!col) {
-                      try { col = await db.fetchCollectionById(id); } catch(e){}
-                  }
-                  if (col) {
-                      setSelectedCollection(col);
-                      setView('COLLECTION_DETAIL');
-                  } else {
-                      setView('FEED');
-                  }
-              } else if (path.startsWith('/guild/')) {
-                  const id = path.split('/')[2];
-                  const guild = data.guilds.find(g => g.id === id);
-                  if (guild) {
-                      setSelectedGuild(guild);
-                      setView('GUILD_DETAIL');
-                  } else {
-                      setView('FEED');
-                  }
-              } else if (path === '/community') {
-                  setView('COMMUNITY_HUB');
-              } else {
-                  setView('FEED'); 
-              }
-
-          } else { setView('AUTH'); }
-      } catch (e) { setView('AUTH'); } 
-      finally { clearTimeout(safetyTimer); setIsInitializing(false); setTimeout(() => setShowSplash(false), 300); }
+              // Sync view from URL on initial load
+              await syncFromUrl();
+          } else { 
+              setView('AUTH'); 
+          }
+      } catch (e) { 
+          setView('AUTH'); 
+      } finally { 
+          clearTimeout(safetyTimer); 
+          setIsInitializing(false); 
+          setTimeout(() => setShowSplash(false), 300); 
+      }
     };
     init();
   }, []);
@@ -322,7 +333,10 @@ export default function App() {
              setUser(u);
              if (u.settings?.theme) setTheme(u.settings.theme);
              if (!remember) localStorage.removeItem('neo_active_user');
-             setView('FEED');
+             // On login, check URL. If it was root, go FEED. If deep link, syncFromUrl will handle it via reload or we just go FEED.
+             // Ideally we stay on the requested page if protected.
+             // For now, simpler to just go FEED or syncFromUrl.
+             syncFromUrl();
           }} />
         </div>
       </div>
@@ -359,7 +373,7 @@ export default function App() {
         {user && (
             <nav className={`hidden md:flex fixed top-0 left-0 w-full z-50 px-6 h-16 items-center justify-between ${getDesktopNavClasses()}`}>
                 {/* Logo Area */}
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('FEED')}>
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigateTo('FEED')}>
                     <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-xs ${theme === 'winamp' ? 'border border-[#505050] bg-black text-[#00ff00]' : theme === 'xp' ? 'bg-[url(https://upload.wikimedia.org/wikipedia/commons/e/e2/Windows_logo_and_wordmark_-_2001-2006.svg)] bg-contain bg-no-repeat bg-center w-8' : 'bg-green-500 text-black font-pixel'}`}>
                         {theme !== 'xp' && 'NA'}
                     </div>
@@ -368,13 +382,13 @@ export default function App() {
 
                 {/* Desktop Menu Links */}
                 <div className="flex items-center gap-6">
-                    <button onClick={() => setView('FEED')} className={`flex items-center gap-2 hover:opacity-100 transition-opacity ${view === 'FEED' ? 'opacity-100 font-bold' : 'opacity-60'}`}>
+                    <button onClick={() => navigateTo('FEED')} className={`flex items-center gap-2 hover:opacity-100 transition-opacity ${view === 'FEED' ? 'opacity-100 font-bold' : 'opacity-60'}`}>
                         <LayoutGrid size={18}/> {theme === 'winamp' ? 'LIBRARY' : 'Лента'}
                     </button>
-                    <button onClick={() => setView('COMMUNITY_HUB')} className={`flex items-center gap-2 hover:opacity-100 transition-opacity ${view === 'COMMUNITY_HUB' ? 'opacity-100 font-bold' : 'opacity-60'}`}>
+                    <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`flex items-center gap-2 hover:opacity-100 transition-opacity ${view === 'COMMUNITY_HUB' ? 'opacity-100 font-bold' : 'opacity-60'}`}>
                         <Globe size={18}/> {theme === 'winamp' ? 'NETWORK' : 'Комьюнити'}
                     </button>
-                    <button onClick={() => setView('CREATE_HUB')} className={`flex items-center gap-2 hover:opacity-100 transition-opacity ${view === 'CREATE_HUB' ? 'opacity-100 font-bold' : 'opacity-60'}`}>
+                    <button onClick={() => navigateTo('CREATE_HUB')} className={`flex items-center gap-2 hover:opacity-100 transition-opacity ${view === 'CREATE_HUB' ? 'opacity-100 font-bold' : 'opacity-60'}`}>
                         <PlusCircle size={18}/> {theme === 'winamp' ? 'UPLOAD' : 'Создать'}
                     </button>
                 </div>
@@ -564,8 +578,8 @@ export default function App() {
                         exhibits={exhibits}
                         onExhibitClick={handleExhibitClick}
                         onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
-                        onBack={() => setView('FEED')}
-                        onGuildClick={(g) => { setSelectedGuild(g); setView('GUILD_DETAIL'); }}
+                        onBack={() => navigateTo('FEED')}
+                        onGuildClick={(g) => { setSelectedGuild(g); navigateTo('GUILD_DETAIL', { guild: g }); }}
                         currentUser={user}
                     />
                 </div>
@@ -744,9 +758,8 @@ export default function App() {
                         profileTab={profileTab}
                         setProfileTab={setProfileTab}
                         onOpenSocialList={(u, type) => {
-                            setViewedProfileUsername(u);
                             setSocialListType(type);
-                            setView('SOCIAL_LIST');
+                            navigateTo('SOCIAL_LIST', { username: u });
                         }}
                         onThemeChange={(t) => setTheme(t)}
                         onWishlistClick={(w) => { setSelectedWishlistItem(w); setView('WISHLIST_DETAIL'); }}
@@ -825,13 +838,13 @@ export default function App() {
             {user && (
                 <div className={`md:hidden fixed bottom-0 left-0 w-full z-40 border-t safe-area-pb ${theme === 'winamp' ? 'bg-[#292929] border-[#505050]' : theme === 'dark' ? 'bg-black/90 border-white/10 backdrop-blur-md' : 'bg-white/90 border-black/10 backdrop-blur-md'}`}>
                     <div className="flex justify-around items-center p-3">
-                        <button onClick={() => setView('FEED')} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}>
+                        <button onClick={() => navigateTo('FEED')} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}>
                             {theme === 'winamp' ? <div className="w-4 h-4 bg-[#00ff00] shadow-[0_0_5px_#00ff00]"/> : <LayoutGrid size={20} />}
                         </button>
-                        <button onClick={() => setView('COMMUNITY_HUB')} className={`flex flex-col items-center gap-1 ${view === 'COMMUNITY_HUB' ? 'text-green-500' : 'opacity-50'}`}>
+                        <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`flex flex-col items-center gap-1 ${view === 'COMMUNITY_HUB' ? 'text-green-500' : 'opacity-50'}`}>
                             {theme === 'winamp' ? <div className="w-4 h-4 bg-[#00ff00] shadow-[0_0_5px_#00ff00] opacity-50"/> : <Globe size={20} />}
                         </button>
-                        <button onClick={() => setView('CREATE_HUB')} className="flex flex-col items-center justify-center -mt-8">
+                        <button onClick={() => navigateTo('CREATE_HUB')} className="flex flex-col items-center justify-center -mt-8">
                             <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 ${theme === 'winamp' ? 'bg-[#292929] border-2 border-wa-gold text-wa-gold shadow-[0_0_10px_#FFD700]' : 'bg-green-500 text-black'}`}>
                                 <Plus size={28} />
                             </div>

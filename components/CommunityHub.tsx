@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Trophy, TrendingUp, Users, RefreshCw, Shield, Flame, Lock, UserPlus, Camera } from 'lucide-react';
 import { UserProfile, Exhibit, Guild } from '../types';
 import ExhibitCard from './ExhibitCard';
@@ -13,7 +13,7 @@ interface CommunityHubProps {
     onUserClick: (username: string) => void;
     onBack?: () => void;
     onGuildClick?: (guild: Guild) => void; 
-    currentUser?: UserProfile | null; // Added prop for proper guild creation
+    currentUser?: UserProfile | null;
 }
 
 // Winamp Helper wrapper moved outside
@@ -30,7 +30,16 @@ const WinampWindow = ({ title, children, className = '' }: { title: string, chil
 );
 
 const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users = [], exhibits = [], onExhibitClick, onUserClick, onBack, onGuildClick, currentUser }) => {
-    const [tab, setTab] = useState<'TRENDS' | 'TRADE' | 'GUILDS'>('TRENDS');
+    // Read initial tab from URL
+    const getInitialTab = () => {
+        const params = new URLSearchParams(window.location.search);
+        const t = params.get('tab');
+        if (t === 'trade') return 'TRADE';
+        if (t === 'guilds') return 'GUILDS';
+        return 'TRENDS';
+    };
+
+    const [tab, setTab] = useState<'TRENDS' | 'TRADE' | 'GUILDS'>(getInitialTab);
     const [showCreateGuild, setShowCreateGuild] = useState(false);
     const [newGuildName, setNewGuildName] = useState('');
     const [newGuildDesc, setNewGuildDesc] = useState('');
@@ -41,6 +50,17 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users = [], exhibits
     
     const isWinamp = theme === 'winamp';
     const activeGuilds = getFullDatabase().guilds || [];
+
+    // Sync tab changes to URL
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (tab === 'TRENDS') params.delete('tab');
+        else if (tab === 'TRADE') params.set('tab', 'trade');
+        else if (tab === 'GUILDS') params.set('tab', 'guilds');
+        
+        const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+        window.history.replaceState({ ...window.history.state }, '', newUrl);
+    }, [tab]);
 
     // --- ALGORITHMS ---
     const topUsers = users
