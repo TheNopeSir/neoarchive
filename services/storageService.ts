@@ -636,3 +636,21 @@ export const fileToBase64 = async (file: File): Promise<string> => {
 };
 
 export const getStorageEstimate = async () => { if (navigator.storage?.estimate) return await navigator.storage.estimate(); return null; };
+
+// Fix for TradeOfferModal build error
+export const sendTradeRequest = async (targetUser: string, offerDetails: string) => {
+    const sender = localStorage.getItem(SESSION_USER_KEY);
+    if(!sender) return;
+    
+    // Simulate sending a trade request via DM system since backend specific endpoint might not be ready
+    const text = `[TRADE PROPOSAL] ${offerDetails}`;
+    const msg: Message = {
+        id: crypto.randomUUID(),
+        sender,
+        receiver: targetUser,
+        text,
+        timestamp: new Date().toISOString(),
+        isRead: false
+    };
+    await saveMessage(msg);
+};

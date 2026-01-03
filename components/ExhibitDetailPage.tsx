@@ -30,6 +30,7 @@ interface ExhibitDetailPageProps {
   onExhibitClick: (item: Exhibit) => void;
   isFollowing: boolean;
   currentUser: string;
+  currentUserProfile?: UserProfile | null;
   isAdmin: boolean;
   users: UserProfile[];
   allExhibits?: Exhibit[];
@@ -63,7 +64,7 @@ const renderTextWithMentions = (text: string, onUserClick: (u: string) => void) 
 };
 
 const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
-  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, onExhibitClick, isFollowing, currentUser, isAdmin, users, allExhibits, highlightCommentId
+  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, onExhibitClick, isFollowing, currentUser, currentUserProfile, isAdmin, users, allExhibits, highlightCommentId
 }) => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
