@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Bell, MessageCircle, ChevronDown, ChevronUp, User, Heart, MessageSquare, UserPlus, BookOpen, CheckCheck, RefreshCw, X, Check } from 'lucide-react';
+import { Bell, MessageCircle, ChevronDown, ChevronUp, User, Heart, MessageSquare, UserPlus, BookOpen, CheckCheck, RefreshCw, X, Check, ArrowRight } from 'lucide-react';
 import { Notification, Message, UserProfile, Exhibit } from '../types';
-import { getUserAvatar, markNotificationsRead, getMyTradeRequests, acceptTradeRequest, declineTradeRequest } from '../services/storageService';
+import { getUserAvatar, markNotificationsRead, getMyTradeRequests, acceptTradeRequest, declineTradeRequest, getFullDatabase } from '../services/storageService';
 
 interface ActivityViewProps {
     notifications: Notification[];
@@ -16,7 +16,7 @@ interface ActivityViewProps {
 
 const ActivityView: React.FC<ActivityViewProps> = ({ 
     notifications, messages, currentUser, theme, 
-    onAuthorClick, onExhibitClick, onChatClick 
+    onAuthorClick, onExhibitClick, onChatClick
 }) => {
     const [activeTab, setActiveTab] = useState<'NOTIFICATIONS' | 'MESSAGES' | 'TRADES'>('NOTIFICATIONS');
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -24,6 +24,10 @@ const ActivityView: React.FC<ActivityViewProps> = ({
     const myNotifs = notifications.filter(n => n.recipient === currentUser.username);
     const myMessages = messages.filter(m => m.sender === currentUser.username || m.receiver === currentUser.username);
     const trades = getMyTradeRequests();
+    
+    // Use direct DB access for trade thumbnails since we don't want to pass huge array everywhere if not needed, 
+    // or rely on what App passes. The database cache is synced.
+    const allExhibits = getFullDatabase().exhibits;
 
     const handleMarkAllRead = () => {
         markNotificationsRead(currentUser.username);
@@ -210,45 +214,79 @@ const ActivityView: React.FC<ActivityViewProps> = ({
                     <div className="space-y-6">
                         {/* INCOMING */}
                         <div>
-                            <h3 className="text-xs font-bold opacity-50 mb-2 font-pixel">ВХОДЯЩИЕ ЗАПРОСЫ</h3>
+                            <h3 className="text-xs font-bold opacity-50 mb-2 font-pixel">ВХОДЯЩИЕ ЗАПРОСЫ ({trades.incoming.length})</h3>
                             {trades.incoming.length === 0 ? <div className="text-[10px] opacity-30 italic">Нет активных предложений</div> : 
-                                trades.incoming.map(req => (
-                                    <div key={req.id} className="border border-blue-500/30 bg-blue-500/5 p-4 rounded-xl mb-2">
+                                trades.incoming.map(req => {
+                                    const targetItem = allExhibits.find(e => e.id === req.targetItemId);
+                                    return (
+                                    <div key={req.id} className={`border p-4 rounded-xl mb-4 ${theme === 'winamp' ? 'bg-[#292929] border-[#505050]' : 'bg-blue-500/5 border-blue-500/30'}`}>
                                         <div className="flex justify-between items-center mb-4">
                                             <div className="text-sm font-bold text-blue-400">От @{req.sender}</div>
                                             <div className="text-[10px] opacity-50">{req.timestamp.split('T')[0]}</div>
                                         </div>
-                                        <div className="flex items-center gap-4 text-xs mb-4">
-                                            <div className="flex-1 text-center">
-                                                <div className="text-[9px] opacity-50 uppercase">Отдает</div>
-                                                <div className="font-bold text-green-400">{req.offeredItemIds.length} ITEMS</div>
+                                        
+                                        {/* Visual Trade Layout */}
+                                        <div className="flex items-center gap-2 mb-4">
+                                            {/* Offered Side */}
+                                            <div className="flex-1 border border-white/10 rounded p-2 bg-black/20 overflow-x-auto">
+                                                <div className="text-[8px] opacity-50 mb-1 uppercase tracking-widest">ПРЕДЛАГАЕТ ({req.offeredItemIds.length})</div>
+                                                <div className="flex gap-2">
+                                                    {req.offeredItemIds.map(id => {
+                                                        const item = allExhibits.find(e => e.id === id);
+                                                        return item ? (
+                                                            <div key={id} className="w-10 h-10 border border-white/10 rounded overflow-hidden flex-shrink-0" title={item.title}>
+                                                                <img src={item.imageUrls[0]} className="w-full h-full object-cover" />
+                                                            </div>
+                                                        ) : <div key={id} className="w-10 h-10 bg-gray-800 rounded animate-pulse"/>
+                                                    })}
+                                                </div>
                                             </div>
-                                            <RefreshCw size={16} className="opacity-50"/>
-                                            <div className="flex-1 text-center">
-                                                <div className="text-[9px] opacity-50 uppercase">Хочет</div>
-                                                <div className="font-bold text-yellow-400">TARGET ITEM</div>
+
+                                            <div className="flex flex-col items-center opacity-50">
+                                                <ArrowRight size={16} />
+                                            </div>
+
+                                            {/* Target Side */}
+                                            <div className="flex-1 border border-white/10 rounded p-2 bg-black/20 flex flex-col items-center">
+                                                <div className="text-[8px] opacity-50 mb-1 uppercase tracking-widest">ХОЧЕТ</div>
+                                                {targetItem ? (
+                                                    <div className="w-16 h-16 border border-yellow-500 rounded overflow-hidden relative">
+                                                        <img src={targetItem.imageUrls[0]} className="w-full h-full object-cover" />
+                                                        <div className="absolute bottom-0 w-full bg-black/50 text-[8px] text-center text-white truncate px-1">{targetItem.title}</div>
+                                                    </div>
+                                                ) : <div className="text-[10px]">Unknown</div>}
                                             </div>
                                         </div>
+
                                         <div className="flex gap-2">
-                                            <button onClick={() => acceptTradeRequest(req.id)} className="flex-1 py-2 bg-green-600 text-black font-bold text-xs rounded hover:bg-green-500 uppercase">Принять</button>
-                                            <button onClick={() => declineTradeRequest(req.id)} className="flex-1 py-2 border border-red-500 text-red-500 font-bold text-xs rounded hover:bg-red-500/10 uppercase">Отклонить</button>
+                                            <button onClick={() => acceptTradeRequest(req.id)} className="flex-1 py-2 bg-green-600 text-black font-bold text-xs rounded hover:bg-green-500 uppercase flex items-center justify-center gap-2">
+                                                <Check size={14}/> Принять
+                                            </button>
+                                            <button onClick={() => declineTradeRequest(req.id)} className="flex-1 py-2 border border-red-500 text-red-500 font-bold text-xs rounded hover:bg-red-500/10 uppercase flex items-center justify-center gap-2">
+                                                <X size={14}/> Отклонить
+                                            </button>
                                         </div>
                                     </div>
-                                ))
+                                )})
                             }
                         </div>
 
                         {/* OUTGOING */}
                         <div>
-                            <h3 className="text-xs font-bold opacity-50 mb-2 font-pixel">ИСХОДЯЩИЕ</h3>
+                            <h3 className="text-xs font-bold opacity-50 mb-2 font-pixel">ИСХОДЯЩИЕ ({trades.outgoing.length})</h3>
                             {trades.outgoing.map(req => (
-                                <div key={req.id} className="border border-white/10 p-3 rounded-lg mb-2 opacity-70">
-                                    <div className="flex justify-between items-center text-xs">
-                                        <span>Для @{req.recipient}</span>
-                                        <span className={`px-2 py-0.5 rounded text-[9px] ${req.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' : req.status === 'ACCEPTED' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                                            {req.status}
-                                        </span>
+                                <div key={req.id} className={`border p-3 rounded-lg mb-2 opacity-80 flex items-center justify-between ${theme === 'winamp' ? 'border-[#505050] bg-[#191919]' : 'border-white/10 bg-white/5'}`}>
+                                    <div className="text-xs">
+                                        <span className="opacity-50">Для</span> <span className="font-bold">@{req.recipient}</span>
+                                        <div className="text-[9px] opacity-40 mt-1">{new Date(req.timestamp).toLocaleDateString()}</div>
                                     </div>
+                                    <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase border ${
+                                        req.status === 'PENDING' ? 'border-yellow-500/50 text-yellow-500' : 
+                                        req.status === 'ACCEPTED' ? 'border-green-500/50 text-green-500' : 
+                                        'border-red-500/50 text-red-500'
+                                    }`}>
+                                        {req.status}
+                                    </span>
                                 </div>
                             ))}
                         </div>

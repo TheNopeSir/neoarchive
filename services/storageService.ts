@@ -183,7 +183,8 @@ export const startLiveUpdates = () => {
     
     // Poll every 8 seconds
     liveUpdateInterval = setInterval(async () => {
-        if (isOfflineMode) return;
+        // Do not block polling even if isOfflineMode was set once. Retry connectivity.
+        // if (isOfflineMode) return; 
 
         try {
             // 1. Check for new exhibits (Page 1)
@@ -226,9 +227,13 @@ export const startLiveUpdates = () => {
                 await saveToLocalCache();
                 notifyListeners(); 
             }
+            
+            // If we succeeded, clear offline flag
+            isOfflineMode = false;
 
         } catch (e) {
-            console.warn("[LiveSync] Pulse skipped:", e);
+            console.warn("[LiveSync] Pulse skipped (Network issue?)");
+            // Do not aggressively set offline mode here to allow retries
         }
     }, 8000); 
 };
@@ -314,8 +319,8 @@ const performCloudSync = async () => {
         }
         isOfflineMode = false;
     } catch (e) {
-        console.warn("Sync slow or failed, staying in local mode");
-        isOfflineMode = true;
+        console.warn("Sync slow or failed, trying to stay active for retries.");
+        // Do NOT set isOfflineMode = true immediately to avoid death spiral on initial load timeout
     }
 };
 
@@ -325,7 +330,8 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     
     if (cache.exhibits.length === 0 && cache.collections.length === 0) {
         console.log("Cache empty, awaiting initial sync...");
-        await Promise.race([performCloudSync(), new Promise(resolve => setTimeout(resolve, 3000))]);
+        // Increase timeout to 5s to give slow mobile networks a chance
+        await Promise.race([performCloudSync(), new Promise(resolve => setTimeout(resolve, 5000))]);
     } else {
         performCloudSync();
     }

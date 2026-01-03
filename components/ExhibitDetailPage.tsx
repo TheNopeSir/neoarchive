@@ -249,14 +249,13 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
         </div>
       </div>
 
-      <div className="flex flex-col gap-6">
-        <div className="space-y-4">
-          {/* Main Media Container */}
-          <div className={`relative aspect-square md:aspect-video w-full overflow-hidden border transition-all duration-500 ${isWinamp ? 'bg-black border-[#505050]' : (theme === 'dark' ? 'rounded-2xl border-white/10 bg-black' : 'rounded-2xl border-black/10 bg-white')} ${isCursed ? 'shadow-[0_0_30px_red]' : ''}`}>
-             
+      <div className="md:grid md:grid-cols-2 md:gap-8 items-start">
+        
+        {/* LEFT COLUMN: Media */}
+        <div className="space-y-4 md:sticky md:top-24">
+          <div className={`relative aspect-square md:aspect-[4/3] w-full overflow-hidden border transition-all duration-500 ${isWinamp ? 'bg-black border-[#505050]' : (theme === 'dark' ? 'rounded-2xl border-white/10 bg-black' : 'rounded-2xl border-black/10 bg-white')} ${isCursed ? 'shadow-[0_0_30px_red]' : ''}`}>
              {slides[currentSlideIndex].type === 'image' ? (
                  <>
-                    {/* Blurred Background */}
                     <div className="absolute inset-0 bg-cover bg-center blur-2xl opacity-50 scale-110" style={{backgroundImage: `url(${slides[currentSlideIndex].url})`}} />
                     <img src={slides[currentSlideIndex].url} alt={exhibit.title} className="relative z-10 w-full h-full object-contain" />
                  </>
@@ -272,7 +271,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
              )}
           </div>
           
-          {/* Thumbnails */}
           {slides.length > 1 && (
             <div className="flex gap-3 overflow-x-auto py-2 scrollbar-hide snap-x">
                {slides.map((media, idx) => ( 
@@ -286,212 +284,220 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                ))}
             </div>
           )}
+
+          {/* ACTION BUTTONS (TRADE & DOSSIER) MOVED HERE FOR DESKTOP COMPACTNESS */}
+          <div className="grid grid-cols-2 gap-2 mt-4">
+              <button 
+                  onClick={() => setShowDossier(true)}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 border rounded font-pixel text-[10px] uppercase font-bold hover:bg-white/5 ${isWinamp ? 'border-[#00ff00] text-[#00ff00]' : 'border-white/20'}`}
+              >
+                  <FileText size={14}/> ДОСЬЕ
+              </button>
+              
+              {!isOwner && (tradeStatus === 'FOR_TRADE' || tradeStatus === 'FOR_SALE') && (
+                  <button 
+                      onClick={() => setShowTradeModal(true)}
+                      className={`flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded font-pixel text-[10px] uppercase font-bold hover:bg-blue-500 shadow-lg animate-pulse-slow`}
+                  >
+                      <RefreshCw size={14}/> ПРЕДЛОЖИТЬ ОБМЕН
+                  </button>
+              )}
+          </div>
         </div>
 
-        <div className={`p-6 border ${isWinamp ? 'bg-[#191919] border-[#505050]' : (theme === 'dark' ? 'bg-dark-surface border-white/10 rounded-3xl' : 'bg-white border-black/10 shadow-xl rounded-3xl')}`}>
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
-               <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <span className={`px-2 py-1 text-[9px] font-pixel font-bold uppercase ${isWinamp ? 'bg-[#00ff00] text-black' : 'bg-green-500 text-black rounded'}`}>{exhibit.category}</span>
-                      <span className={`px-2 py-1 text-[9px] font-bold font-pixel border flex items-center gap-1 uppercase ${isWinamp ? 'border-[#00ff00] text-[#00ff00]' : `${tier.bgColor} ${tier.color} rounded`}`}><TierIcon size={10} /> {tier.name}</span>
-                      {tradeStatus !== 'NONE' && (
-                          <span className={`px-2 py-1 text-[9px] font-bold font-pixel border flex items-center gap-1 uppercase ${tradeConfig.color} ${tradeConfig.bg} ${!isWinamp ? 'rounded' : ''}`}>
-                              {tradeConfig.icon && React.createElement(tradeConfig.icon, { size: 10 })} {tradeConfig.badge}
-                          </span>
+        {/* RIGHT COLUMN: Info */}
+        <div className="mt-6 md:mt-0">
+            <div className={`p-6 border mb-6 ${isWinamp ? 'bg-[#191919] border-[#505050]' : (theme === 'dark' ? 'bg-dark-surface border-white/10 rounded-3xl' : 'bg-white border-black/10 shadow-xl rounded-3xl')}`}>
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+                   <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                          <span className={`px-2 py-1 text-[9px] font-pixel font-bold uppercase ${isWinamp ? 'bg-[#00ff00] text-black' : 'bg-green-500 text-black rounded'}`}>{exhibit.category}</span>
+                          {exhibit.subcategory && (
+                              <span className={`px-2 py-1 text-[9px] font-pixel font-bold uppercase border ${isWinamp ? 'border-[#00ff00] text-[#00ff00]' : 'border-white/20 text-white/70 rounded'}`}>
+                                  {exhibit.subcategory}
+                              </span>
+                          )}
+                          <span className={`px-2 py-1 text-[9px] font-bold font-pixel border flex items-center gap-1 uppercase ${isWinamp ? 'border-[#00ff00] text-[#00ff00]' : `${tier.bgColor} ${tier.color} rounded`}`}><TierIcon size={10} /> {tier.name}</span>
+                          {tradeStatus !== 'NONE' && (
+                              <span className={`px-2 py-1 text-[9px] font-bold font-pixel border flex items-center gap-1 uppercase ${tradeConfig.color} ${tradeConfig.bg} ${!isWinamp ? 'rounded' : ''}`}>
+                                  {tradeConfig.icon && React.createElement(tradeConfig.icon, { size: 10 })} {tradeConfig.badge}
+                              </span>
+                          )}
+                      </div>
+                      <h1 className={`text-2xl md:text-4xl font-bold font-pixel leading-tight mb-4 ${isCursed ? 'text-red-500 italic' : (isWinamp ? 'text-[#00ff00]' : '')}`}>{exhibit.title}</h1>
+                   </div>
+                   
+                   <div className={`flex items-center gap-2 p-2 border ${isWinamp ? 'border-[#505050] bg-black' : (theme === 'dark' ? 'bg-black/40 border-white/5 rounded-2xl' : 'bg-gray-50 border-black/5 rounded-2xl')}`}>
+                      <button onClick={() => onLike(exhibit.id)} className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all active:scale-95 ${isLiked ? 'border-green-500 text-green-500 bg-green-500/10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                        <Heart size={20} fill={isLiked ? "currentColor" : "none"} />
+                        <span className="text-sm font-bold font-mono">{exhibit.likes}</span>
+                      </button>
+                      {isOwner && (
+                          <>
+                            <div className="w-[1px] h-6 bg-white/10" />
+                            <button 
+                                onClick={() => onAddToCollection?.(exhibit.id)} 
+                                className="p-2 opacity-60 hover:opacity-100 transition-all text-blue-400" 
+                                title="Добавить в коллекцию"
+                            >
+                                <BookmarkPlus size={20} />
+                            </button>
+                          </>
                       )}
-                  </div>
-                  <h1 className={`text-2xl md:text-4xl font-bold font-pixel leading-tight mb-4 ${isCursed ? 'text-red-500 italic' : (isWinamp ? 'text-[#00ff00]' : '')}`}>{exhibit.title}</h1>
-               </div>
-               
-               <div className={`flex items-center gap-2 p-2 border ${isWinamp ? 'border-[#505050] bg-black' : (theme === 'dark' ? 'bg-black/40 border-white/5 rounded-2xl' : 'bg-gray-50 border-black/5 rounded-2xl')}`}>
-                  <button onClick={() => onLike(exhibit.id)} className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all active:scale-95 ${isLiked ? 'border-green-500 text-green-500 bg-green-500/10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
-                    <Heart size={20} fill={isLiked ? "currentColor" : "none"} />
-                    <span className="text-sm font-bold font-mono">{exhibit.likes}</span>
-                  </button>
-                  {isOwner && (
-                      <>
-                        <div className="w-[1px] h-6 bg-white/10" />
-                        <button 
-                            onClick={() => onAddToCollection?.(exhibit.id)} 
-                            className="p-2 opacity-60 hover:opacity-100 transition-all text-blue-400" 
-                            title="Добавить в коллекцию"
-                        >
-                            <BookmarkPlus size={20} />
-                        </button>
-                      </>
-                  )}
-                  <div className="w-[1px] h-6 bg-white/10" />
-                  <div className="flex items-center gap-2 px-3 py-2 opacity-60"><Eye size={20} /><span className="text-sm font-bold font-mono">{exhibit.views}</span></div>
-               </div>
-            </div>
+                      <div className="w-[1px] h-6 bg-white/10" />
+                      <div className="flex items-center gap-2 px-3 py-2 opacity-60"><Eye size={20} /><span className="text-sm font-bold font-mono">{exhibit.views}</span></div>
+                   </div>
+                </div>
 
-            {/* ACTION BUTTONS (TRADE & DOSSIER) */}
-            <div className="flex flex-wrap gap-2 mb-6">
-                <button 
-                    onClick={() => setShowDossier(true)}
-                    className={`flex items-center gap-2 px-4 py-2 border rounded font-pixel text-[10px] uppercase font-bold hover:bg-white/5 ${isWinamp ? 'border-[#00ff00] text-[#00ff00]' : 'border-white/20'}`}
-                >
-                    <FileText size={14}/> СГЕНЕРИРОВАТЬ ДОСЬЕ
-                </button>
-                
-                {!isOwner && (tradeStatus === 'FOR_TRADE' || tradeStatus === 'FOR_SALE') && (
-                    <button 
-                        onClick={() => setShowTradeModal(true)}
-                        className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded font-pixel text-[10px] uppercase font-bold hover:bg-blue-500 shadow-lg animate-pulse-slow`}
-                    >
-                        <RefreshCw size={14}/> ПРЕДЛОЖИТЬ ОБМЕН
-                    </button>
+                {/* "Who Liked" Section */}
+                {exhibit.likedBy && exhibit.likedBy.length > 0 && (
+                    <div className={`flex items-center gap-2 mb-6 p-2 rounded-2xl border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-white/5 border-white/5'}`}>
+                        <div className="flex -space-x-3 ml-2">
+                            {exhibit.likedBy.slice(0, 5).map(name => (
+                                <img key={name} src={getUserAvatar(name)} title={`@${name}`} onClick={() => onAuthorClick(name)} className="w-8 h-8 rounded-full border-2 border-black cursor-pointer hover:scale-110 transition-transform" />
+                            ))}
+                        </div>
+                        <span className="text-[10px] font-pixel opacity-40 uppercase ml-2">Оценили это</span>
+                    </div>
                 )}
-            </div>
 
-            {/* "Who Liked" Section */}
-            {exhibit.likedBy && exhibit.likedBy.length > 0 && (
-                <div className={`flex items-center gap-2 mb-6 p-2 rounded-2xl border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-white/5 border-white/5'}`}>
-                    <div className="flex -space-x-3 ml-2">
-                        {exhibit.likedBy.slice(0, 5).map(name => (
-                            <img key={name} src={getUserAvatar(name)} title={`@${name}`} onClick={() => onAuthorClick(name)} className="w-8 h-8 rounded-full border-2 border-black cursor-pointer hover:scale-110 transition-transform" />
-                        ))}
-                    </div>
-                    <span className="text-[10px] font-pixel opacity-40 uppercase ml-2">Оценили это</span>
+                <div className={`flex items-center justify-between p-4 mb-6 border ${isWinamp ? 'bg-black border-[#505050]' : (theme === 'dark' ? 'bg-black/30 border-white/5 rounded-2xl' : 'bg-gray-100 border-black/5 rounded-2xl')}`}>
+                   <div className="flex items-center gap-3 cursor-pointer group" onClick={() => onAuthorClick(exhibit.owner)}>
+                      <div className="w-12 h-12 rounded-full border-2 border-green-500/50 p-0.5"><img src={getUserAvatar(exhibit.owner)} className="w-full h-full object-cover rounded-full" /></div>
+                      <div><div className={`font-bold font-pixel text-xs transition-colors ${isWinamp ? 'text-[#00ff00]' : 'group-hover:text-green-500'}`}>@{exhibit.owner}</div><div className="text-[10px] opacity-40 font-mono uppercase">{exhibit.timestamp}</div></div>
+                   </div>
+                   {!isOwner && ( <button onClick={() => onFollow(exhibit.owner)} className={`px-4 py-2 text-[10px] font-bold font-pixel border transition-all ${isFollowing ? 'border-white/10 opacity-40' : 'bg-green-500 text-black border-green-500'} ${!isWinamp ? 'rounded-xl' : ''}`}>{isFollowing ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}</button> )}
                 </div>
-            )}
 
-            <div className={`flex items-center justify-between p-4 mb-6 border ${isWinamp ? 'bg-black border-[#505050]' : (theme === 'dark' ? 'bg-black/30 border-white/5 rounded-2xl' : 'bg-gray-100 border-black/5 rounded-2xl')}`}>
-               <div className="flex items-center gap-3 cursor-pointer group" onClick={() => onAuthorClick(exhibit.owner)}>
-                  <div className="w-12 h-12 rounded-full border-2 border-green-500/50 p-0.5"><img src={getUserAvatar(exhibit.owner)} className="w-full h-full object-cover rounded-full" /></div>
-                  <div><div className={`font-bold font-pixel text-xs transition-colors ${isWinamp ? 'text-[#00ff00]' : 'group-hover:text-green-500'}`}>@{exhibit.owner}</div><div className="text-[10px] opacity-40 font-mono uppercase">{exhibit.timestamp}</div></div>
-               </div>
-               {!isOwner && ( <button onClick={() => onFollow(exhibit.owner)} className={`px-4 py-2 text-[10px] font-bold font-pixel border transition-all ${isFollowing ? 'border-white/10 opacity-40' : 'bg-green-500 text-black border-green-500'} ${!isWinamp ? 'rounded-xl' : ''}`}>{isFollowing ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}</button> )}
-            </div>
+                <div className="prose prose-sm max-w-none mb-8 border-l-2 border-green-500/20 pl-4"><p className={`font-mono text-sm leading-relaxed whitespace-pre-wrap ${isWinamp ? 'text-[#00ff00] opacity-80' : 'opacity-80'}`}>{exhibit.description}</p></div>
 
-            <div className="prose prose-sm max-w-none mb-8 border-l-2 border-green-500/20 pl-4"><p className={`font-mono text-sm leading-relaxed whitespace-pre-wrap ${isWinamp ? 'text-[#00ff00] opacity-80' : 'opacity-80'}`}>{exhibit.description}</p></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                   {nonEmptySpecs.map(([key, val]) => ( <div key={key} className={`p-3 border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-black/20 border-white/5 rounded-xl'}`}><div className="text-[9px] uppercase opacity-40 mb-1 font-pixel tracking-widest">{key}</div><div className="font-bold font-mono text-sm">{val}</div></div> ))}
+                   {exhibit.condition && ( <div className={`p-3 border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-black/20 border-white/5 rounded-xl'}`}><div className="text-[9px] uppercase opacity-40 mb-1 font-pixel tracking-widest">СОСТОЯНИЕ</div><div className="font-black font-mono text-sm text-green-400 uppercase">{exhibit.condition}</div></div> )}
+                </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-               {nonEmptySpecs.map(([key, val]) => ( <div key={key} className={`p-3 border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-black/20 border-white/5 rounded-xl'}`}><div className="text-[9px] uppercase opacity-40 mb-1 font-pixel tracking-widest">{key}</div><div className="font-bold font-mono text-sm">{val}</div></div> ))}
-               {exhibit.condition && ( <div className={`p-3 border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-black/20 border-white/5 rounded-xl'}`}><div className="text-[9px] uppercase opacity-40 mb-1 font-pixel tracking-widest">СОСТОЯНИЕ</div><div className="font-black font-mono text-sm text-green-400 uppercase">{exhibit.condition}</div></div> )}
-            </div>
-
-            {/* Linked Artifacts */}
-            {linkedArtifacts.length > 0 && (
-                <div className={`mb-8 p-4 border ${isWinamp ? 'bg-[#191919] border-[#505050]' : 'bg-white/5 border-white/10 rounded-2xl'}`}>
-                    <h3 className="font-pixel text-[10px] opacity-70 uppercase tracking-widest mb-4 flex items-center gap-2"><Link2 size={14}/> СВЯЗАННЫЕ ЭКСПОНАТЫ</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {linkedArtifacts.map(link => (
-                            <div key={link.id} onClick={() => onExhibitClick(link)} className="group cursor-pointer">
-                                <div className="aspect-square rounded-lg overflow-hidden border border-white/10 relative">
-                                    <img src={link.imageUrls[0]} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                {/* Linked Artifacts */}
+                {linkedArtifacts.length > 0 && (
+                    <div className={`mb-8 p-4 border ${isWinamp ? 'bg-[#191919] border-[#505050]' : 'bg-white/5 border-white/10 rounded-2xl'}`}>
+                        <h3 className="font-pixel text-[10px] opacity-70 uppercase tracking-widest mb-4 flex items-center gap-2"><Link2 size={14}/> СВЯЗАННЫЕ ЭКСПОНАТЫ</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {linkedArtifacts.map(link => (
+                                <div key={link.id} onClick={() => onExhibitClick(link)} className="group cursor-pointer">
+                                    <div className="aspect-square rounded-lg overflow-hidden border border-white/10 relative">
+                                        <img src={link.imageUrls[0]} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                                    </div>
+                                    <div className="mt-2 text-[10px] font-bold truncate">{link.title}</div>
                                 </div>
-                                <div className="mt-2 text-[10px] font-bold truncate">{link.title}</div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            <div className="pt-8 border-t border-white/10">
-               <h3 className="font-pixel text-sm mb-6 flex items-center gap-2"><MessageSquare size={16} /> ПРОТОКОЛ КОММЕНТАРИЕВ ({comments.length})</h3>
-               
-               <div className="space-y-4 mb-8">
-                  {comments.length === 0 ? ( <div className="text-center py-10 opacity-30 text-xs font-pixel uppercase tracking-widest">ЛОГИ ПУСТЫ</div> ) : ( 
-                    comments.map(c => {
-                        const isCommentLiked = c.likedBy && c.likedBy.includes(currentUser);
-                        const isAuthor = c.author === currentUser;
-                        return ( 
-                          <div 
-                            key={c.id} 
-                            id={`comment-${c.id}`} // Hook for smart scrolling
-                            className={`p-4 border transition-all ${isWinamp ? 'bg-black border-[#505050]' : 'rounded-2xl bg-white/5 border-white/5 hover:border-white/10'}`}
-                          >
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-2">
-                                    <img src={getUserAvatar(c.author)} className="w-6 h-6 rounded-full cursor-pointer" onClick={() => onAuthorClick(c.author)} />
-                                    <div>
-                                        <div onClick={() => onAuthorClick(c.author)} className="font-bold cursor-pointer text-green-500 font-pixel text-[10px] leading-none">@{c.author}</div>
-                                        <div className="text-[9px] opacity-30 font-mono leading-none mt-1">{c.timestamp}</div>
+                <div className="pt-8 border-t border-white/10">
+                   <h3 className="font-pixel text-sm mb-6 flex items-center gap-2"><MessageSquare size={16} /> ПРОТОКОЛ КОММЕНТАРИЕВ ({comments.length})</h3>
+                   
+                   <div className="space-y-4 mb-8">
+                      {comments.length === 0 ? ( <div className="text-center py-10 opacity-30 text-xs font-pixel uppercase tracking-widest">ЛОГИ ПУСТЫ</div> ) : ( 
+                        comments.map(c => {
+                            const isCommentLiked = c.likedBy && c.likedBy.includes(currentUser);
+                            const isAuthor = c.author === currentUser;
+                            return ( 
+                              <div 
+                                key={c.id} 
+                                id={`comment-${c.id}`} // Hook for smart scrolling
+                                className={`p-4 border transition-all ${isWinamp ? 'bg-black border-[#505050]' : 'rounded-2xl bg-white/5 border-white/5 hover:border-white/10'}`}
+                              >
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <img src={getUserAvatar(c.author)} className="w-6 h-6 rounded-full cursor-pointer" onClick={() => onAuthorClick(c.author)} />
+                                        <div>
+                                            <div onClick={() => onAuthorClick(c.author)} className="font-bold cursor-pointer text-green-500 font-pixel text-[10px] leading-none">@{c.author}</div>
+                                            <div className="text-[9px] opacity-30 font-mono leading-none mt-1">{c.timestamp}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => onCommentLike(c.id)} className={`flex items-center gap-1 text-[10px] transition-colors ${isCommentLiked ? 'text-red-500' : 'text-gray-500 hover:text-red-500'}`}>
+                                            <Heart size={12} fill={isCommentLiked ? "currentColor" : "none"} /> {c.likes > 0 && c.likes}
+                                        </button>
+                                        <button onClick={() => handleReply(c)} className="text-gray-500 hover:text-white transition-colors" title="Ответить">
+                                            <CornerDownRight size={14} />
+                                        </button>
+                                        {(isAuthor || isAdmin) && (
+                                            <button onClick={() => onDeleteComment(exhibit.id, c.id)} className="text-gray-500 hover:text-red-500 transition-colors" title="Удалить">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={() => onCommentLike(c.id)} className={`flex items-center gap-1 text-[10px] transition-colors ${isCommentLiked ? 'text-red-500' : 'text-gray-500 hover:text-red-500'}`}>
-                                        <Heart size={12} fill={isCommentLiked ? "currentColor" : "none"} /> {c.likes > 0 && c.likes}
-                                    </button>
-                                    <button onClick={() => handleReply(c)} className="text-gray-500 hover:text-white transition-colors" title="Ответить">
-                                        <CornerDownRight size={14} />
-                                    </button>
-                                    {(isAuthor || isAdmin) && (
-                                        <button onClick={() => onDeleteComment(exhibit.id, c.id)} className="text-gray-500 hover:text-red-500 transition-colors" title="Удалить">
-                                            <Trash2 size={14} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                            <p className="font-mono text-sm opacity-80 pl-8">{renderTextWithMentions(c.text, onAuthorClick)}</p>
-                          </div> 
-                        );
-                    }) 
-                  )}
-               </div>
+                                <p className="font-mono text-sm opacity-80 pl-8">{renderTextWithMentions(c.text, onAuthorClick)}</p>
+                              </div> 
+                            );
+                        }) 
+                      )}
+                   </div>
 
-               <div className="flex flex-col gap-2 relative">
-                  {mentionQuery !== null && filteredUsers.length > 0 && (
-                      <div className="absolute bottom-full mb-2 left-0 w-64 bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50">
-                          {filteredUsers.map(u => (
-                              <button 
-                                key={u.username}
-                                onClick={() => selectMention(u.username)}
-                                className="w-full flex items-center gap-2 p-2 hover:bg-white/10 text-left transition-colors"
-                              >
-                                  <img src={u.avatarUrl} className="w-6 h-6 rounded-full" />
-                                  <div className="flex flex-col">
-                                      <span className="font-bold text-xs">@{u.username}</span>
-                                      <span className="text-[9px] opacity-50 truncate">{u.tagline}</span>
-                                  </div>
-                              </button>
-                          ))}
-                      </div>
-                  )}
+                   <div className="flex flex-col gap-2 relative">
+                      {mentionQuery !== null && filteredUsers.length > 0 && (
+                          <div className="absolute bottom-full mb-2 left-0 w-64 bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50">
+                              {filteredUsers.map(u => (
+                                  <button 
+                                    key={u.username}
+                                    onClick={() => selectMention(u.username)}
+                                    className="w-full flex items-center gap-2 p-2 hover:bg-white/10 text-left transition-colors"
+                                  >
+                                      <img src={u.avatarUrl} className="w-6 h-6 rounded-full" />
+                                      <div className="flex flex-col">
+                                          <span className="font-bold text-xs">@{u.username}</span>
+                                          <span className="text-[9px] opacity-50 truncate">{u.tagline}</span>
+                                      </div>
+                                  </button>
+                              ))}
+                          </div>
+                      )}
 
-                  {replyTo && (
-                      <div className="flex items-center justify-between text-xs font-mono bg-white/5 p-2 rounded-lg border border-white/10">
-                          <span className="opacity-70">Ответ для <span className="text-green-500 font-bold">@{replyTo.author}</span></span>
-                          <button onClick={() => { setReplyTo(null); setCommentText(''); }} className="hover:text-red-500"><Trash2 size={12}/></button>
+                      {replyTo && (
+                          <div className="flex items-center justify-between text-xs font-mono bg-white/5 p-2 rounded-lg border border-white/10">
+                              <span className="opacity-70">Ответ для <span className="text-green-500 font-bold">@{replyTo.author}</span></span>
+                              <button onClick={() => { setReplyTo(null); setCommentText(''); }} className="hover:text-red-500"><Trash2 size={12}/></button>
+                          </div>
+                      )}
+                      <div className="flex gap-3">
+                          <input 
+                              type="text" 
+                              value={commentText} 
+                              onChange={handleCommentChange} 
+                              placeholder={replyTo ? `Ответ @${replyTo.author}...` : "ВВЕСТИ ДАННЫЕ В ПРОТОКОЛ... (@ для упоминания)"}
+                              className={`flex-1 bg-black/40 border border-white/10 px-4 py-3 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors ${!isWinamp ? 'rounded-xl' : ''}`} 
+                              onKeyDown={(e) => { 
+                                  if(e.key === 'Enter' && commentText.trim()) { 
+                                      onPostComment(exhibit.id, commentText, replyTo?.id); 
+                                      setCommentText(''); 
+                                      setReplyTo(null);
+                                      setMentionQuery(null);
+                                  } 
+                              }} 
+                          />
+                          <button 
+                              onClick={() => { 
+                                  if(commentText.trim()) { 
+                                      onPostComment(exhibit.id, commentText, replyTo?.id); 
+                                      setCommentText(''); 
+                                      setReplyTo(null);
+                                      setMentionQuery(null);
+                                  } 
+                              }} 
+                              className={`bg-green-500 text-black p-3 hover:scale-105 active:scale-95 transition-all ${!isWinamp ? 'rounded-xl' : ''}`}
+                          >
+                              <Send size={20} />
+                          </button>
                       </div>
-                  )}
-                  <div className="flex gap-3">
-                      <input 
-                          type="text" 
-                          value={commentText} 
-                          onChange={handleCommentChange} 
-                          placeholder={replyTo ? `Ответ @${replyTo.author}...` : "ВВЕСТИ ДАННЫЕ В ПРОТОКОЛ... (@ для упоминания)"}
-                          className={`flex-1 bg-black/40 border border-white/10 px-4 py-3 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors ${!isWinamp ? 'rounded-xl' : ''}`} 
-                          onKeyDown={(e) => { 
-                              if(e.key === 'Enter' && commentText.trim()) { 
-                                  onPostComment(exhibit.id, commentText, replyTo?.id); 
-                                  setCommentText(''); 
-                                  setReplyTo(null);
-                                  setMentionQuery(null);
-                              } 
-                          }} 
-                      />
-                      <button 
-                          onClick={() => { 
-                              if(commentText.trim()) { 
-                                  onPostComment(exhibit.id, commentText, replyTo?.id); 
-                                  setCommentText(''); 
-                                  setReplyTo(null);
-                                  setMentionQuery(null);
-                              } 
-                          }} 
-                          className={`bg-green-500 text-black p-3 hover:scale-105 active:scale-95 transition-all ${!isWinamp ? 'rounded-xl' : ''}`}
-                      >
-                          <Send size={20} />
-                      </button>
-                  </div>
-               </div>
+                   </div>
+                </div>
             </div>
         </div>
 
         {similarArtifacts.length > 0 && (
-            <div className="mt-12">
+            <div className="mt-12 col-span-2">
                 <h3 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Sparkles size={14} className="text-purple-400" /> РЕКОМЕНДУЕМЫЕ ОБЪЕКТЫ (AI MATCH)</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {similarArtifacts.map(sim => (
