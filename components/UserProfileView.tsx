@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ArrowLeft, Edit2, LogOut, MessageSquare, Send, Trophy, Reply, Trash2, Check, X, Wand2, Eye, EyeOff, Camera, Palette, Settings, Search, Terminal, Sun, Package, Archive, FolderPlus, BookOpen, Heart, Share2, ExternalLink, Link as LinkIcon } from 'lucide-react';
 import { UserProfile, Exhibit, Collection, GuestbookEntry, UserStatus, AppSettings, WishlistItem } from '../types';
@@ -53,6 +52,19 @@ interface UserProfileViewProps {
     onThemeChange?: (theme: 'dark' | 'light' | 'xp' | 'winamp') => void;
     onWishlistClick: (item: WishlistItem) => void;
 }
+
+// Winamp Helper wrapper moved outside
+const WinampWindow = ({ title, children, className = '' }: { title: string, children?: React.ReactNode, className?: string }) => (
+    <div className={`mb-6 bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] ${className}`}>
+        <div className="h-4 bg-gradient-to-r from-wa-blue-light to-wa-blue-dark flex items-center justify-between px-1 cursor-default select-none mb-1">
+            <span className="text-white font-winamp text-[10px] tracking-widest uppercase">{title}</span>
+            <div className="w-2 h-2 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050]"></div>
+        </div>
+        <div className="p-2">
+            {children}
+        </div>
+    </div>
+);
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({ 
     user, viewedProfileUsername, exhibits, collections, guestbook, theme, 
@@ -118,19 +130,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
         navigator.clipboard.writeText(url);
         alert('Ссылка на вишлист скопирована в буфер обмена!');
     };
-
-    // Winamp Helper wrapper
-    const WinampWindow = ({ title, children, className = '' }: { title: string, children: React.ReactNode, className?: string }) => (
-        <div className={`mb-6 bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] ${className}`}>
-            <div className="h-4 bg-gradient-to-r from-wa-blue-light to-wa-blue-dark flex items-center justify-between px-1 cursor-default select-none mb-1">
-                <span className="text-white font-winamp text-[10px] tracking-widest uppercase">{title}</span>
-                <div className="w-2 h-2 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050]"></div>
-            </div>
-            <div className="p-2">
-                {children}
-            </div>
-        </div>
-    );
 
     return (
         <div className={`max-w-4xl mx-auto space-y-6 animate-in slide-in-from-right-8 fade-in duration-500 pb-32 ${isWinamp ? 'font-winamp text-wa-green' : ''}`}>

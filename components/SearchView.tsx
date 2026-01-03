@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Grid, FolderPlus, Users, ArrowLeft } from 'lucide-react';
+import { Search, Grid, FolderPlus, Users, ArrowLeft, X } from 'lucide-react';
 import { Exhibit, Collection, UserProfile } from '../types';
 import ExhibitCard from './ExhibitCard';
 import CollectionCard from './CollectionCard';
@@ -56,9 +56,7 @@ const SearchView: React.FC<SearchViewProps> = ({
     return (
         <div className="max-w-4xl mx-auto animate-in fade-in pb-32">
             <div className={`flex items-center gap-4 mb-6 sticky top-20 z-30 pt-4 pb-4 border-b backdrop-blur-md ${isWinamp ? 'bg-[#282828]/90 border-[#505050]' : 'bg-transparent border-white/10'}`}>
-                <button onClick={onBack} className={`p-2 rounded-full transition-colors ${isWinamp ? 'hover:bg-[#505050]' : 'hover:bg-white/10'}`}>
-                    <ArrowLeft size={20} className={isWinamp ? 'text-[#00ff00]' : ''}/>
-                </button>
+                {/* Search Input Container - Moved to Left */}
                 <div className={`flex-1 flex items-center px-4 py-3 rounded-2xl border ${isWinamp ? 'bg-black border-[#505050] text-[#00ff00]' : theme === 'dark' ? 'bg-black/40 border-white/20' : 'bg-white border-black/10'}`}>
                     <Search size={18} className="opacity-50 mr-3" />
                     <input 
@@ -70,6 +68,10 @@ const SearchView: React.FC<SearchViewProps> = ({
                         className={`bg-transparent border-none outline-none text-sm font-mono w-full ${isWinamp ? 'text-[#00ff00] placeholder-[#00ff00]/50' : ''}`} 
                     />
                 </div>
+                {/* Back/Cancel Button - Moved to Right */}
+                <button onClick={onBack} className={`p-2 rounded-full transition-colors ${isWinamp ? 'hover:bg-[#505050]' : 'hover:bg-white/10'}`}>
+                    {isWinamp ? <ArrowLeft size={20} className="text-[#00ff00]"/> : <span className="text-xs font-bold px-2 opacity-70 hover:opacity-100">ОТМЕНА</span>}
+                </button>
             </div>
 
             <div className={`flex mb-8 border-b ${isWinamp ? 'border-[#505050]' : 'border-gray-500/30'}`}>

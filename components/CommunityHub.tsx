@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Trophy, TrendingUp, Users, RefreshCw, Swords, Shield, Flame, Lock, UserPlus, Camera } from 'lucide-react';
+import { Trophy, TrendingUp, Users, RefreshCw, Shield, Flame, Lock, UserPlus, Camera } from 'lucide-react';
 import { UserProfile, Exhibit, Guild } from '../types';
 import ExhibitCard from './ExhibitCard';
 import { getUserAvatar, getFullDatabase, createGuild, joinGuild, fileToBase64 } from '../services/storageService';
@@ -16,8 +16,21 @@ interface CommunityHubProps {
     currentUser?: UserProfile | null; // Added prop for proper guild creation
 }
 
+// Winamp Helper wrapper moved outside
+const WinampWindow = ({ title, children, className = '' }: { title: string, children?: React.ReactNode, className?: string }) => (
+    <div className={`mb-6 bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] ${className}`}>
+        <div className="h-4 bg-gradient-to-r from-wa-blue-light to-wa-blue-dark flex items-center justify-between px-1 cursor-default select-none mb-1">
+            <span className="text-white font-winamp text-[10px] tracking-widest uppercase">{title}</span>
+            <div className="w-2 h-2 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050]"></div>
+        </div>
+        <div className="p-2">
+            {children}
+        </div>
+    </div>
+);
+
 const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onExhibitClick, onUserClick, onBack, onGuildClick, currentUser }) => {
-    const [tab, setTab] = useState<'TRENDS' | 'TRADE' | 'DUELS' | 'GUILDS'>('TRENDS');
+    const [tab, setTab] = useState<'TRENDS' | 'TRADE' | 'GUILDS'>('TRENDS');
     const [showCreateGuild, setShowCreateGuild] = useState(false);
     const [newGuildName, setNewGuildName] = useState('');
     const [newGuildDesc, setNewGuildDesc] = useState('');
@@ -97,18 +110,6 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
         </button>
     );
 
-    const WinampWindow = ({ title, children, className = '' }: { title: string, children: React.ReactNode, className?: string }) => (
-        <div className={`mb-6 bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] ${className}`}>
-            <div className="h-4 bg-gradient-to-r from-wa-blue-light to-wa-blue-dark flex items-center justify-between px-1 cursor-default select-none mb-1">
-                <span className="text-white font-winamp text-[10px] tracking-widest uppercase">{title}</span>
-                <div className="w-2 h-2 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050]"></div>
-            </div>
-            <div className="p-2">
-                {children}
-            </div>
-        </div>
-    );
-
     return (
         <div className={`max-w-4xl mx-auto pb-32 animate-in fade-in ${isWinamp ? 'font-winamp text-wa-green' : ''}`}>
             {/* Header */}
@@ -128,7 +129,6 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
             <div className={`flex mb-8 sticky top-16 z-30 ${isWinamp ? 'bg-[#292929] border-b border-[#505050]' : 'border-b border-white/10 bg-black/80 backdrop-blur-md'}`}>
                 {renderTabButton('TRENDS', TrendingUp, 'ТРЕНДЫ')}
                 {renderTabButton('TRADE', RefreshCw, 'ОБМЕН')}
-                {renderTabButton('DUELS', Swords, 'ДУЭЛИ')}
                 {renderTabButton('GUILDS', Shield, 'ГИЛЬДИИ')}
             </div>
 

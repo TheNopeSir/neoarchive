@@ -2,12 +2,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ChevronLeft, ChevronRight, Heart, Share2, MessageSquare, Trash2, 
-  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2, Link2, Sparkles, Video, Pin
+  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2, Link2, Sparkles, Video, Pin, FileOutput, RefreshCw
 } from 'lucide-react';
 import { Exhibit, Comment, UserProfile } from '../types';
 import { getArtifactTier, TIER_CONFIG, TRADE_STATUS_CONFIG, getSimilarArtifacts } from '../constants';
 import { getUserAvatar } from '../services/storageService';
 import ExhibitCard from './ExhibitCard';
+import ShareCardModal from './ShareCardModal';
+import TradeOfferModal from './TradeOfferModal';
 
 interface ExhibitDetailPageProps {
   exhibit: Exhibit;
@@ -30,6 +32,7 @@ interface ExhibitDetailPageProps {
   onExhibitClick: (item: Exhibit) => void;
   isFollowing: boolean;
   currentUser: string;
+  currentUserProfile?: UserProfile | null;
   isAdmin: boolean;
   users: UserProfile[];
   allExhibits?: Exhibit[];
@@ -63,7 +66,7 @@ const renderTextWithMentions = (text: string, onUserClick: (u: string) => void) 
 };
 
 const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
-  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, onExhibitClick, isFollowing, currentUser, isAdmin, users, allExhibits, highlightCommentId
+  exhibit, theme, onBack, onShare, onFavorite, onLike, isFavorited, isLiked, onPostComment, onCommentLike, onDeleteComment, onAuthorClick, onFollow, onMessage, onDelete, onEdit, onAddToCollection, onExhibitClick, isFollowing, currentUser, currentUserProfile, isAdmin, users, allExhibits, highlightCommentId
 }) => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [commentText, setCommentText] = useState('');
@@ -73,6 +76,10 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
   
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
+
+  // Modal States
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [showTradeOffer, setShowTradeOffer] = useState(false);
 
   const isWinamp = theme === 'winamp';
 
@@ -139,6 +146,11 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
       return allExhibits.filter(e => exhibit.relatedIds?.includes(e.id));
   }, [exhibit.relatedIds, allExhibits]);
 
+  const userInventory = useMemo(() => {
+      if (!allExhibits || !currentUser) return [];
+      return allExhibits.filter(e => e.owner === currentUser);
+  }, [allExhibits, currentUser]);
+
   useEffect(() => {
       if (mentionQuery !== null) {
           const query = mentionQuery.toLowerCase();
@@ -186,6 +198,9 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
   return (
     <div className={`w-full min-h-full pb-20 animate-in slide-in-from-right-8 fade-in duration-500 ${isWinamp ? 'font-mono text-gray-300' : theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
       
+      {showShareCard && <ShareCardModal exhibit={exhibit} currentUser={currentUser} onClose={() => setShowShareCard(false)} />}
+      {showTradeOffer && currentUserProfile && <TradeOfferModal targetItem={exhibit} currentUser={currentUserProfile} userInventory={userInventory} onClose={() => setShowTradeOffer(false)} />}
+
       {/* Winamp-style Header Bar */}
       {isWinamp && (
           <div className="bg-[#282828] border-t border-l border-[#505050] border-b border-r border-[#101010] p-1 mb-4 flex items-center justify-between">
@@ -215,6 +230,8 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
             <button onClick={() => setShowShareMenu(!showShareMenu)} className={`flex items-center gap-2 opacity-70 hover:opacity-100 transition-all ${shareCopied ? 'text-green-500' : ''}`}><Share2 size={18} /></button>
             {showShareMenu && (
                 <div className="absolute right-0 top-8 w-48 bg-dark-surface border border-white/10 rounded-xl shadow-2xl z-50 p-2 animate-in slide-in-from-top-2">
+                    <button onClick={() => setShowShareCard(true)} className="w-full text-left p-3 hover:bg-white/5 rounded-lg text-xs font-pixel flex items-center gap-3"><FileOutput size={14} className="text-purple-400"/> GENERATE DOSSIER</button>
+                    <div className="h-[1px] bg-white/10 my-1"/>
                     <button onClick={() => handleShare('tg')} className="w-full text-left p-3 hover:bg-white/5 rounded-lg text-xs font-pixel flex items-center gap-3"><Send size={14} className="text-blue-400"/> TELEGRAM</button>
                     <button onClick={() => handleShare('wa')} className="w-full text-left p-3 hover:bg-white/5 rounded-lg text-xs font-pixel flex items-center gap-3"><MessageCircle size={14} className="text-green-500"/> WHATSAPP</button>
                     <button onClick={() => handleShare('pin')} className="w-full text-left p-3 hover:bg-white/5 rounded-lg text-xs font-pixel flex items-center gap-3"><Pin size={14} className="text-red-500"/> PINTEREST</button>
@@ -318,7 +335,16 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                   <div className="w-12 h-12 rounded-full border-2 border-green-500/50 p-0.5"><img src={getUserAvatar(exhibit.owner)} className="w-full h-full object-cover rounded-full" /></div>
                   <div><div className={`font-bold font-pixel text-xs transition-colors ${isWinamp ? 'text-[#00ff00]' : 'group-hover:text-green-500'}`}>@{exhibit.owner}</div><div className="text-[10px] opacity-40 font-mono uppercase">{exhibit.timestamp}</div></div>
                </div>
-               {!isOwner && ( <button onClick={() => onFollow(exhibit.owner)} className={`px-4 py-2 text-[10px] font-bold font-pixel border transition-all ${isFollowing ? 'border-white/10 opacity-40' : 'bg-green-500 text-black border-green-500'} ${!isWinamp ? 'rounded-xl' : ''}`}>{isFollowing ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}</button> )}
+               {!isOwner && ( 
+                   <div className="flex gap-2">
+                        {tradeStatus !== 'NONE' && (
+                            <button onClick={() => setShowTradeOffer(true)} className={`px-4 py-2 text-[10px] font-bold font-pixel border transition-all bg-blue-600 text-white border-blue-600 flex items-center gap-2 ${!isWinamp ? 'rounded-xl' : ''}`}>
+                                <RefreshCw size={14}/> {tradeStatus === 'FOR_SALE' ? 'КУПИТЬ' : 'ОБМЕНЯТЬ'}
+                            </button>
+                        )}
+                        <button onClick={() => onFollow(exhibit.owner)} className={`px-4 py-2 text-[10px] font-bold font-pixel border transition-all ${isFollowing ? 'border-white/10 opacity-40' : 'bg-green-500 text-black border-green-500'} ${!isWinamp ? 'rounded-xl' : ''}`}>{isFollowing ? 'ПОДПИСАН' : 'ПОДПИСАТЬСЯ'}</button> 
+                   </div>
+               )}
             </div>
 
             <div className="prose prose-sm max-w-none mb-8 border-l-2 border-green-500/20 pl-4"><p className={`font-mono text-sm leading-relaxed whitespace-pre-wrap ${isWinamp ? 'text-[#00ff00] opacity-80' : 'opacity-80'}`}>{exhibit.description}</p></div>
