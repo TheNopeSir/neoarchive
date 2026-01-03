@@ -139,7 +139,12 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
                         {/* Top Collectors */}
                         <div className={`p-4 rounded-2xl border ${isWinamp ? 'bg-[#292929] border-[#505050]' : 'bg-gradient-to-r from-yellow-900/10 to-transparent border-yellow-500/20'}`}>
                             <h3 className={`text-xs mb-4 flex items-center gap-2 uppercase tracking-widest ${isWinamp ? 'text-wa-gold font-winamp' : 'text-yellow-500 font-pixel'}`}><Trophy size={14}/> ТОП КОЛЛЕКЦИОНЕРЫ</h3>
-                            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                            <div 
+                                className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide"
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onTouchMove={(e) => e.stopPropagation()}
+                                onTouchEnd={(e) => e.stopPropagation()}
+                            >
                                 {topUsers.map((u, i) => (
                                     <div key={u.username} onClick={() => onUserClick(u.username)} className="flex flex-col items-center gap-2 cursor-pointer group min-w-[80px]">
                                         <div className="relative">

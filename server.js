@@ -498,6 +498,23 @@ app.get('/api/users/:username', async (req, res) => {
     }
 });
 
+// Single Item Fetchers for Deep Linking
+app.get('/api/exhibits/:id', async (req, res) => {
+    try {
+        const result = await query('SELECT data FROM exhibits WHERE id = $1', [req.params.id]);
+        if (result.rows.length > 0) res.json(result.rows[0].data);
+        else res.status(404).json({error: 'Not found'});
+    } catch(e) { res.status(500).json({error: e.message}); }
+});
+
+app.get('/api/collections/:id', async (req, res) => {
+    try {
+        const result = await query('SELECT data FROM collections WHERE id = $1', [req.params.id]);
+        if (result.rows.length > 0) res.json(result.rows[0].data);
+        else res.status(404).json({error: 'Not found'});
+    } catch(e) { res.status(500).json({error: e.message}); }
+});
+
 app.get('/api/feed', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;

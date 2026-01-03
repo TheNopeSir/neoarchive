@@ -65,7 +65,12 @@ const MyCollection: React.FC<MyCollectionProps> = ({
             </div>
 
             {/* Navigation Tabs */}
-            <div className={`flex gap-2 overflow-x-auto pb-2 mb-8 ${isWinamp ? 'border-b border-[#505050]' : 'border-b border-white/10'}`}>
+            <div 
+                className={`flex gap-2 overflow-x-auto pb-2 mb-8 ${isWinamp ? 'border-b border-[#505050]' : 'border-b border-white/10'}`}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
+            >
                 {renderTabButton('MY_ITEMS', 'ПРЕДМЕТЫ')}
                 {renderTabButton('COLLECTIONS', 'АЛЬБОМЫ')}
                 {renderTabButton('FAVORITES', 'ИЗБРАННОЕ')}

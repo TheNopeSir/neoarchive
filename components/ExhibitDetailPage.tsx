@@ -253,7 +253,12 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
         
         {/* LEFT COLUMN: Media */}
         <div className="space-y-4 md:sticky md:top-24">
-          <div className={`relative aspect-square md:aspect-[4/3] w-full overflow-hidden border transition-all duration-500 ${isWinamp ? 'bg-black border-[#505050]' : (theme === 'dark' ? 'rounded-2xl border-white/10 bg-black' : 'rounded-2xl border-black/10 bg-white')} ${isCursed ? 'shadow-[0_0_30px_red]' : ''}`}>
+          <div 
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
+            className={`relative aspect-square md:aspect-[4/3] w-full overflow-hidden border transition-all duration-500 ${isWinamp ? 'bg-black border-[#505050]' : (theme === 'dark' ? 'rounded-2xl border-white/10 bg-black' : 'rounded-2xl border-black/10 bg-white')} ${isCursed ? 'shadow-[0_0_30px_red]' : ''}`}
+          >
              {slides[currentSlideIndex].type === 'image' ? (
                  <>
                     <div className="absolute inset-0 bg-cover bg-center blur-2xl opacity-50 scale-110" style={{backgroundImage: `url(${slides[currentSlideIndex].url})`}} />
@@ -272,7 +277,12 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
           </div>
           
           {slides.length > 1 && (
-            <div className="flex gap-3 overflow-x-auto py-2 scrollbar-hide snap-x">
+            <div 
+              className="flex gap-3 overflow-x-auto py-2 scrollbar-hide snap-x"
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+            >
                {slides.map((media, idx) => ( 
                    <button 
                     key={idx} 

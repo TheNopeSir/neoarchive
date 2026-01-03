@@ -206,7 +206,10 @@ export default function App() {
                   }
               } else if (path.startsWith('/artifact/')) {
                   const id = path.split('/')[2];
-                  const item = data.exhibits.find(e => e.id === id);
+                  let item = data.exhibits.find(e => e.id === id);
+                  if (!item) {
+                      try { item = await db.fetchExhibitById(id); } catch(e){}
+                  }
                   if (item) {
                       setSelectedExhibit(item);
                       setView('EXHIBIT');
@@ -215,7 +218,10 @@ export default function App() {
                   }
               } else if (path.startsWith('/collection/')) {
                   const id = path.split('/')[2];
-                  const col = data.collections.find(c => c.id === id);
+                  let col = data.collections.find(c => c.id === id);
+                  if (!col) {
+                      try { col = await db.fetchCollectionById(id); } catch(e){}
+                  }
                   if (col) {
                       setSelectedCollection(col);
                       setView('COLLECTION_DETAIL');

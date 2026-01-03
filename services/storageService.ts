@@ -175,6 +175,35 @@ export const loadFeedBatch = async (page: number, limit: number = 10): Promise<E
     }
 };
 
+// --- SINGLE ITEM FETCHERS ---
+export const fetchExhibitById = async (id: string): Promise<Exhibit | null> => {
+    const cached = cache.exhibits.find(e => e.id === id);
+    if (cached) return cached;
+    try {
+        const item: Exhibit = await apiCall(`/exhibits/${id}`);
+        if (item) {
+            cache.exhibits.unshift(item); // Add to cache for subsequent use
+            await saveToLocalCache();
+            return item;
+        }
+    } catch(e) { console.warn("Fetch exhibit failed:", e); }
+    return null;
+};
+
+export const fetchCollectionById = async (id: string): Promise<Collection | null> => {
+    const cached = cache.collections.find(c => c.id === id);
+    if (cached) return cached;
+    try {
+        const item: Collection = await apiCall(`/collections/${id}`);
+        if (item) {
+            cache.collections.unshift(item);
+            await saveToLocalCache();
+            return item;
+        }
+    } catch(e) { console.warn("Fetch collection failed:", e); }
+    return null;
+};
+
 // --- REALTIME UPDATES LOGIC ---
 export const startLiveUpdates = () => {
     if (liveUpdateInterval) return; // Already running
