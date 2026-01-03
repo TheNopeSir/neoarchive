@@ -105,6 +105,19 @@ const loadFromCache = async (): Promise<boolean> => {
         const stored: any = await idb.get(CACHE_KEY);
         if (stored && (stored.version === CACHE_VERSION || stored.data)) {
             const data = stored.data || stored;
+            
+            // CRITICAL: Ensure arrays are initialized if missing in storage
+            data.exhibits = data.exhibits || [];
+            data.collections = data.collections || [];
+            data.notifications = data.notifications || [];
+            data.messages = data.messages || [];
+            data.users = data.users || [];
+            data.guestbook = data.guestbook || [];
+            data.wishlist = data.wishlist || [];
+            data.tradeRequests = data.tradeRequests || [];
+            data.guilds = data.guilds || [{ id: 'g1', name: 'Retro Keepers', description: 'Хранители старого железа', leader: 'SysAdmin', members: ['SysAdmin'], isPrivate: false, inviteCode: 'retro123' }];
+            data.duels = data.duels || [];
+            
             cache = { ...cache, ...data, isLoaded: true };
             return true;
         }

@@ -154,12 +154,13 @@ export default function App() {
 
   const refreshData = useCallback(() => {
     const data = db.getFullDatabase();
-    setExhibits(data.exhibits);
-    setCollections(data.collections);
-    setWishlist(data.wishlist);
-    setNotifications(data.notifications);
-    setMessages(data.messages);
-    setGuestbook(data.guestbook);
+    // Safety check: ensure arrays are never undefined to prevent crashes
+    setExhibits(data.exhibits || []);
+    setCollections(data.collections || []);
+    setWishlist(data.wishlist || []);
+    setNotifications(data.notifications || []);
+    setMessages(data.messages || []);
+    setGuestbook(data.guestbook || []);
     if (user) {
        const updatedUser = data.users.find(u => u.username === user.username);
        if (updatedUser) setUser(updatedUser);
@@ -356,7 +357,7 @@ export default function App() {
         
         {/* --- DESKTOP TOP NAVIGATION --- */}
         {user && (
-            <nav className={`hidden md:flex fixed top-0 left-0 w-full z-50 px-6 py-2 items-center justify-between ${getDesktopNavClasses()}`}>
+            <nav className={`hidden md:flex fixed top-0 left-0 w-full z-50 px-6 h-16 items-center justify-between ${getDesktopNavClasses()}`}>
                 {/* Logo Area */}
                 <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('FEED')}>
                     <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-xs ${theme === 'winamp' ? 'border border-[#505050] bg-black text-[#00ff00]' : theme === 'xp' ? 'bg-[url(https://upload.wikimedia.org/wikipedia/commons/e/e2/Windows_logo_and_wordmark_-_2001-2006.svg)] bg-contain bg-no-repeat bg-center w-8' : 'bg-green-500 text-black font-pixel'}`}>
