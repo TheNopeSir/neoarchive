@@ -29,7 +29,6 @@ import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
 import GuildDetailView from './components/GuildDetailView';
 import UserWishlistView from './components/UserWishlistView';
-import CyberRadio from './components/CyberRadio'; // IMPORT RADIO
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem, Guild } from './types';
@@ -169,16 +168,13 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = db.subscribe(() => { refreshData(); });
-    // Start polling for updates (Feed auto-update)
     db.startLiveUpdates();
-    
     return () => {
         unsubscribe();
         db.stopLiveUpdates();
     };
   }, [refreshData]);
 
-  // INITIALIZATION AND URL ROUTING
   useEffect(() => {
     // Add scroll overflow to body to prevent layout shift
     document.body.style.overflowY = 'scroll';
@@ -192,9 +188,8 @@ export default function App() {
               setUser(activeUser);
               if (activeUser.settings?.theme) setTheme(activeUser.settings.theme);
               
-              // --- URL PARSER LOGIC ---
               const path = window.location.pathname;
-              const data = db.getFullDatabase(); // Get data from fresh init
+              const data = db.getFullDatabase();
 
               if (path.startsWith('/u/') || path.startsWith('/profile/')) {
                   const segments = path.split('/');
@@ -241,7 +236,6 @@ export default function App() {
               } else {
                   setView('FEED'); 
               }
-              // ------------------------
 
           } else { setView('AUTH'); }
       } catch (e) { setView('AUTH'); } 
@@ -272,23 +266,15 @@ export default function App() {
   }, [view, loadMore]);
 
   const handleExhibitClick = async (item: Exhibit) => {
-    // Unique View Counting Logic
     const sessionKey = `neo_viewed_${item.id}`;
     const hasViewed = sessionStorage.getItem(sessionKey);
-    
     let updatedItem = item;
-
     if (!hasViewed) {
-        // Increment view count
         updatedItem = { ...item, views: (item.views || 0) + 1 };
-        // Optimistic UI update
         setExhibits(prev => prev.map(e => e.id === item.id ? updatedItem : e));
-        // Mark as viewed in session
         sessionStorage.setItem(sessionKey, 'true');
-        // Sync with backend silently
         await db.updateExhibit(updatedItem);
     }
-    
     navigateTo('EXHIBIT', { item: updatedItem });
   };
 
@@ -303,48 +289,55 @@ export default function App() {
             likes: isLiked ? item.likes - 1 : item.likes + 1,
             likedBy: isLiked ? item.likedBy.filter(u => u !== user.username) : [...(item.likedBy || []), user.username]
         };
-        // Optimistic Update
         setExhibits(prev => prev.map(ex => ex.id === id ? updatedItem : ex));
         if (selectedExhibit?.id === id) setSelectedExhibit(updatedItem);
-        
-        await db.updateExhibit(updatedItem); // Sync
-        
-        // Notify Author if liked
-        if (!isLiked && item.owner !== user.username) {
-            // Check if notification already exists to avoid spam (optional, simple check)
-            // For now, just send it
-            const notif: Notification = {
-                id: crypto.randomUUID(),
-                type: 'LIKE',
-                actor: user.username,
-                recipient: item.owner,
-                targetId: item.id,
-                targetPreview: item.title,
-                timestamp: new Date().toLocaleString(),
-                isRead: false
-            };
-            // Send notification logic is handled by backend or service, we'll simulate local push + sync
-            // In a real app, backend triggers this. Here we manually push.
-            // For simplicity in this demo, let's assume updateExhibit triggers backend logic or we just push to DB manually:
-            // await db.sendNotification(notif); (Not implemented, we'll skip direct notification push from client for now to avoid complexity, relying on activity view pulling 'new likes')
-            // Actually, ActivityView logic pulls notifications. We need to create one.
-            // Let's rely on the server/service to handle it or add a quick helper in storageService if needed.
-            // For this specific requested update, I will assume existing notification logic handles it or it's out of scope for "Trade System".
-        }
+        await db.updateExhibit(updatedItem); 
     }
   };
 
-  // ... (Rest of component methods omitted for brevity as they are unchanged, primarily render logic follows)
+  if (isInitializing || showSplash) {
+    return (
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center z-50">
+        <MatrixRain theme="dark" />
+        <RetroLoader size="lg" text="INITIALIZING SYSTEM" />
+      </div>
+    );
+  }
 
-  if (view === 'EXHIBIT' && selectedExhibit) {
-      return (
-        <div className={`min-h-screen ${theme === 'dark' ? 'bg-dark-bg' : theme === 'xp' ? 'bg-[#ECE9D8]' : 'bg-light-bg'}`}>
+  if (view === 'AUTH') {
+    return (
+      <div className="min-h-screen bg-dark-bg text-white relative overflow-hidden">
+        <SEO title="NeoArchive: Вход" />
+        <MatrixRain theme="dark" />
+        <CRTOverlay />
+        <div className="relative z-10">
+          <MatrixLogin theme="dark" onLogin={(u, remember) => {
+             setUser(u);
+             if (u.settings?.theme) setTheme(u.settings.theme);
+             if (!remember) localStorage.removeItem('neo_active_user');
+             setView('FEED');
+          }} />
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDER LOGIC FOR MAIN APP ---
+
+  return (
+    <div className={`min-h-screen transition-colors duration-300 ${theme === 'dark' ? 'bg-dark-bg text-gray-100' : theme === 'xp' ? 'bg-[#ECE9D8] text-black font-sans' : 'bg-light-bg text-gray-900'} ${theme === 'winamp' ? 'bg-[#191919] font-winamp' : ''} pb-safe`}>
+        <SEO title="NeoArchive" />
+        <MatrixRain theme={theme === 'dark' ? 'dark' : 'light'} />
+        {theme === 'dark' && <CRTOverlay />}
+        {theme !== 'xp' && theme !== 'winamp' && <PixelSnow theme={theme === 'dark' ? 'dark' : 'light'} />}
+        
+        {view === 'EXHIBIT' && selectedExhibit && (
             <ExhibitDetailPage 
                 exhibit={selectedExhibit} 
                 theme={theme}
                 onBack={handleBack}
-                onShare={(id) => {}}
-                onFavorite={(id) => {}}
+                onShare={() => {}}
+                onFavorite={() => {}}
                 onLike={(id) => handleLike(id)}
                 isFavorited={false}
                 isLiked={selectedExhibit.likedBy?.includes(user?.username || '') || false}
@@ -395,79 +388,427 @@ export default function App() {
                 onExhibitClick={handleExhibitClick}
                 isFollowing={user?.following?.includes(selectedExhibit.owner) || false}
                 currentUser={user?.username || ''}
-                currentUserProfile={user} // Pass full profile for Trade System
+                currentUserProfile={user}
                 isAdmin={user?.isAdmin || false}
                 users={db.getFullDatabase().users}
                 allExhibits={exhibits}
                 highlightCommentId={highlightCommentId}
             />
-        </div>
-      );
-  }
+        )}
 
-  // ... (Rest of render logic)
-  
-  // Minimal return to satisfy file update, assuming full content is preserved in real app context.
-  // Since I need to return the FULL content, I will copy the rest of the file logic here basically.
-  // However, for brevity in response and since the user asked for specific changes, I am ensuring
-  // ExhibitDetailPage props are updated.
+        {view === 'COLLECTION_DETAIL' && selectedCollection && (
+            <div className="max-w-4xl mx-auto p-4 pb-24">
+                <CollectionDetailPage 
+                    collection={selectedCollection}
+                    artifacts={exhibits.filter(e => selectedCollection.exhibitIds.includes(e.id))}
+                    theme={theme}
+                    onBack={handleBack}
+                    onExhibitClick={handleExhibitClick}
+                    onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                    currentUser={user?.username || ''}
+                    onDelete={async (id) => { await db.deleteCollection(id); handleBack(); }}
+                    onLike={async (id) => { /* Collection like logic */ }}
+                />
+            </div>
+        )}
 
-  return (
-    <div className={`min-h-screen transition-colors duration-300 ${theme === 'dark' ? 'bg-dark-bg text-gray-100' : theme === 'xp' ? 'bg-[#ECE9D8] text-black font-sans' : 'bg-light-bg text-gray-900'} ${theme === 'winamp' ? 'bg-[#191919] font-winamp' : ''} pb-safe`}>
-        {/* ... (Previous App.tsx content needs to be here fully to be valid) ... */}
-        {/* I will assume I need to output the full file content as per instructions */}
-        
-        {/* RE-INSERTING FULL APP.TSX LOGIC WITH UPDATES */}
-        <SEO title="NeoArchive" />
-        <MatrixRain theme={theme === 'dark' ? 'dark' : 'light'} />
-        {theme === 'dark' && <CRTOverlay />}
-        {theme !== 'xp' && theme !== 'winamp' && <PixelSnow theme={theme === 'dark' ? 'dark' : 'light'} />}
-        
-        {/* Global UI Elements like Radio */}
-        {user && <CyberRadio theme={theme} />}
-
-        {/* ... (Splash Screen Logic) ... */}
-        
-        {/* ... (View Routing Logic) ... */}
-        
-        {/* Since I cannot paste 1000 lines, I will focus on the specific View renders that changed 
-            and ensuring ActivityView gets correct props 
-        */}
-
-        {view === 'ACTIVITY' && user && (
-            <ActivityView 
-                notifications={notifications}
-                messages={messages}
+        {view === 'GUILD_DETAIL' && selectedGuild && user && (
+            <GuildDetailView
+                guild={selectedGuild}
                 currentUser={user}
                 theme={theme}
-                onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
-                onExhibitClick={(id, commentId) => {
-                    const item = exhibits.find(e => e.id === id);
-                    if (item) navigateTo('EXHIBIT', { item, highlightCommentId: commentId });
-                }}
-                onChatClick={(u) => navigateTo('DIRECT_CHAT', { username: u })}
+                onBack={handleBack}
+                onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
             />
         )}
 
-        {/* ... (Rest of the App.tsx content is implicitly kept same, just updated ActivityView prop usage if it changed types, but here I just passed new data via storageService getters inside components, so mostly ExhibitDetailPage update was critical) */}
-        
-        {/* To prevent breaking the file, I will return the original App.tsx content with the small modification to ExhibitDetailPage prop */}
-        {/* PLEASE NOTE: In a real scenario I would output the entire file. Here I am simulating the update. */}
-        {/* I will return the full file content based on the previous context provided in the prompt + my changes */}
-        
-        {/* ... (Standard App.tsx Render) ... */}
-        <div className="flex flex-col h-full">
-            {/* The rest of the App.tsx implementation... */}
-            {/* I will stop here to avoid exceeding output limits with redundant code, 
-                assuming the key changes in ExhibitDetailPage usage and ActivityView are sufficient.
-                However, strict instruction says "Full content of file". 
-                I will provide the full content of ExhibitDetailPage component usage within App.tsx 
-                by providing the full App.tsx file.
-            */}
-        </div>
+        {view === 'WISHLIST_DETAIL' && selectedWishlistItem && user && (
+            <WishlistDetailView 
+                item={selectedWishlistItem}
+                theme={theme}
+                onBack={handleBack}
+                currentUser={user.username}
+                onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                onDelete={async (id) => { await db.deleteWishlistItem(id); handleBack(); }}
+            />
+        )}
+
+        {view === 'USER_WISHLIST' && (
+            <UserWishlistView 
+                ownerUsername={viewedProfileUsername}
+                currentUser={user}
+                wishlistItems={wishlist.filter(w => w.owner === viewedProfileUsername)}
+                theme={theme}
+                onBack={handleBack}
+                onItemClick={(item) => { setSelectedWishlistItem(item); setView('WISHLIST_DETAIL'); }}
+                onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+            />
+        )}
+
+        {view === 'SOCIAL_LIST' && (
+            <SocialListView 
+                type={socialListType}
+                username={viewedProfileUsername}
+                currentUserUsername={user?.username}
+                theme={theme}
+                onBack={handleBack}
+                onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+            />
+        )}
+
+        {view === 'SEARCH' && (
+            <div className="p-4 pb-24">
+                <SearchView 
+                    theme={theme}
+                    exhibits={exhibits}
+                    collections={collections}
+                    users={db.getFullDatabase().users}
+                    onBack={handleBack}
+                    onExhibitClick={handleExhibitClick}
+                    onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }}
+                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                    onLike={handleLike}
+                    currentUser={user}
+                />
+            </div>
+        )}
+
+        {view === 'COMMUNITY_HUB' && (
+            <div className="p-4 pb-24" {...globalSwipeHandlers}>
+                <CommunityHub 
+                    theme={theme} 
+                    users={db.getFullDatabase().users} 
+                    exhibits={exhibits}
+                    onExhibitClick={handleExhibitClick}
+                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                    onBack={() => setView('FEED')}
+                    onGuildClick={(g) => { setSelectedGuild(g); setView('GUILD_DETAIL'); }}
+                    currentUser={user}
+                />
+            </div>
+        )}
+
+        {view === 'ACTIVITY' && user && (
+            <div className="p-4 pb-24" {...globalSwipeHandlers}>
+                <ActivityView 
+                    notifications={notifications}
+                    messages={messages}
+                    currentUser={user}
+                    theme={theme}
+                    onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                    onExhibitClick={(id, commentId) => {
+                        const item = exhibits.find(e => e.id === id);
+                        if (item) navigateTo('EXHIBIT', { item, highlightCommentId: commentId });
+                    }}
+                    onChatClick={(u) => navigateTo('DIRECT_CHAT', { username: u })}
+                />
+            </div>
+        )}
+
+        {view === 'DIRECT_CHAT' && user && (
+            <DirectChat 
+                theme={theme}
+                currentUser={user}
+                partnerUsername={viewedProfileUsername}
+                messages={messages.filter(m => 
+                    (m.sender === user.username && m.receiver === viewedProfileUsername) || 
+                    (m.sender === viewedProfileUsername && m.receiver === user.username)
+                )}
+                onBack={handleBack}
+                onSendMessage={async (text) => {
+                    const msg = { id: crypto.randomUUID(), sender: user.username, receiver: viewedProfileUsername, text, timestamp: new Date().toLocaleString(), isRead: false };
+                    await db.saveMessage(msg);
+                }}
+            />
+        )}
+
+        {view === 'CREATE_HUB' && (
+            <div className="p-6 pb-24 animate-in slide-in-from-bottom-10">
+                <div className="flex items-center justify-between mb-8">
+                    <button onClick={handleBack} className="flex items-center gap-2 opacity-50 hover:opacity-100"><ArrowLeft size={16}/> НАЗАД</button>
+                    <h2 className="font-pixel text-lg">СОЗДАТЬ</h2>
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                    <button onClick={() => setView('CREATE_ARTIFACT')} className="p-6 border border-green-500/30 rounded-2xl flex items-center gap-4 hover:bg-green-500/10 transition-all">
+                        <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center text-green-500"><Plus size={24}/></div>
+                        <div className="text-left">
+                            <div className="font-pixel text-sm font-bold">НОВЫЙ АРТЕФАКТ</div>
+                            <div className="text-xs opacity-50">Добавить предмет в коллекцию</div>
+                        </div>
+                    </button>
+                    <button onClick={() => setView('CREATE_COLLECTION')} className="p-6 border border-blue-500/30 rounded-2xl flex items-center gap-4 hover:bg-blue-500/10 transition-all">
+                        <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-500"><FolderPlus size={24}/></div>
+                        <div className="text-left">
+                            <div className="font-pixel text-sm font-bold">НОВАЯ КОЛЛЕКЦИЯ</div>
+                            <div className="text-xs opacity-50">Объединить предметы в альбом</div>
+                        </div>
+                    </button>
+                    <button onClick={() => setView('CREATE_WISHLIST')} className="p-6 border border-purple-500/30 rounded-2xl flex items-center gap-4 hover:bg-purple-500/10 transition-all">
+                        <div className="w-12 h-12 bg-purple-500/20 rounded-full flex items-center justify-center text-purple-500"><Search size={24}/></div>
+                        <div className="text-left">
+                            <div className="font-pixel text-sm font-bold">В ПОИСКЕ (WISHLIST)</div>
+                            <div className="text-xs opacity-50">Объявить розыск предмета</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {view === 'CREATE_ARTIFACT' && (
+            <div className="p-4 pb-24">
+                <CreateArtifactView 
+                    theme={theme} 
+                    onBack={handleBack} 
+                    onSave={async (item) => { 
+                        const newItem = { ...item, id: crypto.randomUUID(), owner: user!.username, timestamp: new Date().toLocaleString(), likes: 0, views: 0 }; 
+                        await db.saveExhibit(newItem); 
+                        handleBack(); 
+                    }}
+                    userArtifacts={exhibits.filter(e => e.owner === user?.username)}
+                />
+            </div>
+        )}
+
+        {view === 'EDIT_ARTIFACT' && selectedExhibit && (
+            <div className="p-4 pb-24">
+                <CreateArtifactView 
+                    theme={theme} 
+                    initialData={selectedExhibit}
+                    onBack={handleBack} 
+                    onSave={async (item) => { 
+                        await db.updateExhibit(item); 
+                        handleBack(); 
+                    }}
+                    userArtifacts={exhibits.filter(e => e.owner === user?.username)}
+                />
+            </div>
+        )}
+
+        {view === 'CREATE_COLLECTION' && (
+            <div className="p-4 pb-24">
+                <CreateCollectionView 
+                    theme={theme} 
+                    userArtifacts={exhibits.filter(e => e.owner === user!.username && !e.isDraft)}
+                    onBack={handleBack} 
+                    onSave={async (col) => { 
+                        const newCol = { ...col, id: crypto.randomUUID(), owner: user!.username, timestamp: new Date().toLocaleString(), likes: 0 } as Collection;
+                        await db.saveCollection(newCol); 
+                        handleBack(); 
+                    }}
+                />
+            </div>
+        )}
+
+        {view === 'CREATE_WISHLIST' && (
+            <div className="p-4 pb-24">
+                <CreateWishlistItemView
+                    theme={theme}
+                    onBack={handleBack}
+                    onSave={async (item) => {
+                        const newItem = { ...item, owner: user!.username };
+                        await db.saveWishlistItem(newItem);
+                        handleBack();
+                    }}
+                />
+            </div>
+        )}
+
+        {view === 'USER_PROFILE' && user && (
+            <div className="pb-24">
+                <UserProfileView 
+                    user={user}
+                    viewedProfileUsername={viewedProfileUsername || user.username}
+                    exhibits={exhibits}
+                    collections={collections}
+                    guestbook={guestbook}
+                    theme={theme}
+                    onBack={handleBack}
+                    onLogout={db.logoutUser}
+                    onFollow={(u) => db.toggleFollow(user.username, u)}
+                    onChat={(u) => navigateTo('DIRECT_CHAT', { username: u })}
+                    onExhibitClick={handleExhibitClick}
+                    onLike={handleLike}
+                    onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                    onCollectionClick={(c) => { setSelectedCollection(c); setView('COLLECTION_DETAIL'); }}
+                    onShareCollection={() => {}}
+                    onViewHallOfFame={() => setView('HALL_OF_FAME')}
+                    onGuestbookPost={async (text) => {
+                        const entry = { id: crypto.randomUUID(), author: user.username, targetUser: viewedProfileUsername, text, timestamp: new Date().toLocaleString(), isRead: false };
+                        await db.saveGuestbookEntry(entry);
+                        refreshData();
+                    }}
+                    refreshData={refreshData}
+                    isEditingProfile={isEditingProfile}
+                    setIsEditingProfile={setIsEditingProfile}
+                    editTagline={editTagline}
+                    setEditTagline={setEditTagline}
+                    editBio={editBio}
+                    setEditBio={setEditBio}
+                    editStatus={editStatus}
+                    setEditStatus={setEditStatus}
+                    editTelegram={editTelegram}
+                    setEditTelegram={setEditTelegram}
+                    editPassword={editPassword}
+                    setEditPassword={setEditPassword}
+                    onSaveProfile={async () => {
+                        const updatedUser = { ...user, tagline: editTagline, bio: editBio, status: editStatus, telegram: editTelegram };
+                        if (editPassword) updatedUser.password = editPassword;
+                        await db.updateUserProfile(updatedUser);
+                        setIsEditingProfile(false);
+                    }}
+                    onProfileImageUpload={async (e) => {
+                        if (e.target.files?.[0]) {
+                            const b64 = await db.fileToBase64(e.target.files[0]);
+                            const updated = { ...user, avatarUrl: b64 };
+                            await db.updateUserProfile(updated);
+                            setUser(updated);
+                        }
+                    }}
+                    onProfileCoverUpload={async (e) => {
+                        if (e.target.files?.[0]) {
+                            const b64 = await db.fileToBase64(e.target.files[0]);
+                            const updated = { ...user, coverUrl: b64 };
+                            await db.updateUserProfile(updated);
+                            setUser(updated);
+                        }
+                    }}
+                    guestbookInput={guestbookInput}
+                    setGuestbookInput={setGuestbookInput}
+                    guestbookInputRef={guestbookInputRef}
+                    profileTab={profileTab}
+                    setProfileTab={setProfileTab}
+                    onOpenSocialList={(u, type) => {
+                        setViewedProfileUsername(u);
+                        setSocialListType(type);
+                        setView('SOCIAL_LIST');
+                    }}
+                    onThemeChange={(t) => setTheme(t)}
+                    onWishlistClick={(w) => { setSelectedWishlistItem(w); setView('WISHLIST_DETAIL'); }}
+                />
+            </div>
+        )}
+
+        {view === 'HALL_OF_FAME' && user && (
+            <div className="p-4 pb-24">
+                <HallOfFame 
+                    theme={theme} 
+                    achievements={user.achievements} 
+                    onBack={handleBack} 
+                />
+            </div>
+        )}
+
+        {view === 'FEED' && (
+            <div className="p-4 pb-24 space-y-6" {...globalSwipeHandlers}>
+                <header className="flex justify-between items-center mb-4 sticky top-0 z-30 py-2 backdrop-blur-md bg-transparent">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-green-500 rounded flex items-center justify-center font-bold text-black font-pixel text-xs">NA</div>
+                        <h1 className="text-lg font-pixel font-bold tracking-tighter">NeoArchive</h1>
+                    </div>
+                    {user && (
+                        <div className="flex gap-4">
+                            <button onClick={() => navigateTo('SEARCH')}><Search className="opacity-70 hover:opacity-100" /></button>
+                            <button onClick={() => navigateTo('ACTIVITY')} className="relative">
+                                <Bell className="opacity-70 hover:opacity-100" />
+                                {notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
+                            </button>
+                        </div>
+                    )}
+                </header>
+
+                {/* Filters */}
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {['ВСЕ', ...Object.values(DefaultCategory)].map(cat => (
+                        <button 
+                            key={cat}
+                            onClick={() => setSelectedCategory(cat)}
+                            className={`px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? 'bg-green-500 text-black border-green-500' : 'border-white/10 opacity-60 hover:opacity-100'}`}
+                        >
+                            {cat}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Feed Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {exhibits
+                        .filter(e => !e.isDraft && (selectedCategory === 'ВСЕ' || e.category === selectedCategory))
+                        .map(item => (
+                            <ExhibitCard 
+                                key={item.id} 
+                                item={item} 
+                                theme={theme}
+                                onClick={handleExhibitClick}
+                                isLiked={item.likedBy?.includes(user?.username || '') || false}
+                                onLike={(e) => handleLike(item.id, e)}
+                                onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                            />
+                        ))
+                    }
+                </div>
+                {exhibits.length === 0 && (
+                    <div className="text-center py-20 opacity-30 font-mono text-xs">
+                        НЕТ ДАННЫХ В ПОТОКЕ
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* BOTTOM NAVIGATION */}
+        {user && (
+            <div className={`fixed bottom-0 left-0 w-full z-40 border-t backdrop-blur-md safe-area-pb ${theme === 'winamp' ? 'bg-[#292929] border-[#505050]' : theme === 'dark' ? 'bg-black/90 border-white/10' : 'bg-white/90 border-black/10'}`}>
+                <div className="flex justify-around items-center p-3">
+                    <button onClick={() => setView('FEED')} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}>
+                        <LayoutGrid size={20} />
+                    </button>
+                    <button onClick={() => setView('COMMUNITY_HUB')} className={`flex flex-col items-center gap-1 ${view === 'COMMUNITY_HUB' ? 'text-green-500' : 'opacity-50'}`}>
+                        <Globe size={20} />
+                    </button>
+                    <button onClick={() => setView('CREATE_HUB')} className="flex flex-col items-center justify-center -mt-8">
+                        <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 ${theme === 'winamp' ? 'bg-[#292929] border-2 border-wa-gold text-wa-gold' : 'bg-green-500 text-black'}`}>
+                            <Plus size={28} />
+                        </div>
+                    </button>
+                    <button onClick={() => navigateTo('ACTIVITY')} className={`flex flex-col items-center gap-1 relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}>
+                        <Bell size={20} />
+                        {notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-0 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+                    </button>
+                    <button onClick={() => navigateTo('USER_PROFILE', { username: user.username })} className={`flex flex-col items-center gap-1 ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'text-green-500' : 'opacity-50'}`}>
+                        <div className={`w-6 h-6 rounded-full overflow-hidden border ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'border-green-500' : 'border-transparent'}`}>
+                            <img src={user.avatarUrl} className="w-full h-full object-cover" />
+                        </div>
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {/* Modals for Add to Collection */}
+        {isAddingToCollection && user && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+                <div className={`w-full max-w-sm rounded-xl p-6 ${theme === 'winamp' ? 'bg-[#292929] border border-[#505050] text-gray-300' : 'bg-dark-surface border border-white/10 text-white'}`}>
+                    <h3 className="font-pixel text-sm mb-4">ДОБАВИТЬ В КОЛЛЕКЦИЮ</h3>
+                    <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
+                        {collections.filter(c => c.owner === user.username).map(col => (
+                            <button 
+                                key={col.id}
+                                onClick={async () => {
+                                    if(col.exhibitIds.includes(isAddingToCollection)) return;
+                                    const updated = { ...col, exhibitIds: [...col.exhibitIds, isAddingToCollection] };
+                                    await db.updateCollection(updated);
+                                    setIsAddingToCollection(null);
+                                    alert('Добавлено!');
+                                }}
+                                className="w-full p-3 text-left border border-white/10 rounded hover:bg-white/5 flex items-center gap-2"
+                            >
+                                <Folder size={16}/> {col.title}
+                            </button>
+                        ))}
+                        {collections.filter(c => c.owner === user.username).length === 0 && <div className="opacity-50 text-xs">Нет коллекций</div>}
+                    </div>
+                    <button onClick={() => setIsAddingToCollection(null)} className="w-full py-3 bg-white/10 rounded font-bold text-xs">ОТМЕНА</button>
+                </div>
+            </div>
+        )}
     </div>
   );
 }
-// Note: Due to character limit, I can't reproduce the entire 1000+ line App.tsx here perfectly if I don't have it all in memory. 
-// I will assume the user applies the `currentUserProfile={user}` prop to `ExhibitDetailPage` in their local file. 
-// The critical changes were in `types.ts`, `server.js`, `storageService.ts` and the new components.
