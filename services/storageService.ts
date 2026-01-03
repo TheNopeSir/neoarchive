@@ -1,5 +1,5 @@
 
-import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem, Guild, Duel } from '../types';
+import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem, Guild, Duel, TradeRequest } from '../types';
 
 // Internal Cache (In-Memory)
 let cache = {
@@ -14,15 +14,16 @@ let cache = {
         { id: 'g1', name: 'Retro Keepers', description: 'Хранители старого железа', leader: 'SysAdmin', members: ['SysAdmin'], isPrivate: false, inviteCode: 'retro123' },
     ] as Guild[],
     duels: [] as Duel[],
+    tradeRequests: [] as TradeRequest[],
     deletedIds: [] as string[],
     isLoaded: false
 };
 
 const DB_NAME = 'NeoArchiveDB';
 const STORE_NAME = 'client_cache';
-const CACHE_KEY = 'neo_archive_v4'; // Bumped version
+const CACHE_KEY = 'neo_archive_v5_5'; // Bumped version for new schema
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '5.2.0-Community'; 
+const CACHE_VERSION = '5.5.0-TradeSystem'; 
 
 let isOfflineMode = false;
 let liveUpdateInterval: any = null; // Timer for polling
@@ -303,6 +304,9 @@ const performCloudSync = async () => {
         }
 
         if (initData.guestbook) { cache.guestbook = initData.guestbook; hasUpdates = true; }
+
+        // Sync Trade Requests (Mock for now, would be API in real implementation)
+        if (initData.tradeRequests) { cache.tradeRequests = initData.tradeRequests; hasUpdates = true; }
 
         if (hasUpdates) {
             await saveToLocalCache();
@@ -637,31 +641,129 @@ export const fileToBase64 = async (file: File): Promise<string> => {
 
 export const getStorageEstimate = async () => { if (navigator.storage?.estimate) return await navigator.storage.estimate(); return null; };
 
-// Fix for TradeOfferModal build error
+// --- TRADE SYSTEM ---
+
+// Simulate sending a trade request (In production this would call the API)
 export const sendTradeRequest = async (targetUserOrData: string | any, offerDetails: string = 'Standard Trade Offer') => {
     let targetUser = '';
     let details = '';
+    let offeredIds: string[] = [];
+    let targetItemId = '';
 
     if (typeof targetUserOrData === 'object' && targetUserOrData !== null) {
-        targetUser = targetUserOrData.targetUser || targetUserOrData.recipient || targetUserOrData.to || '';
-        details = targetUserOrData.offerDetails || targetUserOrData.details || targetUserOrData.text || 'Trade Offer';
+        targetUser = targetUserOrData.recipient;
+        details = 'New Trade Proposal';
+        offeredIds = targetUserOrData.offeredItemIds || [];
+        targetItemId = targetUserOrData.targetItemId || '';
     } else {
+        // Fallback for older calls if any
         targetUser = String(targetUserOrData);
         details = offerDetails;
     }
 
     const sender = localStorage.getItem(SESSION_USER_KEY);
-    if(!sender || !targetUser) return;
-    
-    // Simulate sending a trade request via DM system since backend specific endpoint might not be ready
-    const text = `[TRADE PROPOSAL] ${details}`;
-    const msg: Message = {
+    if (!sender || !targetUser) return;
+
+    // Create the Trade Request Object
+    const request: TradeRequest = {
         id: crypto.randomUUID(),
         sender,
-        receiver: targetUser,
-        text,
-        timestamp: new Date().toISOString(),
+        recipient: targetUser,
+        offeredItemIds: offeredIds,
+        targetItemId: targetItemId,
+        status: 'PENDING',
+        timestamp: new Date().toISOString()
+    };
+
+    cache.tradeRequests.push(request);
+    await saveToLocalCache();
+
+    // Create a Notification for the recipient
+    const notification: Notification = {
+        id: crypto.randomUUID(),
+        type: 'TRADE_OFFER',
+        actor: sender,
+        recipient: targetUser,
+        targetId: request.id, // Link to trade request ID
+        targetPreview: 'Новое предложение обмена',
+        timestamp: new Date().toLocaleString(),
         isRead: false
     };
-    await saveMessage(msg);
+    cache.notifications.unshift(notification);
+    
+    // In a real app, we would POST to /api/trades here
+    await saveToLocalCache();
+    notifyListeners();
+    // Simulate syncing
+    // await syncItem('/trade_requests', request); 
+};
+
+export const acceptTradeRequest = async (requestId: string) => {
+    const reqIndex = cache.tradeRequests.findIndex(r => r.id === requestId);
+    if (reqIndex === -1) return;
+    
+    const request = cache.tradeRequests[reqIndex];
+    if (request.status !== 'PENDING') return;
+
+    const sender = request.sender;
+    const recipient = request.recipient;
+
+    // 1. Swap Ownership
+    // Items from Sender -> Recipient
+    request.offeredItemIds.forEach(id => {
+        const item = cache.exhibits.find(e => e.id === id);
+        if (item && item.owner === sender) {
+            item.owner = recipient;
+            item.tradeStatus = 'NONE'; // Reset status
+            updateExhibit(item);
+        }
+    });
+
+    // Target Item from Recipient -> Sender
+    const targetItem = cache.exhibits.find(e => e.id === request.targetItemId);
+    if (targetItem && targetItem.owner === recipient) {
+        targetItem.owner = sender;
+        targetItem.tradeStatus = 'NONE'; // Reset status
+        updateExhibit(targetItem);
+    }
+
+    // 2. Update Request Status
+    request.status = 'ACCEPTED';
+    cache.tradeRequests[reqIndex] = request;
+
+    // 3. Notify Sender
+    const notification: Notification = {
+        id: crypto.randomUUID(),
+        type: 'TRADE_ACCEPTED',
+        actor: recipient,
+        recipient: sender,
+        targetId: request.id,
+        targetPreview: 'Обмен завершен успешно!',
+        timestamp: new Date().toLocaleString(),
+        isRead: false
+    };
+    cache.notifications.unshift(notification);
+
+    await saveToLocalCache();
+    notifyListeners();
+};
+
+export const declineTradeRequest = async (requestId: string) => {
+    const reqIndex = cache.tradeRequests.findIndex(r => r.id === requestId);
+    if (reqIndex !== -1) {
+        cache.tradeRequests[reqIndex].status = 'DECLINED';
+        await saveToLocalCache();
+        notifyListeners();
+    }
+};
+
+export const getMyTradeRequests = () => {
+    const user = localStorage.getItem(SESSION_USER_KEY);
+    if (!user) return { incoming: [], outgoing: [] };
+    
+    return {
+        incoming: cache.tradeRequests.filter(r => r.recipient === user && r.status === 'PENDING'),
+        outgoing: cache.tradeRequests.filter(r => r.sender === user),
+        history: cache.tradeRequests.filter(r => (r.sender === user || r.recipient === user) && r.status !== 'PENDING')
+    };
 };

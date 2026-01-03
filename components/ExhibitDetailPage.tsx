@@ -2,12 +2,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ChevronLeft, ChevronRight, Heart, Share2, MessageSquare, Trash2, 
-  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2, Link2, Sparkles, Video, Pin
+  ArrowLeft, Eye, BookmarkPlus, Send, MessageCircle, Play, CornerDownRight, Edit2, Link2, Sparkles, Video, Pin, FileText, RefreshCw
 } from 'lucide-react';
 import { Exhibit, Comment, UserProfile } from '../types';
 import { getArtifactTier, TIER_CONFIG, TRADE_STATUS_CONFIG, getSimilarArtifacts } from '../constants';
 import { getUserAvatar } from '../services/storageService';
 import ExhibitCard from './ExhibitCard';
+import ShareCardModal from './ShareCardModal';
+import TradeOfferModal from './TradeOfferModal';
 
 interface ExhibitDetailPageProps {
   exhibit: Exhibit;
@@ -74,6 +76,10 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
   
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
+
+  // Modals
+  const [showDossier, setShowDossier] = useState(false);
+  const [showTradeModal, setShowTradeModal] = useState(false);
 
   const isWinamp = theme === 'winamp';
 
@@ -187,6 +193,23 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
   return (
     <div className={`w-full min-h-full pb-20 animate-in slide-in-from-right-8 fade-in duration-500 ${isWinamp ? 'font-mono text-gray-300' : theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
       
+      {showDossier && (
+          <ShareCardModal 
+            exhibit={exhibit} 
+            user={currentUserProfile || null} 
+            onClose={() => setShowDossier(false)} 
+          />
+      )}
+
+      {showTradeModal && currentUserProfile && allExhibits && (
+          <TradeOfferModal
+            targetItem={exhibit}
+            currentUser={currentUserProfile}
+            userInventory={allExhibits.filter(e => e.owner === currentUser)}
+            onClose={() => setShowTradeModal(false)}
+          />
+      )}
+
       {/* Winamp-style Header Bar */}
       {isWinamp && (
           <div className="bg-[#282828] border-t border-l border-[#505050] border-b border-r border-[#101010] p-1 mb-4 flex items-center justify-between">
@@ -300,6 +323,25 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                   <div className="w-[1px] h-6 bg-white/10" />
                   <div className="flex items-center gap-2 px-3 py-2 opacity-60"><Eye size={20} /><span className="text-sm font-bold font-mono">{exhibit.views}</span></div>
                </div>
+            </div>
+
+            {/* ACTION BUTTONS (TRADE & DOSSIER) */}
+            <div className="flex flex-wrap gap-2 mb-6">
+                <button 
+                    onClick={() => setShowDossier(true)}
+                    className={`flex items-center gap-2 px-4 py-2 border rounded font-pixel text-[10px] uppercase font-bold hover:bg-white/5 ${isWinamp ? 'border-[#00ff00] text-[#00ff00]' : 'border-white/20'}`}
+                >
+                    <FileText size={14}/> СГЕНЕРИРОВАТЬ ДОСЬЕ
+                </button>
+                
+                {!isOwner && (tradeStatus === 'FOR_TRADE' || tradeStatus === 'FOR_SALE') && (
+                    <button 
+                        onClick={() => setShowTradeModal(true)}
+                        className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded font-pixel text-[10px] uppercase font-bold hover:bg-blue-500 shadow-lg animate-pulse-slow`}
+                    >
+                        <RefreshCw size={14}/> ПРЕДЛОЖИТЬ ОБМЕН
+                    </button>
+                )}
             </div>
 
             {/* "Who Liked" Section */}

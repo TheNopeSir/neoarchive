@@ -1,41 +1,37 @@
 
-import React, { useEffect, useRef, useState } from 'react';
-import { X, Download, Share2 } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { X, Download, RefreshCw } from 'lucide-react';
 import { Exhibit, UserProfile } from '../types';
-import { getArtifactTier } from '../constants';
 
 interface ShareCardModalProps {
     exhibit: Exhibit;
-    currentUser: string;
+    user: UserProfile | null;
     onClose: () => void;
 }
 
-const ShareCardModal: React.FC<ShareCardModalProps> = ({ exhibit, currentUser, onClose }) => {
+const ShareCardModal: React.FC<ShareCardModalProps> = ({ exhibit, user, onClose }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(true);
 
-    useEffect(() => {
+    const generateCard = async () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Configuration
+        setIsGenerating(true);
+
+        // CONFIG
         const W = 600;
         const H = 800;
         canvas.width = W;
         canvas.height = H;
 
-        // Fonts
-        const fontPixel = '24px "Orbitron", monospace';
-        const fontMono = '16px "Courier New", monospace';
-        const fontBig = '40px "Orbitron", monospace';
-
-        // Background
+        // 1. Background
         ctx.fillStyle = '#050505';
         ctx.fillRect(0, 0, W, H);
 
-        // Matrix Grid
+        // Grid Pattern
         ctx.strokeStyle = '#003300';
         ctx.lineWidth = 1;
         for (let i = 0; i < W; i += 40) {
@@ -45,133 +41,152 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ exhibit, currentUser, o
             ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(W, i); ctx.stroke();
         }
 
-        // Header Box
-        ctx.fillStyle = '#00FF00';
-        ctx.fillRect(20, 20, W - 40, 60);
-        
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 30px "Orbitron", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText("NEO_ARCHIVE // CLASSIFIED", W / 2, 60);
-
-        // Image Frame
+        // 2. Load Image
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.src = exhibit.imageUrls[0];
         
-        img.onload = () => {
-            // Draw Image
-            const imgSize = 400;
-            const x = (W - imgSize) / 2;
-            const y = 120;
-            
-            // Draw border rect around image
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(x - 5, y - 5, imgSize + 10, imgSize + 10);
+        await new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve; // Continue even if image fails
+        });
 
-            // Clip and draw image
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(x, y, imgSize, imgSize);
-            ctx.clip();
-            
-            // Aspect Ratio fit
-            const scale = Math.max(imgSize / img.width, imgSize / img.height);
-            const w = img.width * scale;
-            const h = img.height * scale;
-            ctx.drawImage(img, x + (imgSize - w)/2, y + (imgSize - h)/2, w, h);
-            ctx.restore();
+        // Draw Image (Grayscale + Green Tint)
+        const imgH = 350;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(40, 120, W - 80, imgH);
+        ctx.clip();
+        
+        // Scale image to cover
+        const ratio = Math.max((W - 80) / img.width, imgH / img.height);
+        const centerShift_x = (W - 80 - img.width * ratio) / 2;
+        const centerShift_y = (imgH - img.height * ratio) / 2;
+        ctx.drawImage(img, 0, 0, img.width, img.height, 40 + centerShift_x, 120 + centerShift_y, img.width * ratio, img.height * ratio);
+        
+        // Green Overlay
+        ctx.globalCompositeOperation = 'color';
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(40, 120, W - 80, imgH);
+        
+        // Scanlines
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        for (let i = 120; i < 120 + imgH; i += 4) {
+            ctx.fillRect(40, i, W - 80, 2);
+        }
+        ctx.restore();
 
-            // Scanlines over image
-            ctx.fillStyle = 'rgba(0, 255, 0, 0.1)';
-            for(let i=y; i<y+imgSize; i+=4) {
-                ctx.fillRect(x, i, imgSize, 2);
-            }
+        // Image Border
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(40, 120, W - 80, imgH);
 
-            drawTextDetails(ctx);
+        // Corner Markers
+        const cornerSize = 15;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        // TL
+        ctx.moveTo(35, 115 + cornerSize); ctx.lineTo(35, 115); ctx.lineTo(35 + cornerSize, 115);
+        // TR
+        ctx.moveTo(W - 35 - cornerSize, 115); ctx.lineTo(W - 35, 115); ctx.lineTo(W - 35, 115 + cornerSize);
+        // BL
+        ctx.moveTo(35, 125 + imgH - cornerSize); ctx.lineTo(35, 125 + imgH); ctx.lineTo(35 + cornerSize, 125 + imgH);
+        // BR
+        ctx.moveTo(W - 35 - cornerSize, 125 + imgH); ctx.lineTo(W - 35, 125 + imgH); ctx.lineTo(W - 35, 125 + imgH - cornerSize);
+        ctx.stroke();
+
+        // 3. Typography
+        ctx.font = 'bold 30px "Courier New", monospace';
+        ctx.fillStyle = '#00ff00';
+        ctx.textAlign = 'center';
+        ctx.fillText("NEO_ARCHIVE // DOSSIER", W / 2, 60);
+
+        ctx.font = '16px "Courier New", monospace';
+        ctx.fillText(`ID: ${exhibit.id.slice(0, 8).toUpperCase()}`, W / 2, 90);
+
+        // Stamps
+        ctx.save();
+        ctx.translate(W - 100, 100);
+        ctx.rotate(Math.PI / 6);
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(-60, -20, 120, 40);
+        ctx.font = 'bold 16px Arial';
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+        ctx.fillText("TOP SECRET", 0, 5);
+        ctx.restore();
+
+        // Data Fields
+        ctx.textAlign = 'left';
+        const startY = 520;
+        const lineHeight = 30;
+
+        const drawField = (label: string, value: string, y: number) => {
+            ctx.font = 'bold 14px "Courier New", monospace';
+            ctx.fillStyle = '#00aa00';
+            ctx.fillText(label, 50, y);
+            ctx.fillStyle = '#ccffcc';
+            ctx.fillText(value.toUpperCase().substring(0, 40), 200, y);
         };
 
-        const drawTextDetails = (ctx: CanvasRenderingContext2D) => {
-            const tier = getArtifactTier(exhibit);
-            const startY = 560;
+        drawField("SUBJECT:", exhibit.title, startY);
+        drawField("CLASS:", exhibit.category, startY + lineHeight);
+        drawField("OWNER:", `@${exhibit.owner}`, startY + lineHeight * 2);
+        drawField("STATUS:", exhibit.tradeStatus || "SECURE", startY + lineHeight * 3);
+        drawField("DATE:", new Date().toLocaleDateString(), startY + lineHeight * 4);
 
-            ctx.fillStyle = '#00FF00';
-            ctx.textAlign = 'left';
-            
-            // Title
-            ctx.font = 'bold 28px "Courier New", monospace';
-            let title = exhibit.title.toUpperCase();
-            if (title.length > 25) title = title.substring(0, 25) + '...';
-            ctx.fillText(`ITEM: ${title}`, 40, startY);
-
-            // Details
-            ctx.font = '20px "Courier New", monospace';
-            ctx.fillStyle = '#CCCCCC';
-            ctx.fillText(`OWNER: @${exhibit.owner.toUpperCase()}`, 40, startY + 40);
-            ctx.fillText(`CLASS: ${tier}`, 40, startY + 70);
-            ctx.fillText(`CAT:   ${exhibit.category}`, 40, startY + 100);
-            ctx.fillText(`DATE:  ${exhibit.timestamp.split(',')[0]}`, 40, startY + 130);
-
-            // Stats Box
-            const statX = 350;
-            ctx.strokeStyle = '#00FF00';
-            ctx.strokeRect(statX, startY, 200, 140);
-            
-            ctx.fillStyle = '#00FF00';
-            ctx.font = '16px "Courier New", monospace';
-            ctx.fillText("STATS_MODULE", statX + 10, startY + 25);
-            
-            ctx.fillStyle = '#FFF';
-            ctx.fillText(`VIEWS: ${exhibit.views}`, statX + 10, startY + 60);
-            ctx.fillText(`LIKES: ${exhibit.likes}`, statX + 10, startY + 90);
-            
-            // Barcode (Fake)
-            ctx.fillStyle = '#FFFFFF';
-            const bcY = 740;
-            const bcX = 40;
-            for(let i=0; i<300; i+= Math.random() * 5 + 2) {
-                ctx.fillRect(bcX + i, bcY, Math.random() * 3 + 1, 30);
+        // Barcode (Simulated)
+        const barcodeY = H - 80;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(50, barcodeY, W - 100, 40);
+        ctx.fillStyle = '#000';
+        for (let i = 50; i < W - 50; i += 5) {
+            if (Math.random() > 0.3) {
+                ctx.fillRect(i, barcodeY, Math.random() * 3 + 1, 40);
             }
-            ctx.font = '12px "Courier New", monospace';
-            ctx.fillText(`ID: ${exhibit.id.toUpperCase()}`, 40, 785);
+        }
 
-            // Finalize
-            setImageUrl(canvas.toDataURL('image/png'));
-        };
+        ctx.font = '10px monospace';
+        ctx.fillStyle = '#00ff00';
+        ctx.textAlign = 'center';
+        ctx.fillText("GENERATED BY NEO_ARCHIVE PROTOCOL v5.5", W / 2, H - 20);
 
+        setIsGenerating(false);
+    };
+
+    useEffect(() => {
+        generateCard();
     }, [exhibit]);
 
     const handleDownload = () => {
-        if (!imageUrl) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
         const link = document.createElement('a');
-        link.download = `neo_dossier_${exhibit.id}.png`;
-        link.href = imageUrl;
+        link.download = `dossier_${exhibit.id.slice(0,6)}.png`;
+        link.href = canvas.toDataURL();
         link.click();
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in">
-            <div className="bg-[#101010] border border-green-500 rounded-lg p-4 max-w-lg w-full flex flex-col items-center">
-                <div className="flex justify-between w-full mb-4">
-                    <h2 className="text-green-500 font-pixel text-xs tracking-widest uppercase">GENERATING_DOSSIER...</h2>
-                    <button onClick={onClose}><X className="text-green-500 hover:text-white" /></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-[#111] border border-green-500/50 p-4 rounded-xl max-w-lg w-full flex flex-col gap-4 shadow-[0_0_50px_rgba(0,255,0,0.1)]">
+                <div className="flex justify-between items-center text-green-500 border-b border-green-500/30 pb-2">
+                    <h3 className="font-pixel text-xs tracking-widest">ГЕНЕРАТОР ДОСЬЕ</h3>
+                    <button onClick={onClose}><X size={20} /></button>
                 </div>
                 
-                <canvas ref={canvasRef} className="hidden" /> {/* Hidden source canvas */}
-                
-                {imageUrl ? (
-                    <img src={imageUrl} alt="Dossier" className="w-full h-auto border border-green-500/30 shadow-[0_0_20px_rgba(0,255,0,0.2)] mb-4" />
-                ) : (
-                    <div className="w-full aspect-[3/4] flex items-center justify-center text-green-500 font-mono animate-pulse">COMPILING DATA...</div>
-                )}
+                <div className="relative aspect-[3/4] bg-black border border-white/10 w-full flex items-center justify-center overflow-hidden">
+                    <canvas ref={canvasRef} className="max-w-full max-h-full" />
+                    {isGenerating && <div className="absolute inset-0 bg-black flex items-center justify-center text-green-500 font-mono animate-pulse">COMPILING DATA...</div>}
+                </div>
 
-                <button 
-                    onClick={handleDownload}
-                    className="w-full py-3 bg-green-500 text-black font-pixel font-bold uppercase hover:bg-green-400 flex items-center justify-center gap-2"
-                >
-                    <Download size={18} /> СКАЧАТЬ (SAVE)
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={generateCard} className="p-3 border border-green-500/30 text-green-500 rounded hover:bg-green-500/10"><RefreshCw size={20}/></button>
+                    <button onClick={handleDownload} className="flex-1 py-3 bg-green-600 text-black font-bold font-pixel text-xs rounded hover:bg-green-500 flex items-center justify-center gap-2">
+                        <Download size={16}/> DOWNLOAD_DOSSIER.PNG
+                    </button>
+                </div>
             </div>
         </div>
     );

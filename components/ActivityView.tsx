@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Bell, MessageCircle, ChevronDown, ChevronUp, User, Heart, MessageSquare, UserPlus, BookOpen, CheckCheck } from 'lucide-react';
+import { Bell, MessageCircle, ChevronDown, ChevronUp, User, Heart, MessageSquare, UserPlus, BookOpen, CheckCheck, RefreshCw, X, Check } from 'lucide-react';
 import { Notification, Message, UserProfile, Exhibit } from '../types';
-import { getUserAvatar, markNotificationsRead } from '../services/storageService';
+import { getUserAvatar, markNotificationsRead, getMyTradeRequests, acceptTradeRequest, declineTradeRequest } from '../services/storageService';
 
 interface ActivityViewProps {
     notifications: Notification[];
@@ -18,13 +18,13 @@ const ActivityView: React.FC<ActivityViewProps> = ({
     notifications, messages, currentUser, theme, 
     onAuthorClick, onExhibitClick, onChatClick 
 }) => {
-    const [activeTab, setActiveTab] = useState<'NOTIFICATIONS' | 'MESSAGES'>('NOTIFICATIONS');
+    const [activeTab, setActiveTab] = useState<'NOTIFICATIONS' | 'MESSAGES' | 'TRADES'>('NOTIFICATIONS');
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
     const myNotifs = notifications.filter(n => n.recipient === currentUser.username);
     const myMessages = messages.filter(m => m.sender === currentUser.username || m.receiver === currentUser.username);
+    const trades = getMyTradeRequests();
 
-    // Auto-mark logic could go here, but manual button is better for UX control
     const handleMarkAllRead = () => {
         markNotificationsRead(currentUser.username);
     };
@@ -49,6 +49,8 @@ const ActivityView: React.FC<ActivityViewProps> = ({
             case 'COMMENT': return <MessageSquare size={14} className="text-blue-500" />;
             case 'FOLLOW': return <UserPlus size={14} className="text-green-500" />;
             case 'GUESTBOOK': return <BookOpen size={14} className="text-yellow-500" />;
+            case 'TRADE_OFFER': return <RefreshCw size={14} className="text-blue-400" />;
+            case 'TRADE_ACCEPTED': return <Check size={14} className="text-green-400" />;
             default: return <Bell size={14} />;
         }
     };
@@ -65,6 +67,8 @@ const ActivityView: React.FC<ActivityViewProps> = ({
         else if (first.type === 'COMMENT') title = `Новые комментарии к "${first.targetPreview}"`;
         else if (first.type === 'FOLLOW') title = `Новые подписчики`;
         else if (first.type === 'GUESTBOOK') title = `Записи в гостевой книге`;
+        else if (first.type === 'TRADE_OFFER') title = `Предложение обмена`;
+        else if (first.type === 'TRADE_ACCEPTED') title = `Обмен подтвержден`;
 
         const actorText = uniqueActors.length === 1 
             ? <span className="font-bold">@{uniqueActors[0]}</span>
@@ -145,6 +149,13 @@ const ActivityView: React.FC<ActivityViewProps> = ({
                     <MessageCircle size={14} /> СООБЩЕНИЯ
                     {myMessages.some(m => !m.isRead && m.receiver === currentUser.username) && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"/>}
                 </button>
+                <button 
+                    onClick={() => setActiveTab('TRADES')}
+                    className={`flex-1 pb-3 text-center font-pixel text-xs transition-colors flex items-center justify-center gap-2 ${activeTab === 'TRADES' ? (theme === 'winamp' ? 'border-b-2 border-[#00ff00] text-[#00ff00]' : 'border-b-2 border-green-500 text-green-500 font-bold') : 'opacity-50 hover:opacity-100'}`}
+                >
+                    <RefreshCw size={14} /> СДЕЛКИ
+                    {trades.incoming.length > 0 && <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"/>}
+                </button>
             </div>
 
             <div className="space-y-4">
@@ -192,6 +203,55 @@ const ActivityView: React.FC<ActivityViewProps> = ({
                                     </div>
                                 ))
                         )}
+                    </div>
+                )}
+
+                {activeTab === 'TRADES' && (
+                    <div className="space-y-6">
+                        {/* INCOMING */}
+                        <div>
+                            <h3 className="text-xs font-bold opacity-50 mb-2 font-pixel">ВХОДЯЩИЕ ЗАПРОСЫ</h3>
+                            {trades.incoming.length === 0 ? <div className="text-[10px] opacity-30 italic">Нет активных предложений</div> : 
+                                trades.incoming.map(req => (
+                                    <div key={req.id} className="border border-blue-500/30 bg-blue-500/5 p-4 rounded-xl mb-2">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <div className="text-sm font-bold text-blue-400">От @{req.sender}</div>
+                                            <div className="text-[10px] opacity-50">{req.timestamp.split('T')[0]}</div>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-xs mb-4">
+                                            <div className="flex-1 text-center">
+                                                <div className="text-[9px] opacity-50 uppercase">Отдает</div>
+                                                <div className="font-bold text-green-400">{req.offeredItemIds.length} ITEMS</div>
+                                            </div>
+                                            <RefreshCw size={16} className="opacity-50"/>
+                                            <div className="flex-1 text-center">
+                                                <div className="text-[9px] opacity-50 uppercase">Хочет</div>
+                                                <div className="font-bold text-yellow-400">TARGET ITEM</div>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => acceptTradeRequest(req.id)} className="flex-1 py-2 bg-green-600 text-black font-bold text-xs rounded hover:bg-green-500 uppercase">Принять</button>
+                                            <button onClick={() => declineTradeRequest(req.id)} className="flex-1 py-2 border border-red-500 text-red-500 font-bold text-xs rounded hover:bg-red-500/10 uppercase">Отклонить</button>
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </div>
+
+                        {/* OUTGOING */}
+                        <div>
+                            <h3 className="text-xs font-bold opacity-50 mb-2 font-pixel">ИСХОДЯЩИЕ</h3>
+                            {trades.outgoing.map(req => (
+                                <div key={req.id} className="border border-white/10 p-3 rounded-lg mb-2 opacity-70">
+                                    <div className="flex justify-between items-center text-xs">
+                                        <span>Для @{req.recipient}</span>
+                                        <span className={`px-2 py-0.5 rounded text-[9px] ${req.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' : req.status === 'ACCEPTED' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+                                            {req.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>

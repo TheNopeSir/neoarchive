@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, RefreshCw, CheckCircle, Circle, Send } from 'lucide-react';
+import { X, RefreshCw, ArrowRightLeft, Lock, Check } from 'lucide-react';
 import { Exhibit, UserProfile } from '../types';
 import { sendTradeRequest } from '../services/storageService';
 
@@ -13,124 +13,115 @@ interface TradeOfferModalProps {
 
 const TradeOfferModal: React.FC<TradeOfferModalProps> = ({ targetItem, currentUser, userInventory, onClose }) => {
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
-    const [message, setMessage] = useState('');
-    const [step, setStep] = useState<'SELECT' | 'CONFIRM'>('SELECT');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const toggleItem = (id: string) => {
-        if (selectedItems.includes(id)) {
-            setSelectedItems(prev => prev.filter(i => i !== id));
-        } else {
-            if (selectedItems.length >= 4) return alert("Максимум 4 предмета за раз");
-            setSelectedItems(prev => [...prev, id]);
+        setSelectedItems(prev => 
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    };
+
+    const handleSendOffer = async () => {
+        if (selectedItems.length === 0) return alert("Выберите хотя бы один предмет для обмена!");
+        
+        setIsSubmitting(true);
+        try {
+            await sendTradeRequest({
+                recipient: targetItem.owner,
+                offeredItemIds: selectedItems,
+                targetItemId: targetItem.id
+            });
+            alert("Предложение отправлено!");
+            onClose();
+        } catch (e) {
+            alert("Ошибка отправки");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    const handleSend = async () => {
-        if (selectedItems.length === 0) return alert("Выберите предметы для обмена");
-        
-        await sendTradeRequest({
-            id: crypto.randomUUID(),
-            sender: currentUser.username,
-            receiver: targetItem.owner,
-            offeredItems: selectedItems,
-            requestedItems: [targetItem.id],
-            status: 'PENDING',
-            timestamp: new Date().toLocaleString(),
-            message: message
-        });
-        
-        alert("Предложение отправлено!");
-        onClose();
-    };
-
-    const validInventory = userInventory.filter(item => !item.isDraft);
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in">
-            <div className="bg-[#1a1a1a] border border-[#505050] w-full max-w-4xl h-[80vh] flex flex-col rounded-xl overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-2 md:p-6 animate-in zoom-in-95 duration-200">
+            <div className="w-full max-w-5xl h-[80vh] bg-[#1e1e1e] border-4 border-[#3c3c3c] rounded-lg flex flex-col shadow-2xl overflow-hidden font-sans text-[#b0b0b0]">
                 
                 {/* Header */}
-                <div className="p-4 border-b border-[#505050] bg-[#101010] flex justify-between items-center">
-                    <div className="flex items-center gap-2 text-green-500 font-pixel">
-                        <RefreshCw size={20} /> ТОРГОВЫЙ ТЕРМИНАЛ (TF-PROTO)
+                <div className="bg-[#2d2d2d] p-3 flex justify-between items-center border-b border-black">
+                    <div className="flex items-center gap-2">
+                        <RefreshCw size={20} className="text-[#999]" />
+                        <span className="font-bold text-[#ebebeb] uppercase tracking-wide">Торговый Терминал</span>
                     </div>
-                    <button onClick={onClose}><X className="text-white hover:text-red-500" /></button>
+                    <button onClick={onClose} className="hover:text-white"><X size={24} /></button>
                 </div>
 
-                {/* Body */}
-                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                {/* Main Content - Split View */}
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-[#161616]">
                     
-                    {/* Left Column: Your Inventory */}
-                    <div className="flex-1 flex flex-col border-r border-[#505050] bg-[#151515]">
-                        <div className="p-2 text-xs font-mono bg-[#202020] text-center text-gray-400 uppercase">ВАШ ИНВЕНТАРЬ (ВЫБЕРИТЕ ПРЕДМЕТЫ)</div>
-                        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-2 content-start custom-scrollbar">
-                            {validInventory.map(item => (
+                    {/* Left: My Offer */}
+                    <div className="flex-1 flex flex-col border-r border-[#3c3c3c] min-h-0">
+                        <div className="bg-[#262626] p-2 text-center border-b border-[#3c3c3c]">
+                            <h3 className="text-[#5e98d9] font-bold text-sm uppercase">ВАШЕ ПРЕДЛОЖЕНИЕ</h3>
+                            <p className="text-[10px] opacity-60">Выберите предметы из инвентаря</p>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 gap-3 content-start custom-scrollbar">
+                            {userInventory.filter(i => !i.isDraft).map(item => (
                                 <div 
-                                    key={item.id} 
+                                    key={item.id}
                                     onClick={() => toggleItem(item.id)}
-                                    className={`aspect-square relative border-2 cursor-pointer transition-all rounded overflow-hidden group ${selectedItems.includes(item.id) ? 'border-green-500 opacity-100' : 'border-[#303030] hover:border-white opacity-60'}`}
+                                    className={`relative aspect-square bg-[#1e1e1e] border-2 cursor-pointer group transition-all ${selectedItems.includes(item.id) ? 'border-[#5e98d9]' : 'border-[#3c3c3c] hover:border-[#505050]'}`}
                                 >
-                                    <img src={item.imageUrls[0]} className="w-full h-full object-cover" />
-                                    {selectedItems.includes(item.id) && <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center"><CheckCircle className="text-green-500 drop-shadow-md"/></div>}
+                                    <img src={item.imageUrls[0]} className="w-full h-full object-cover p-1" />
+                                    {selectedItems.includes(item.id) && (
+                                        <div className="absolute top-1 right-1 bg-[#5e98d9] text-black rounded-full p-0.5"><Check size={12} strokeWidth={4}/></div>
+                                    )}
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[9px] p-1 truncate text-center text-[#d1d1d1]">
+                                        {item.title}
+                                    </div>
                                 </div>
                             ))}
                         </div>
-                    </div>
-
-                    {/* Right Column: Trade Summary */}
-                    <div className="flex-1 flex flex-col bg-[#101010]">
-                        <div className="flex-1 p-6 flex flex-col gap-8">
-                            
-                            {/* You Give */}
-                            <div className="flex-1 border border-[#303030] rounded-xl p-4 bg-[#151515]">
-                                <h3 className="text-xs font-pixel text-green-500 mb-2 uppercase">ВЫ ПРЕДЛАГАЕТЕ:</h3>
-                                <div className="grid grid-cols-4 gap-2 h-20">
-                                    {[0,1,2,3].map(i => {
-                                        const itemId = selectedItems[i];
-                                        const item = validInventory.find(x => x.id === itemId);
-                                        return (
-                                            <div key={i} className="aspect-square bg-[#050505] border border-[#303030] rounded flex items-center justify-center overflow-hidden">
-                                                {item ? <img src={item.imageUrls[0]} className="w-full h-full object-cover" /> : <div className="text-[#303030] text-[10px]">{i+1}</div>}
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-
-                            <div className="flex justify-center"><RefreshCw className="text-gray-500 animate-spin-slow" /></div>
-
-                            {/* You Get */}
-                            <div className="flex-1 border border-[#303030] rounded-xl p-4 bg-[#151515]">
-                                <h3 className="text-xs font-pixel text-blue-500 mb-2 uppercase">ВЫ ПОЛУЧАЕТЕ:</h3>
-                                <div className="flex gap-4">
-                                    <div className="w-20 h-20 border border-blue-500/50 rounded overflow-hidden">
-                                        <img src={targetItem.imageUrls[0]} className="w-full h-full object-cover" />
-                                    </div>
-                                    <div>
-                                        <div className="text-sm font-bold text-white mb-1">{targetItem.title}</div>
-                                        <div className="text-xs text-gray-500">Владелец: @{targetItem.owner}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <textarea 
-                                value={message}
-                                onChange={e => setMessage(e.target.value)}
-                                placeholder="Сообщение для владельца (опционально)..."
-                                className="w-full bg-[#050505] border border-[#303030] rounded p-2 text-xs font-mono text-white h-20 resize-none outline-none focus:border-green-500"
-                            />
-                        </div>
-
-                        <div className="p-4 border-t border-[#303030]">
-                            <button 
-                                onClick={handleSend}
-                                disabled={selectedItems.length === 0}
-                                className="w-full py-4 bg-green-600 text-black font-pixel font-bold uppercase hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                            >
-                                ОТПРАВИТЬ ПРЕДЛОЖЕНИЕ
-                            </button>
+                        <div className="p-2 bg-[#262626] border-t border-[#3c3c3c] text-center text-xs">
+                            Выбрано предметов: <span className="text-[#5e98d9] font-bold">{selectedItems.length}</span>
                         </div>
                     </div>
+
+                    {/* Middle Icon (Desktop only) */}
+                    <div className="hidden md:flex flex-col justify-center items-center px-2 bg-[#1e1e1e]">
+                        <ArrowRightLeft size={24} className="text-[#505050]" />
+                    </div>
+
+                    {/* Right: Receiving */}
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="bg-[#262626] p-2 text-center border-b border-[#3c3c3c]">
+                            <h3 className="text-[#86b45d] font-bold text-sm uppercase">ВЫ ПОЛУЧАЕТЕ</h3>
+                            <p className="text-[10px] opacity-60">Предмет от @{targetItem.owner}</p>
+                        </div>
+                        <div className="flex-1 p-8 flex items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
+                            <div className="w-48 aspect-square border-4 border-[#86b45d] bg-[#1e1e1e] relative shadow-[0_0_30px_rgba(134,180,93,0.2)]">
+                                <img src={targetItem.imageUrls[0]} className="w-full h-full object-cover p-2" />
+                                <div className="absolute bottom-0 left-0 right-0 bg-[#86b45d] text-black font-bold text-xs p-2 text-center uppercase truncate">
+                                    {targetItem.title}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-[#1e1e1e] border-t border-[#3c3c3c] text-center text-[10px] text-[#707070]">
+                            Внимание: После подтверждения обмена права владения будут переданы автоматически.
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="bg-[#2d2d2d] p-4 flex justify-end gap-4 border-t border-black">
+                    <button onClick={onClose} className="px-6 py-3 bg-[#3c3c3c] hover:bg-[#4a4a4a] text-[#ebebeb] font-bold rounded uppercase text-sm">
+                        Отмена
+                    </button>
+                    <button 
+                        onClick={handleSendOffer}
+                        disabled={isSubmitting || selectedItems.length === 0}
+                        className={`px-8 py-3 font-bold rounded uppercase text-sm flex items-center gap-2 ${selectedItems.length > 0 ? 'bg-[#5e98d9] text-black hover:bg-[#7ab0ee]' : 'bg-[#3c3c3c] text-[#707070] cursor-not-allowed'}`}
+                    >
+                        {isSubmitting ? 'Отправка...' : 'Отправить предложение'}
+                        {!isSubmitting && <Lock size={16} />}
+                    </button>
                 </div>
             </div>
         </div>

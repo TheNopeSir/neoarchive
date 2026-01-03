@@ -65,7 +65,7 @@ export interface Collection {
   likedBy: string[];
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION';
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION' | 'TRADE_OFFER' | 'TRADE_ACCEPTED';
 
 export interface Notification {
   id: string;
@@ -74,7 +74,6 @@ export interface Notification {
   recipient: string;
   targetId?: string;
   targetPreview?: string;
-  // New field for specific context (e.g., comment ID)
   contextId?: string; 
   timestamp: string;
   isRead: boolean;
@@ -156,6 +155,16 @@ export interface Duel {
     winner?: string;
     status: 'PENDING' | 'ACTIVE' | 'FINISHED';
     logs: string[];
+}
+
+export interface TradeRequest {
+    id: string;
+    sender: string;
+    recipient: string;
+    offeredItemIds: string[]; // Items the sender gives
+    targetItemId: string; // Item the sender wants
+    status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    timestamp: string;
 }
 
 export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'USER_WISHLIST' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_WISHLIST' | 'EDIT_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'SOCIAL_LIST' | 'WISHLIST_DETAIL' | 'COMMUNITY_HUB' | 'MY_COLLECTION' | 'GUILD_DETAIL';

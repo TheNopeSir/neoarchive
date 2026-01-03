@@ -323,9 +323,18 @@ export default function App() {
   }
 
   // --- RENDER LOGIC FOR MAIN APP ---
+  // Fix: Explicit background colors for themes to avoid white gaps
+  const getThemeClasses = () => {
+      switch(theme) {
+          case 'xp': return 'bg-[#ECE9D8] text-black font-sans';
+          case 'winamp': return 'bg-[#191919] font-winamp text-gray-300';
+          case 'light': return 'bg-light-bg text-gray-900';
+          default: return 'bg-dark-bg text-gray-100';
+      }
+  };
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${theme === 'dark' ? 'bg-dark-bg text-gray-100' : theme === 'xp' ? 'bg-[#ECE9D8] text-black font-sans' : 'bg-light-bg text-gray-900'} ${theme === 'winamp' ? 'bg-[#191919] font-winamp' : ''} pb-safe`}>
+    <div className={`min-h-screen transition-colors duration-300 pb-safe ${getThemeClasses()}`}>
         <SEO title="NeoArchive" />
         <MatrixRain theme={theme === 'dark' ? 'dark' : 'light'} />
         {theme === 'dark' && <CRTOverlay />}
@@ -729,8 +738,8 @@ export default function App() {
                     ))}
                 </div>
 
-                {/* Feed Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Feed Grid - Updated for better desktop resizing */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                     {exhibits
                         .filter(e => !e.isDraft && (selectedCategory === 'ВСЕ' || e.category === selectedCategory))
                         .map(item => (
