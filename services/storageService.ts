@@ -84,15 +84,22 @@ const idb = {
 export const isOffline = () => isOfflineMode;
 
 export const getUserAvatar = (username: string): string => {
-    const user = cache.users.find(u => u.username === username);
+    if (!username) return 'https://ui-avatars.com/api/?name=NA&background=000&color=fff';
+    const safeUsername = String(username); // Force string to avoid length on undefined
+    
+    const user = cache.users.find(u => u.username === safeUsername);
     if (user?.avatarUrl && !user.avatarUrl.includes('ui-avatars.com')) return user.avatarUrl;
+    
     let hash = 0;
-    for (let i = 0; i < username.length; i++) hash = username.charCodeAt(i) + ((hash << 5) - hash);
+    for (let i = 0; i < safeUsername.length; i++) hash = safeUsername.charCodeAt(i) + ((hash << 5) - hash);
     const color = (hash & 0x00FFFFFF).toString(16).toUpperCase().padStart(6, '0');
-    return `https://ui-avatars.com/api/?name=${username}&background=${color}&color=fff&bold=true`;
+    return `https://ui-avatars.com/api/?name=${safeUsername}&background=${color}&color=fff&bold=true`;
 };
 
-const slugify = (text: string): string => text.toString().toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').replace(/-+$/, '');
+const slugify = (text: string): string => {
+    if (!text) return 'untitled';
+    return String(text).toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').replace(/-+$/, '');
+};
 
 const saveToLocalCache = async () => {
     try {
@@ -107,16 +114,16 @@ const loadFromCache = async (): Promise<boolean> => {
             const data = stored.data || stored;
             
             // CRITICAL: Ensure arrays are initialized if missing in storage
-            data.exhibits = data.exhibits || [];
-            data.collections = data.collections || [];
-            data.notifications = data.notifications || [];
-            data.messages = data.messages || [];
-            data.users = data.users || [];
-            data.guestbook = data.guestbook || [];
-            data.wishlist = data.wishlist || [];
-            data.tradeRequests = data.tradeRequests || [];
-            data.guilds = data.guilds || [{ id: 'g1', name: 'Retro Keepers', description: 'Хранители старого железа', leader: 'SysAdmin', members: ['SysAdmin'], isPrivate: false, inviteCode: 'retro123' }];
-            data.duels = data.duels || [];
+            data.exhibits = Array.isArray(data.exhibits) ? data.exhibits : [];
+            data.collections = Array.isArray(data.collections) ? data.collections : [];
+            data.notifications = Array.isArray(data.notifications) ? data.notifications : [];
+            data.messages = Array.isArray(data.messages) ? data.messages : [];
+            data.users = Array.isArray(data.users) ? data.users : [];
+            data.guestbook = Array.isArray(data.guestbook) ? data.guestbook : [];
+            data.wishlist = Array.isArray(data.wishlist) ? data.wishlist : [];
+            data.tradeRequests = Array.isArray(data.tradeRequests) ? data.tradeRequests : [];
+            data.guilds = Array.isArray(data.guilds) ? data.guilds : [{ id: 'g1', name: 'Retro Keepers', description: 'Хранители старого железа', leader: 'SysAdmin', members: ['SysAdmin'], isPrivate: false, inviteCode: 'retro123' }];
+            data.duels = Array.isArray(data.duels) ? data.duels : [];
             
             cache = { ...cache, ...data, isLoaded: true };
             return true;
@@ -166,7 +173,7 @@ const checkSuperAdmin = (user: UserProfile) => {
 export const loadFeedBatch = async (page: number, limit: number = 10): Promise<Exhibit[]> => {
     try {
         const items: Exhibit[] = await apiCall(`/feed?page=${page}&limit=${limit}`);
-        if (items && items.length > 0) {
+        if (Array.isArray(items) && items.length > 0) {
             const currentIds = new Set(cache.exhibits.map(e => e.id));
             const newItems = items.filter(item => !currentIds.has(item.id));
             cache.exhibits = [...cache.exhibits, ...newItems].sort((a,b) => {
@@ -295,23 +302,23 @@ const performCloudSync = async () => {
         
         let hasUpdates = false;
 
-        if (initData.users) {
+        if (Array.isArray(initData.users)) {
             cache.users = initData.users;
             cache.users.forEach(u => checkSuperAdmin(u));
             hasUpdates = true;
         }
-        if (initData.notifications) {
+        if (Array.isArray(initData.notifications)) {
             cache.notifications = initData.notifications;
             hasUpdates = true;
         }
-        if (initData.messages) {
+        if (Array.isArray(initData.messages)) {
             const msgMap = new Map(cache.messages.map(m => [m.id, m]));
             (initData.messages as Message[]).forEach(m => msgMap.set(m.id, m));
             cache.messages = Array.from(msgMap.values()).sort((a,b) => a.timestamp.localeCompare(b.timestamp));
             hasUpdates = true;
         }
         
-        if (initData.exhibits) {
+        if (Array.isArray(initData.exhibits)) {
             const serverMap = new Map((initData.exhibits as Exhibit[]).map(e => [e.id, e]));
             
             cache.exhibits.forEach(e => { 
@@ -330,7 +337,7 @@ const performCloudSync = async () => {
             hasUpdates = true;
         }
 
-        if (initData.collections) {
+        if (Array.isArray(initData.collections)) {
              const colServerMap = new Map((initData.collections as Collection[]).map(c => [c.id, c]));
              cache.collections.forEach(c => {
                  if(!colServerMap.has(c.id) && !cache.deletedIds.includes(c.id)) colServerMap.set(c.id, c);
@@ -340,7 +347,7 @@ const performCloudSync = async () => {
              hasUpdates = true;
         }
 
-        if (initData.wishlist) {
+        if (Array.isArray(initData.wishlist)) {
             const wlMap = new Map((initData.wishlist as WishlistItem[]).map(w => [w.id, w]));
             cache.wishlist.forEach(w => {
                 if (!wlMap.has(w.id) && !cache.deletedIds.includes(w.id)) wlMap.set(w.id, w);
@@ -350,10 +357,10 @@ const performCloudSync = async () => {
             hasUpdates = true;
         }
 
-        if (initData.guestbook) { cache.guestbook = initData.guestbook; hasUpdates = true; }
+        if (Array.isArray(initData.guestbook)) { cache.guestbook = initData.guestbook; hasUpdates = true; }
 
         // Sync Trade Requests (Mock for now, would be API in real implementation)
-        if (initData.tradeRequests) { cache.tradeRequests = initData.tradeRequests; hasUpdates = true; }
+        if (Array.isArray(initData.tradeRequests)) { cache.tradeRequests = initData.tradeRequests; hasUpdates = true; }
 
         if (hasUpdates) {
             await saveToLocalCache();

@@ -55,6 +55,7 @@ const getEmbedUrl = (url: string) => {
 };
 
 const renderTextWithMentions = (text: string, onUserClick: (u: string) => void) => {
+    if (!text) return "";
     const parts = text.split(/(@\w+)/g);
     return parts.map((part, i) => {
         if (part.startsWith('@')) {
