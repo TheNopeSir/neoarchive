@@ -403,8 +403,6 @@ export default function App() {
                             if (item) navigateTo('EXHIBIT', { item, highlightCommentId: commentId });
                         }}
                         onChatClick={(u) => navigateTo('DIRECT_CHAT', { username: u })}
-                        // Pass full exhibits array to render trade thumbnails
-                        // ActivityView will filter finding item by ID
                     />
                 </div>
             )}
@@ -791,7 +789,7 @@ export default function App() {
                         ))}
                     </div>
 
-                    {/* Feed Grid - Updated density for desktop */}
+                    {/* Feed Grid - Updated density for desktop and 2 columns for mobile */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-6">
                         {exhibits
                             .filter(e => !e.isDraft && (selectedCategory === 'ВСЕ' || e.category === selectedCategory))
