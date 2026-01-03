@@ -18,6 +18,9 @@ const GuildDetailView: React.FC<GuildDetailViewProps> = ({
     const isLeader = guild.leader === currentUser.username;
     const isWinamp = theme === 'winamp';
     const [inviteCopied, setInviteCopied] = useState(false);
+    
+    // Safeguard members array
+    const members = guild.members || [];
 
     const handleCopyInvite = () => {
         const code = guild.inviteCode || 'ERROR';
@@ -73,7 +76,7 @@ const GuildDetailView: React.FC<GuildDetailViewProps> = ({
                         <h1 className={`text-2xl md:text-3xl font-pixel font-bold mb-2 ${isWinamp ? 'text-[#00ff00]' : 'text-white'}`}>{guild.name}</h1>
                         <p className="opacity-60 text-sm font-mono max-w-xl">{guild.description}</p>
                         <div className="flex items-center justify-center md:justify-start gap-4 mt-4 text-xs font-mono opacity-50">
-                            <span className="flex items-center gap-1"><Users size={14}/> {guild.members.length} Участников</span>
+                            <span className="flex items-center gap-1"><Users size={14}/> {members.length} Участников</span>
                             <span className="flex items-center gap-1"><Shield size={14}/> Лидер: {guild.leader}</span>
                         </div>
                     </div>
@@ -113,7 +116,7 @@ const GuildDetailView: React.FC<GuildDetailViewProps> = ({
                     <div className={`p-6 rounded-2xl border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-white/5 border-white/10'}`}>
                         <h3 className="font-pixel text-sm mb-4 flex items-center gap-2"><Users size={16}/> УЧАСТНИКИ</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {guild.members.map(member => (
+                            {members.map(member => (
                                 <div key={member} className={`flex items-center justify-between p-3 rounded-lg border hover:bg-white/5 cursor-pointer ${isWinamp ? 'border-[#505050]' : 'border-white/5'}`}>
                                     <div className="flex items-center gap-3" onClick={() => onUserClick(member)}>
                                         <img src={getUserAvatar(member)} className="w-8 h-8 rounded-full" />

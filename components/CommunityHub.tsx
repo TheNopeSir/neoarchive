@@ -29,7 +29,7 @@ const WinampWindow = ({ title, children, className = '' }: { title: string, chil
     </div>
 );
 
-const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onExhibitClick, onUserClick, onBack, onGuildClick, currentUser }) => {
+const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users = [], exhibits = [], onExhibitClick, onUserClick, onBack, onGuildClick, currentUser }) => {
     const [tab, setTab] = useState<'TRENDS' | 'TRADE' | 'GUILDS'>('TRENDS');
     const [showCreateGuild, setShowCreateGuild] = useState(false);
     const [newGuildName, setNewGuildName] = useState('');
@@ -40,7 +40,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
     const avatarInputRef = useRef<HTMLInputElement>(null);
     
     const isWinamp = theme === 'winamp';
-    const activeGuilds = getFullDatabase().guilds;
+    const activeGuilds = getFullDatabase().guilds || [];
 
     // --- ALGORITHMS ---
     const topUsers = users
@@ -71,7 +71,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
             id: crypto.randomUUID(),
             name: newGuildName,
             description: newGuildDesc,
-            leader: currentUser.username, // FIXED: Use actual current user
+            leader: currentUser.username, 
             members: [currentUser.username],
             isPrivate: false,
             rules: newGuildRules,
@@ -255,7 +255,7 @@ const CommunityHub: React.FC<CommunityHubProps> = ({ theme, users, exhibits, onE
                                                         {guild.name}
                                                         {guild.isPrivate && <Lock size={12} className="opacity-50"/>}
                                                     </h3>
-                                                    <p className="text-[10px] opacity-60 font-mono">{guild.members.length} Участников • Лидер: {guild.leader}</p>
+                                                    <p className="text-[10px] opacity-60 font-mono">{(guild.members?.length || 0)} Участников • Лидер: {guild.leader}</p>
                                                 </div>
                                             </div>
                                             <button 

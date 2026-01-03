@@ -16,6 +16,8 @@ interface CollectionCardProps {
 const CollectionCard: React.FC<CollectionCardProps> = ({ col, theme, onClick, onShare, isLiked, onLike }) => {
     const isXP = theme === 'xp';
     const isWinamp = theme === 'winamp';
+    // Safeguard for exhibitIds being undefined
+    const itemCount = col.exhibitIds?.length || 0;
 
     return (
       <div 
@@ -90,7 +92,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ col, theme, onClick, on
                           )}
                           <div className={`w-[1px] h-4 ${isXP ? 'bg-black/20' : 'bg-white/20'}`} />
                           <div className={`px-2 py-1 rounded-lg text-[10px] font-bold backdrop-blur-sm ${isXP ? 'bg-blue-600 text-white' : isWinamp ? 'bg-[#00ff00] text-black' : 'bg-white/10 text-white'}`}>
-                              {col.exhibitIds.length}
+                              {itemCount}
                           </div>
                       </div>
                   </div>
