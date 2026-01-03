@@ -65,7 +65,7 @@ export interface Collection {
   likedBy: string[];
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION' | 'TRADE_OFFER' | 'TRADE_ACCEPTED';
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION';
 
 export interface Notification {
   id: string;
@@ -87,14 +87,6 @@ export interface Message {
     text: string;
     timestamp: string;
     isRead: boolean;
-}
-
-export interface GuildMessage {
-    id: string;
-    guildId: string;
-    author: string;
-    text: string;
-    timestamp: string;
 }
 
 export interface GuestbookEntry {
@@ -164,17 +156,6 @@ export interface Duel {
     winner?: string;
     status: 'PENDING' | 'ACTIVE' | 'FINISHED';
     logs: string[];
-}
-
-export interface TradeRequest {
-    id: string;
-    sender: string;
-    receiver: string;
-    offeredItems: string[]; // IDs of items sender gives
-    requestedItems: string[]; // IDs of items sender wants
-    status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
-    timestamp: string;
-    message?: string;
 }
 
 export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'USER_WISHLIST' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_WISHLIST' | 'EDIT_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'SOCIAL_LIST' | 'WISHLIST_DETAIL' | 'COMMUNITY_HUB' | 'MY_COLLECTION' | 'GUILD_DETAIL';
