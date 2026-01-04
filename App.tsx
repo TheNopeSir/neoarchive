@@ -82,16 +82,7 @@ export default function App() {
   const [guestbookInput, setGuestbookInput] = useState('');
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
-  // --- DERIVED DATA FOR HERO & STORIES ---
-  const heroData = useMemo(() => {
-      const topItems = exhibits.filter(e => !e.isDraft && (getArtifactTier(e) === 'LEGENDARY' || getArtifactTier(e) === 'EPIC'));
-      // Pseudo-random selection based on hour to keep it stable for a bit
-      const hour = new Date().getHours();
-      const findOfTheDay = topItems.length > 0 ? topItems[hour % topItems.length] : exhibits[0];
-      const totalLikes = exhibits.reduce((acc, curr) => acc + curr.likes, 0);
-      return { findOfTheDay, totalStats: { items: exhibits.length, likes: totalLikes, users: db.getFullDatabase().users.length } };
-  }, [exhibits]);
-
+  // --- STORIES ---
   const stories = useMemo(() => {
       if (!user) return [];
       const following = user.following || [];
@@ -426,7 +417,6 @@ export default function App() {
                 <FeedView 
                     theme={theme}
                     user={user}
-                    heroData={heroData}
                     stories={stories}
                     exhibits={exhibits}
                     wishlist={wishlist}

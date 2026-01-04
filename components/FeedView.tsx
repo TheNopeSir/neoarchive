@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   LayoutGrid, List as ListIcon, Search, Camera, Heart, 
-  Sparkles, Zap, Radar, X
+  Zap, Radar, X
 } from 'lucide-react';
 import { UserProfile, Exhibit, WishlistItem } from '../types';
 import { DefaultCategory } from '../constants';
@@ -12,7 +12,6 @@ import WishlistCard from './WishlistCard';
 interface FeedViewProps {
   theme: 'dark' | 'light' | 'xp' | 'winamp';
   user: UserProfile;
-  heroData: { findOfTheDay?: Exhibit; totalStats: { items: number; likes: number; users?: number } };
   stories: { username: string; avatar: string; latestItem?: Exhibit }[];
   exhibits: Exhibit[];
   wishlist: WishlistItem[];
@@ -36,7 +35,6 @@ interface FeedViewProps {
 const FeedView: React.FC<FeedViewProps> = ({
   theme,
   user,
-  heroData,
   stories,
   exhibits,
   wishlist,
@@ -67,57 +65,9 @@ const FeedView: React.FC<FeedViewProps> = ({
             </div>
         </header>
 
-        {/* 2. HERO SECTION (Refined for Desktop) */}
-        {feedMode === 'ARTIFACTS' && heroData.findOfTheDay && (
-            <div className="px-4">
-                <div 
-                    className={`relative w-full max-w-5xl mx-auto aspect-[2/1] md:aspect-[21/9] rounded-3xl overflow-hidden cursor-pointer group shadow-2xl transition-all duration-500 ${isWinamp ? 'border-2 border-[#505050] rounded-none' : 'hover:shadow-[0_0_40px_rgba(0,255,0,0.1)]'}`} 
-                    onClick={() => onExhibitClick(heroData.findOfTheDay!)}
-                >
-                    {/* Image */}
-                    <div className="absolute inset-0">
-                        <img 
-                            src={heroData.findOfTheDay.imageUrls[0]} 
-                            className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" 
-                        />
-                        <div className={`absolute inset-0 bg-gradient-to-t ${theme === 'light' ? 'from-white/90 via-white/20 to-transparent' : 'from-black/95 via-black/30 to-transparent'}`} />
-                        {/* Desktop Side Gradient for text readability */}
-                        <div className="hidden md:block absolute inset-0 bg-gradient-to-r from-black/80 via-transparent to-transparent" />
-                    </div>
-
-                    {/* Badge */}
-                    <div className="absolute top-4 left-4 z-10">
-                        <div className={`px-3 py-1.5 backdrop-blur-md rounded-full flex items-center gap-2 text-[10px] font-pixel font-bold uppercase shadow-lg border ${isWinamp ? 'bg-black border-[#00ff00] text-[#00ff00]' : 'bg-yellow-500/90 border-yellow-400 text-black'}`}>
-                            <Sparkles size={12} /> НАХОДКА ДНЯ
-                        </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="absolute bottom-0 left-0 w-full md:w-2/3 p-6 md:p-10 flex flex-col gap-3 md:gap-4 z-10">
-                        <h2 className={`text-2xl md:text-5xl font-pixel font-black leading-tight line-clamp-2 md:line-clamp-1 ${theme === 'light' ? 'text-gray-900 md:text-white' : 'text-white'}`}>
-                            {heroData.findOfTheDay.title}
-                        </h2>
-                        
-                        <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full border border-white/10 hover:bg-white/10 transition-colors" onClick={(e) => { e.stopPropagation(); onUserClick(heroData.findOfTheDay!.owner); }}>
-                                <img 
-                                    src={db.getUserAvatar(heroData.findOfTheDay.owner)} 
-                                    className="w-6 h-6 rounded-full object-cover border border-white/30" 
-                                />
-                                <span className="text-xs font-mono font-bold text-white">@{heroData.findOfTheDay.owner}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full border border-white/10 text-xs font-mono text-white">
-                                <Heart size={12} className="fill-current text-green-500"/> {heroData.findOfTheDay.likes}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* 3. STORIES */}
+        {/* 2. STORIES */}
         {stories.length > 0 && (
-            <div className="pl-4 max-w-5xl mx-auto w-full">
+            <div className="pl-4 max-w-5xl mx-auto w-full pt-2">
                 <h3 className="font-pixel text-[10px] opacity-50 mb-3 flex items-center gap-2 tracking-widest"><Zap size={12} className="text-yellow-500"/> ОБНОВЛЕНИЯ</h3>
                 <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide pr-4">
                     {stories.map((story, i) => (
@@ -134,7 +84,7 @@ const FeedView: React.FC<FeedViewProps> = ({
             </div>
         )}
 
-        {/* 4. CONTROLS */}
+        {/* 3. CONTROLS */}
         <div className={`sticky top-[52px] md:top-[64px] z-20 pt-2 pb-2 px-4 transition-all ${theme === 'dark' ? 'bg-dark-bg/95 backdrop-blur-md' : isWinamp ? 'bg-[#191919] border-b border-[#505050]' : 'bg-light-bg/95 backdrop-blur-md'}`}>
             <div className="max-w-5xl mx-auto w-full">
                 {/* Feed Mode Toggle */}
@@ -212,7 +162,7 @@ const FeedView: React.FC<FeedViewProps> = ({
             </div>
         </div>
 
-        {/* 5. GRID/LIST CONTENT */}
+        {/* 4. GRID/LIST CONTENT */}
         <div className="px-4 max-w-5xl mx-auto w-full">
             {feedMode === 'ARTIFACTS' ? (
                 // ARTIFACTS RENDER
