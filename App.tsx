@@ -928,7 +928,7 @@ export default function App() {
                         {exhibits
                             .filter(e => !e.isDraft)
                             .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
-                            .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
+                            .filter(e => feedType === 'FOR_YOU' ? true : (user?.following?.includes(e.owner) || false))
                             .length === 0 ? (
                                 <div className="text-center py-20 opacity-30 font-mono text-xs border-2 border-dashed border-white/10 rounded-3xl">
                                     НЕТ ДАННЫХ В ПОТОКЕ
@@ -940,7 +940,7 @@ export default function App() {
                                     {exhibits
                                         .filter(e => !e.isDraft)
                                         .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
-                                        .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
+                                        .filter(e => feedType === 'FOR_YOU' ? true : (user?.following?.includes(e.owner) || false))
                                         .map(item => (
                                             feedViewMode === 'GRID' ? (
                                                 <ExhibitCard 
