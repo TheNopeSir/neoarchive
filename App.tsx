@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   LayoutGrid, PlusCircle, Search, Bell, FolderPlus, ArrowLeft, Folder, Plus, Globe,
-  Heart
+  Heart, SkipBack, Play, Square, Pause, User
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -808,28 +808,58 @@ export default function App() {
             {/* BOTTOM NAVIGATION - Mobile Only */}
             {user && (
                 <div className={`md:hidden fixed bottom-0 left-0 w-full z-40 border-t safe-area-pb ${theme === 'winamp' ? 'bg-[#292929] border-[#505050]' : theme === 'dark' ? 'bg-black/90 border-white/10 backdrop-blur-md' : 'bg-white/90 border-black/10 backdrop-blur-md'}`}>
-                    <div className="flex justify-around items-center p-3">
-                        <button onClick={() => navigateTo('FEED')} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}>
-                            {theme === 'winamp' ? <div className="w-4 h-4 bg-[#00ff00] shadow-[0_0_5px_#00ff00]"/> : <LayoutGrid size={20} />}
-                        </button>
-                        <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`flex flex-col items-center gap-1 ${view === 'COMMUNITY_HUB' ? 'text-green-500' : 'opacity-50'}`}>
-                            {theme === 'winamp' ? <div className="w-4 h-4 bg-[#00ff00] shadow-[0_0_5px_#00ff00] opacity-50"/> : <Globe size={20} />}
-                        </button>
-                        <button onClick={() => navigateTo('CREATE_HUB')} className="flex flex-col items-center justify-center -mt-8">
-                            <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 ${theme === 'winamp' ? 'bg-[#292929] border-2 border-wa-gold text-wa-gold shadow-[0_0_10px_#FFD700]' : 'bg-green-500 text-black'}`}>
-                                <Plus size={28} />
-                            </div>
-                        </button>
-                        <button onClick={() => navigateTo('ACTIVITY')} className={`flex flex-col items-center gap-1 relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}>
-                            {theme === 'winamp' ? <div className="w-4 h-4 bg-[#00ff00] shadow-[0_0_5px_#00ff00] opacity-50"/> : <Bell size={20} />}
-                            {notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-0 right-1 w-2 h-2 bg-red-500 rounded-full" />}
-                        </button>
-                        <button onClick={() => navigateTo('USER_PROFILE', { username: user.username })} className={`flex flex-col items-center gap-1 ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'text-green-500' : 'opacity-50'}`}>
-                            <div className={`w-6 h-6 rounded-full overflow-hidden border ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'border-green-500' : 'border-transparent'}`}>
-                                <img src={user.avatarUrl} className="w-full h-full object-cover" />
-                            </div>
-                        </button>
-                    </div>
+                    {theme === 'winamp' ? (
+                        <div className="flex justify-around items-center p-2">
+                            {/* Prev / Feed */}
+                            <button onClick={() => navigateTo('FEED')} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] ${view === 'FEED' ? 'text-wa-green' : 'text-gray-500'}`}>
+                                <SkipBack size={16} fill="currentColor"/>
+                            </button>
+                            
+                            {/* Play / Community */}
+                            <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] ${view === 'COMMUNITY_HUB' ? 'text-wa-green' : 'text-gray-500'}`}>
+                                <Play size={16} fill="currentColor"/>
+                            </button>
+
+                            {/* Create (Thunder) */}
+                            <button onClick={() => navigateTo('CREATE_HUB')} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] ${view.includes('CREATE') ? 'text-wa-gold' : 'text-gray-500'}`}>
+                                <span className="font-winamp text-xl">⚡</span>
+                            </button>
+
+                            {/* Pause / Activity */}
+                            <button onClick={() => navigateTo('ACTIVITY')} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] relative ${view === 'ACTIVITY' ? 'text-wa-green' : 'text-gray-500'}`}>
+                                <Pause size={16} fill="currentColor"/>
+                                {notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full" />}
+                            </button>
+
+                            {/* Eject / Profile */}
+                            <button onClick={() => navigateTo('USER_PROFILE', { username: user.username })} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'text-wa-green' : 'text-gray-500'}`}>
+                                <User size={16} fill="currentColor" />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex justify-around items-center p-3">
+                            <button onClick={() => navigateTo('FEED')} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}>
+                                <LayoutGrid size={20} />
+                            </button>
+                            <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`flex flex-col items-center gap-1 ${view === 'COMMUNITY_HUB' ? 'text-green-500' : 'opacity-50'}`}>
+                                <Globe size={20} />
+                            </button>
+                            <button onClick={() => navigateTo('CREATE_HUB')} className="flex flex-col items-center justify-center -mt-8">
+                                <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 bg-green-500 text-black`}>
+                                    <Plus size={28} />
+                                </div>
+                            </button>
+                            <button onClick={() => navigateTo('ACTIVITY')} className={`flex flex-col items-center gap-1 relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}>
+                                <Bell size={20} />
+                                {notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-0 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+                            </button>
+                            <button onClick={() => navigateTo('USER_PROFILE', { username: user.username })} className={`flex flex-col items-center gap-1 ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'text-green-500' : 'opacity-50'}`}>
+                                <div className={`w-6 h-6 rounded-full overflow-hidden border ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'border-green-500' : 'border-transparent'}`}>
+                                    <img src={user.avatarUrl} className="w-full h-full object-cover" />
+                                </div>
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -861,6 +891,5 @@ export default function App() {
                 </div>
             )}
         </div>
-    </div>
-  );
+    );
 }

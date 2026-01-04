@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  LayoutGrid, List as ListIcon, Search, Camera, Heart, 
-  Zap, Radar, X
+  LayoutGrid, List as ListIcon, Search, Heart, 
+  Zap, Radar
 } from 'lucide-react';
 import { UserProfile, Exhibit, WishlistItem } from '../types';
-import { DefaultCategory } from '../constants';
+import { DefaultCategory, CATEGORY_SUBCATEGORIES } from '../constants';
 import * as db from '../services/storageService';
 import ExhibitCard from './ExhibitCard';
 import WishlistCard from './WishlistCard';
@@ -53,13 +53,37 @@ const FeedView: React.FC<FeedViewProps> = ({
   onWishlistClick
 }) => {
   const isWinamp = theme === 'winamp';
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+
+  // Reset subcategory when main category changes
+  useEffect(() => {
+    setSelectedSubcategory(null);
+  }, [selectedCategory]);
+
+  // Filter items logic including subcategory
+  const filterItems = (items: Exhibit[]) => {
+      return items
+        .filter(e => !e.isDraft)
+        .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
+        .filter(e => !selectedSubcategory || e.subcategory === selectedSubcategory)
+        .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner));
+  };
+
+  const filterWishlist = (items: WishlistItem[]) => {
+      return items
+        .filter(w => selectedCategory === 'ВСЕ' || w.category === selectedCategory)
+        .filter(w => feedType === 'FOR_YOU' ? true : user.following.includes(w.owner));
+  };
+
+  const filteredExhibits = filterItems(exhibits);
+  const filteredWishlist = filterWishlist(wishlist);
 
   return (
     <div className="pb-24 space-y-6 animate-in fade-in">
         
-        {/* 1. MOBILE HEADER (Clean, No Notifications) */}
-        <header className="md:hidden flex justify-between items-center px-4 pt-4 sticky top-0 z-30 backdrop-blur-xl bg-transparent">
-            <div className="flex items-center gap-2" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
+        {/* 1. MOBILE HEADER (Static, Clean) */}
+        <header className="md:hidden flex justify-between items-center px-4 pt-4 bg-transparent">
+            <div className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-black font-pixel text-xs ${isWinamp ? 'bg-[#292929] text-[#00ff00] border border-[#505050]' : 'bg-green-500'}`}>NA</div>
                 <h1 className={`text-lg font-pixel font-bold tracking-tighter ${isWinamp ? 'text-[#00ff00]' : 'text-current'}`}>NeoArchive</h1>
             </div>
@@ -84,8 +108,8 @@ const FeedView: React.FC<FeedViewProps> = ({
             </div>
         )}
 
-        {/* 3. CONTROLS */}
-        <div className={`sticky top-[52px] md:top-[64px] z-20 pt-2 pb-2 px-4 transition-all ${theme === 'dark' ? 'bg-dark-bg/95 backdrop-blur-md' : isWinamp ? 'bg-[#191919] border-b border-[#505050]' : 'bg-light-bg/95 backdrop-blur-md'}`}>
+        {/* 3. CONTROLS (Static) */}
+        <div className={`pt-2 pb-2 px-4 transition-all ${theme === 'dark' ? '' : isWinamp ? 'bg-[#191919] border-b border-[#505050]' : ''}`}>
             <div className="max-w-5xl mx-auto w-full">
                 {/* Feed Mode Toggle */}
                 <div className={`flex mb-4 p-1 rounded-xl border ${isWinamp ? 'bg-[#292929] border-[#505050]' : theme === 'dark' ? 'bg-white/5 border-white/5' : 'bg-black/5 border-black/5'}`}>
@@ -103,7 +127,7 @@ const FeedView: React.FC<FeedViewProps> = ({
                     </button>
                 </div>
 
-                {/* Search Trigger */}
+                {/* Search Trigger - No Camera Icon */}
                 <div className="mb-4">
                     <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl border transition-all ${isWinamp ? 'bg-black border-[#00ff00]' : theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-white border-black/10 shadow-sm'}`}>
                         <Search size={16} className="opacity-50" />
@@ -114,7 +138,6 @@ const FeedView: React.FC<FeedViewProps> = ({
                             onFocus={() => onNavigate('SEARCH')} 
                             readOnly
                         />
-                        <Camera size={16} className="opacity-50 cursor-pointer hover:opacity-100" onClick={(e) => { e.stopPropagation(); onNavigate(feedMode === 'WISHLIST' ? 'CREATE_WISHLIST' : 'CREATE_ARTIFACT'); }} />
                     </div>
                 </div>
 
@@ -125,13 +148,13 @@ const FeedView: React.FC<FeedViewProps> = ({
                             onClick={() => setFeedType('FOR_YOU')} 
                             className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${feedType === 'FOR_YOU' ? (isWinamp ? 'bg-[#00ff00] text-black' : 'bg-green-500 text-black shadow') : 'opacity-50 hover:opacity-100'}`}
                         >
-                            FOR YOU
+                            РЕКОМЕНДАЦИИ
                         </button>
                         <button 
                             onClick={() => setFeedType('FOLLOWING')} 
                             className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${feedType === 'FOLLOWING' ? (isWinamp ? 'bg-[#00ff00] text-black' : 'bg-green-500 text-black shadow') : 'opacity-50 hover:opacity-100'}`}
                         >
-                            FOLLOWING
+                            ПОДПИСКИ
                         </button>
                     </div>
 
@@ -142,22 +165,45 @@ const FeedView: React.FC<FeedViewProps> = ({
                 </div>
 
                 {/* Categories */}
-                <div className="flex gap-2 overflow-x-auto pt-4 pb-1 scrollbar-hide">
-                    <button 
-                        onClick={() => setSelectedCategory('ВСЕ')}
-                        className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? 'bg-white text-black border-white' : 'border-current opacity-40 hover:opacity-100'}`}
-                    >
-                        ALL
-                    </button>
-                    {Object.values(DefaultCategory).map(cat => (
+                <div className="space-y-2 pt-4">
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                         <button 
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (isWinamp ? 'bg-[#00ff00] text-black border-[#00ff00]' : 'bg-green-500 text-black border-green-500') : 'border-white/10 opacity-60 hover:opacity-100'}`}
+                            onClick={() => setSelectedCategory('ВСЕ')}
+                            className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? 'bg-white text-black border-white' : 'border-current opacity-40 hover:opacity-100'}`}
                         >
-                            {cat}
+                            ВСЕ
                         </button>
-                    ))}
+                        {Object.values(DefaultCategory).map(cat => (
+                            <button 
+                                key={cat}
+                                onClick={() => setSelectedCategory(cat)}
+                                className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (isWinamp ? 'bg-[#00ff00] text-black border-[#00ff00]' : 'bg-green-500 text-black border-green-500') : 'border-white/10 opacity-60 hover:opacity-100'}`}
+                            >
+                                {cat}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Subcategories */}
+                    {selectedCategory !== 'ВСЕ' && CATEGORY_SUBCATEGORIES[selectedCategory] && (
+                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide animate-in slide-in-from-top-2">
+                            <button
+                                onClick={() => setSelectedSubcategory(null)}
+                                className={`px-3 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap border transition-all ${!selectedSubcategory ? (isWinamp ? 'bg-[#00ff00]/20 text-[#00ff00] border-[#00ff00]' : 'bg-white/10 border-white') : 'border-transparent opacity-50'}`}
+                            >
+                                ВСЕ {selectedCategory}
+                            </button>
+                            {CATEGORY_SUBCATEGORIES[selectedCategory].map(sub => (
+                                <button
+                                    key={sub}
+                                    onClick={() => setSelectedSubcategory(sub)}
+                                    className={`px-3 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap border transition-all ${selectedSubcategory === sub ? (isWinamp ? 'bg-[#00ff00]/20 text-[#00ff00] border-[#00ff00]' : 'bg-white/10 border-white') : 'border-transparent opacity-50'}`}
+                                >
+                                    {sub}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -166,11 +212,7 @@ const FeedView: React.FC<FeedViewProps> = ({
         <div className="px-4 max-w-5xl mx-auto w-full">
             {feedMode === 'ARTIFACTS' ? (
                 // ARTIFACTS RENDER
-                exhibits
-                    .filter(e => !e.isDraft)
-                    .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
-                    .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
-                    .length === 0 ? (
+                filteredExhibits.length === 0 ? (
                         <div className="text-center py-20 opacity-30 font-mono text-xs border-2 border-dashed border-white/10 rounded-3xl">
                             НЕТ ДАННЫХ В ПОТОКЕ
                             <br/>
@@ -178,11 +220,7 @@ const FeedView: React.FC<FeedViewProps> = ({
                         </div>
                     ) : (
                         <div className={`grid gap-4 ${feedViewMode === 'GRID' ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1'}`}>
-                            {exhibits
-                                .filter(e => !e.isDraft)
-                                .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
-                                .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
-                                .map(item => (
+                            {filteredExhibits.map(item => (
                                     feedViewMode === 'GRID' ? (
                                         <ExhibitCard 
                                             key={item.id} 
@@ -227,19 +265,13 @@ const FeedView: React.FC<FeedViewProps> = ({
                     )
             ) : (
                 // WISHLIST RENDER
-                wishlist
-                    .filter(w => selectedCategory === 'ВСЕ' || w.category === selectedCategory)
-                    .filter(w => feedType === 'FOR_YOU' ? true : user.following.includes(w.owner))
-                    .length === 0 ? (
+                filteredWishlist.length === 0 ? (
                         <div className="text-center py-20 opacity-30 font-mono text-xs border-2 border-dashed border-white/10 rounded-3xl">
                             ВИШЛИСТ ПУСТ
                         </div>
                     ) : (
                         <div className={`grid gap-4 ${feedViewMode === 'GRID' ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4' : 'grid-cols-1'}`}>
-                            {wishlist
-                                .filter(w => selectedCategory === 'ВСЕ' || w.category === selectedCategory)
-                                .filter(w => feedType === 'FOR_YOU' ? true : user.following.includes(w.owner))
-                                .map(item => (
+                            {filteredWishlist.map(item => (
                                     <WishlistCard 
                                         key={item.id}
                                         item={item}
