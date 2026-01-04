@@ -1,5 +1,5 @@
 
-import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem, Guild, Duel, TradeRequest } from '../types';
+import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem, Guild, Duel, TradeRequest, TradeRequestStatus, TradeType, NotificationType } from '../types';
 
 // Internal Cache (In-Memory)
 let cache = {
@@ -21,9 +21,9 @@ let cache = {
 
 const DB_NAME = 'NeoArchiveDB';
 const STORE_NAME = 'client_cache';
-const CACHE_KEY = 'neo_archive_v5_5'; // Bumped version for new schema
+const CACHE_KEY = 'neo_archive_v5_6'; 
 const SESSION_USER_KEY = 'neo_active_user';
-const CACHE_VERSION = '5.5.0-TradeSystem'; 
+const CACHE_VERSION = '5.6.0-FullTrade'; 
 
 let isOfflineMode = false;
 let liveUpdateInterval: any = null; // Timer for polling
@@ -85,7 +85,7 @@ export const isOffline = () => isOfflineMode;
 
 export const getUserAvatar = (username: string): string => {
     if (!username) return 'https://ui-avatars.com/api/?name=NA&background=000&color=fff';
-    const safeUsername = String(username); // Force string to avoid length on undefined
+    const safeUsername = String(username); 
     
     const user = cache.users.find(u => u.username === safeUsername);
     if (user?.avatarUrl && !user.avatarUrl.includes('ui-avatars.com')) return user.avatarUrl;
@@ -113,7 +113,6 @@ const loadFromCache = async (): Promise<boolean> => {
         if (stored && (stored.version === CACHE_VERSION || stored.data)) {
             const data = stored.data || stored;
             
-            // CRITICAL: Ensure arrays are initialized if missing in storage
             data.exhibits = Array.isArray(data.exhibits) ? data.exhibits : [];
             data.collections = Array.isArray(data.collections) ? data.collections : [];
             data.notifications = Array.isArray(data.notifications) ? data.notifications : [];
@@ -195,14 +194,13 @@ export const loadFeedBatch = async (page: number, limit: number = 10): Promise<E
     }
 };
 
-// --- SINGLE ITEM FETCHERS ---
 export const fetchExhibitById = async (id: string): Promise<Exhibit | null> => {
     const cached = cache.exhibits.find(e => e.id === id);
     if (cached) return cached;
     try {
         const item: Exhibit = await apiCall(`/exhibits/${id}`);
         if (item) {
-            cache.exhibits.unshift(item); // Add to cache for subsequent use
+            cache.exhibits.unshift(item); 
             await saveToLocalCache();
             return item;
         }
@@ -224,19 +222,13 @@ export const fetchCollectionById = async (id: string): Promise<Collection | null
     return null;
 };
 
-// --- REALTIME UPDATES LOGIC ---
 export const startLiveUpdates = () => {
-    if (liveUpdateInterval) return; // Already running
+    if (liveUpdateInterval) return; 
 
     console.log("📡 [System] Starting live feed updates...");
     
-    // Poll every 8 seconds
     liveUpdateInterval = setInterval(async () => {
-        // Do not block polling even if isOfflineMode was set once. Retry connectivity.
-        // if (isOfflineMode) return; 
-
         try {
-            // 1. Check for new exhibits (Page 1)
             const latestItems: Exhibit[] = await apiCall(`/feed?page=1&limit=10`);
             let hasUpdates = false;
             
@@ -253,7 +245,6 @@ export const startLiveUpdates = () => {
                 }
             }
 
-            // 2. Check for notifications if user is active
             const activeUser = localStorage.getItem(SESSION_USER_KEY);
             if (activeUser) {
                 try {
@@ -269,20 +260,17 @@ export const startLiveUpdates = () => {
                             hasUpdates = true;
                         }
                     }
-                } catch(e) { /* ignore auth errors during poll */ }
+                } catch(e) { }
             }
 
             if (hasUpdates) {
                 await saveToLocalCache();
                 notifyListeners(); 
             }
-            
-            // If we succeeded, clear offline flag
             isOfflineMode = false;
 
         } catch (e) {
             console.warn("[LiveSync] Pulse skipped (Network issue?)");
-            // Do not aggressively set offline mode here to allow retries
         }
     }, 8000); 
 };
@@ -320,28 +308,15 @@ const performCloudSync = async () => {
         
         if (Array.isArray(initData.exhibits)) {
             const serverMap = new Map((initData.exhibits as Exhibit[]).map(e => [e.id, e]));
-            
-            cache.exhibits.forEach(e => { 
-                if(!serverMap.has(e.id) && !cache.deletedIds.includes(e.id)) {
-                    serverMap.set(e.id, e); 
-                }
-            });
-
-            cache.deletedIds.forEach(id => {
-                if(serverMap.has(id)) serverMap.delete(id);
-            });
-
-            cache.exhibits = Array.from(serverMap.values()).sort((a,b) => {
-                return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-            });
+            cache.exhibits.forEach(e => { if(!serverMap.has(e.id) && !cache.deletedIds.includes(e.id)) serverMap.set(e.id, e); });
+            cache.deletedIds.forEach(id => { if(serverMap.has(id)) serverMap.delete(id); });
+            cache.exhibits = Array.from(serverMap.values()).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             hasUpdates = true;
         }
 
         if (Array.isArray(initData.collections)) {
              const colServerMap = new Map((initData.collections as Collection[]).map(c => [c.id, c]));
-             cache.collections.forEach(c => {
-                 if(!colServerMap.has(c.id) && !cache.deletedIds.includes(c.id)) colServerMap.set(c.id, c);
-             });
+             cache.collections.forEach(c => { if(!colServerMap.has(c.id) && !cache.deletedIds.includes(c.id)) colServerMap.set(c.id, c); });
              cache.deletedIds.forEach(id => { if(colServerMap.has(id)) colServerMap.delete(id); });
              cache.collections = Array.from(colServerMap.values());
              hasUpdates = true;
@@ -349,17 +324,13 @@ const performCloudSync = async () => {
 
         if (Array.isArray(initData.wishlist)) {
             const wlMap = new Map((initData.wishlist as WishlistItem[]).map(w => [w.id, w]));
-            cache.wishlist.forEach(w => {
-                if (!wlMap.has(w.id) && !cache.deletedIds.includes(w.id)) wlMap.set(w.id, w);
-            });
+            cache.wishlist.forEach(w => { if (!wlMap.has(w.id) && !cache.deletedIds.includes(w.id)) wlMap.set(w.id, w); });
             cache.deletedIds.forEach(id => { if(wlMap.has(id)) wlMap.delete(id); });
             cache.wishlist = Array.from(wlMap.values());
             hasUpdates = true;
         }
 
         if (Array.isArray(initData.guestbook)) { cache.guestbook = initData.guestbook; hasUpdates = true; }
-
-        // Sync Trade Requests (Mock for now, would be API in real implementation)
         if (Array.isArray(initData.tradeRequests)) { cache.tradeRequests = initData.tradeRequests; hasUpdates = true; }
 
         if (hasUpdates) {
@@ -369,7 +340,6 @@ const performCloudSync = async () => {
         isOfflineMode = false;
     } catch (e) {
         console.warn("Sync slow or failed, trying to stay active for retries.");
-        // Do NOT set isOfflineMode = true immediately to avoid death spiral on initial load timeout
     }
 };
 
@@ -379,7 +349,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     
     if (cache.exhibits.length === 0 && cache.collections.length === 0) {
         console.log("Cache empty, awaiting initial sync...");
-        // Increase timeout to 5s to give slow mobile networks a chance
         await Promise.race([performCloudSync(), new Promise(resolve => setTimeout(resolve, 5000))]);
     } else {
         performCloudSync();
@@ -399,7 +368,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
 export const forceSync = performCloudSync;
 export const getFullDatabase = () => ({ ...cache });
 
-// --- UTILS ---
 const checkAndAddHelloAchievement = async (user: UserProfile) => {
     if (!user.achievements) user.achievements = [];
     const hasHello = user.achievements.some(a => a.id === 'HELLO_WORLD');
@@ -561,7 +529,6 @@ export const markNotificationsRead = async (username: string) => {
         if (n.recipient === username && !n.isRead) {
             n.isRead = true;
             hasUpdates = true;
-            // Optimistic update, no strict sync per item to avoid spamming
             syncItem('/notifications', n);
         }
     });
@@ -575,98 +542,41 @@ export const saveGuestbookEntry = async (e: GuestbookEntry) => { cache.guestbook
 export const updateGuestbookEntry = async (e: GuestbookEntry) => { const idx = cache.guestbook.findIndex(g => g.id === e.id); if (idx !== -1) cache.guestbook[idx] = e; await saveToLocalCache(); notifyListeners(); await syncItem('/guestbook', e); };
 export const deleteGuestbookEntry = async (id: string) => { cache.guestbook = cache.guestbook.filter(g => g.id !== id); await saveToLocalCache(); notifyListeners(); apiCall(`/guestbook/${id}`, 'DELETE').catch(()=>{}); };
 
-// -- GUILDS LOGIC --
 export const createGuild = async (guild: Guild) => {
     guild.inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     cache.guilds.push(guild);
-    
-    // Update leader's profile
     const leader = cache.users.find(u => u.username === guild.leader);
-    if(leader) { 
-        leader.guildId = guild.id; 
-        updateUserProfile(leader); 
-    }
-    
-    await saveToLocalCache();
-    notifyListeners();
+    if(leader) { leader.guildId = guild.id; updateUserProfile(leader); }
+    await saveToLocalCache(); notifyListeners();
 };
-
-export const updateGuild = async (guild: Guild) => {
-    const idx = cache.guilds.findIndex(g => g.id === guild.id);
-    if (idx !== -1) {
-        cache.guilds[idx] = guild;
-        await saveToLocalCache();
-        notifyListeners();
-    }
-};
-
+export const updateGuild = async (guild: Guild) => { const idx = cache.guilds.findIndex(g => g.id === guild.id); if (idx !== -1) { cache.guilds[idx] = guild; await saveToLocalCache(); notifyListeners(); } };
 export const deleteGuild = async (guildId: string) => {
     const guild = cache.guilds.find(g => g.id === guildId);
     if (!guild) return;
-
-    // Remove guildId from all members
-    guild.members.forEach(username => {
-        const u = cache.users.find(user => user.username === username);
-        if (u) {
-            u.guildId = undefined;
-            updateUserProfile(u);
-        }
-    });
-
-    cache.guilds = cache.guilds.filter(g => g.id !== guildId);
-    await saveToLocalCache();
-    notifyListeners();
+    guild.members.forEach(username => { const u = cache.users.find(user => user.username === username); if (u) { u.guildId = undefined; updateUserProfile(u); } });
+    cache.guilds = cache.guilds.filter(g => g.id !== guildId); await saveToLocalCache(); notifyListeners();
 };
-
 export const joinGuild = async (guildIdOrCode: string, username: string) => {
     let g = cache.guilds.find(g => g.id === guildIdOrCode || g.inviteCode === guildIdOrCode);
-    
     if (!g) return false;
-
     const u = cache.users.find(u => u.username === username);
     if (g && u && !g.members.includes(username)) {
-        // If user is already in another guild, they leave it first (optional logic, but cleaner)
-        if (u.guildId && u.guildId !== g.id) {
-            await leaveGuild(u.guildId, username);
-        }
-
-        g.members.push(username);
-        u.guildId = g.id;
-        await updateUserProfile(u);
-        await updateGuild(g);
-        return true;
-    }
-    return false;
+        if (u.guildId && u.guildId !== g.id) await leaveGuild(u.guildId, username);
+        g.members.push(username); u.guildId = g.id; await updateUserProfile(u); await updateGuild(g); return true;
+    } return false;
 };
-
 export const leaveGuild = async (guildId: string, username: string) => {
     const g = cache.guilds.find(g => g.id === guildId);
     const u = cache.users.find(u => u.username === username);
-    
     if (g && u) {
-        // Leader cannot simply leave, they must delete the guild (simplified logic)
-        if (g.leader === username) {
-            return false; 
-        }
-
-        g.members = g.members.filter(m => m !== username);
-        u.guildId = undefined;
-        await updateUserProfile(u);
-        await updateGuild(g);
-        return true;
-    }
-    return false;
+        if (g.leader === username) return false; 
+        g.members = g.members.filter(m => m !== username); u.guildId = undefined; await updateUserProfile(u); await updateGuild(g); return true;
+    } return false;
 };
-
 export const kickFromGuild = async (guildId: string, targetUsername: string) => {
     const g = cache.guilds.find(g => g.id === guildId);
     const u = cache.users.find(u => u.username === targetUsername);
-    if (g && u) {
-        g.members = g.members.filter(m => m !== targetUsername);
-        u.guildId = undefined;
-        await updateUserProfile(u);
-        await updateGuild(g);
-    }
+    if (g && u) { g.members = g.members.filter(m => m !== targetUsername); u.guildId = undefined; await updateUserProfile(u); await updateGuild(g); }
 };
 
 export const logoutUser = () => { localStorage.removeItem(SESSION_USER_KEY); notifyListeners(); };
@@ -696,129 +606,244 @@ export const fileToBase64 = async (file: File): Promise<string> => {
 
 export const getStorageEstimate = async () => { if (navigator.storage?.estimate) return await navigator.storage.estimate(); return null; };
 
-// --- TRADE SYSTEM ---
+// --- TRADE SYSTEM V2 ---
 
-// Simulate sending a trade request (In production this would call the API)
-export const sendTradeRequest = async (targetUserOrData: string | any, offerDetails: string = 'Standard Trade Offer') => {
-    let targetUser = '';
-    let details = '';
-    let offeredIds: string[] = [];
-    let targetItemId = '';
+const notifyTrade = (req: TradeRequest, type: NotificationType, text: string) => {
+    const targetUser = req.status === 'PENDING' ? req.recipient : req.sender;
+    // If completed/accepted, logic might differ but let's assume we notify the "other" party
+    // For specific events, we define who gets notified below
+    const notif: Notification = {
+        id: crypto.randomUUID(),
+        type,
+        actor: type === 'TRADE_OFFER' ? req.sender : req.recipient, // Rough approximation
+        recipient: '', // Filled in specific calls
+        targetId: req.id,
+        targetPreview: text,
+        timestamp: new Date().toLocaleString(),
+        isRead: false
+    };
+    return notif;
+};
 
-    if (typeof targetUserOrData === 'object' && targetUserOrData !== null) {
-        targetUser = targetUserOrData.recipient;
-        details = 'New Trade Proposal';
-        offeredIds = targetUserOrData.offeredItemIds || [];
-        targetItemId = targetUserOrData.targetItemId || '';
-    } else {
-        // Fallback for older calls if any
-        targetUser = String(targetUserOrData);
-        details = offerDetails;
-    }
-
+// 1. Create Trade
+export const sendTradeRequest = async (payload: { recipient: string, senderItems: string[], recipientItems: string[], type: TradeType, message: string }) => {
     const sender = localStorage.getItem(SESSION_USER_KEY);
-    if (!sender || !targetUser) return;
+    if (!sender) return;
 
-    // Create the Trade Request Object
     const request: TradeRequest = {
         id: crypto.randomUUID(),
         sender,
-        recipient: targetUser,
-        offeredItemIds: offeredIds,
-        targetItemId: targetItemId,
+        recipient: payload.recipient,
+        senderItems: payload.senderItems,
+        recipientItems: payload.recipientItems,
+        type: payload.type,
         status: 'PENDING',
-        timestamp: new Date().toISOString()
+        messages: [{ author: sender, text: payload.message, timestamp: new Date().toISOString() }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
     };
 
     cache.tradeRequests.push(request);
     await saveToLocalCache();
 
-    // Create a Notification for the recipient
-    const notification: Notification = {
-        id: crypto.randomUUID(),
-        type: 'TRADE_OFFER',
-        actor: sender,
-        recipient: targetUser,
-        targetId: request.id, // Link to trade request ID
-        targetPreview: 'Новое предложение обмена',
-        timestamp: new Date().toLocaleString(),
-        isRead: false
-    };
-    cache.notifications.unshift(notification);
+    // Notify Recipient
+    const notif = notifyTrade(request, 'TRADE_OFFER', `Предложение обмена от @${sender}`);
+    notif.recipient = payload.recipient;
+    notif.actor = sender;
+    cache.notifications.unshift(notif);
     
-    // In a real app, we would POST to /api/trades here
-    await saveToLocalCache();
+    await syncItem('/tradeRequests', request); // Assuming generic route or dedicated
+    await syncItem('/notifications', notif);
     notifyListeners();
-    // Simulate syncing
-    // await syncItem('/trade_requests', request); 
 };
 
-export const acceptTradeRequest = async (requestId: string) => {
-    const reqIndex = cache.tradeRequests.findIndex(r => r.id === requestId);
-    if (reqIndex === -1) return;
+// 2. Counter Offer
+export const counterTradeRequest = async (requestId: string, newSenderItems: string[], newRecipientItems: string[], message: string) => {
+    const idx = cache.tradeRequests.findIndex(r => r.id === requestId);
+    if (idx === -1) return;
+    const req = cache.tradeRequests[idx];
+    const actor = localStorage.getItem(SESSION_USER_KEY);
+    if (!actor) return;
+
+    // Determine roles for counter:
+    // If I am the original recipient, I am now proposing new terms.
+    // However, keeping original sender/recipient fields constant is better for tracking.
+    // We just swap the item lists logic relative to the original structure?
+    // Actually, "senderItems" always refers to items owned by "sender".
+    // So if Recipient counters, they update "senderItems" (original sender's items they want) and "recipientItems" (what they give).
     
-    const request = cache.tradeRequests[reqIndex];
-    if (request.status !== 'PENDING') return;
+    // Correction: `senderItems` = items owned by `req.sender`. `recipientItems` = items owned by `req.recipient`.
+    // Regardless of who modifies the request, these semantic fields stay attached to the users.
+    
+    // Validating ownership should happen in UI, here we blindly update.
+    
+    const updatedReq = {
+        ...req,
+        senderItems: newSenderItems, // Updated list of items from Sender
+        recipientItems: newRecipientItems, // Updated list of items from Recipient
+        status: 'COUNTER_OFFERED' as TradeRequestStatus,
+        updatedAt: new Date().toISOString(),
+        messages: [...req.messages, { author: actor, text: message, timestamp: new Date().toISOString() }]
+    };
 
-    const sender = request.sender;
-    const recipient = request.recipient;
+    cache.tradeRequests[idx] = updatedReq;
+    await saveToLocalCache();
 
-    // 1. Swap Ownership
-    // Items from Sender -> Recipient
-    request.offeredItemIds.forEach(id => {
+    // Notify the OTHER party
+    const otherParty = actor === req.sender ? req.recipient : req.sender;
+    const notif = notifyTrade(updatedReq, 'TRADE_COUNTER', `Встречное предложение от @${actor}`);
+    notif.recipient = otherParty;
+    notif.actor = actor;
+    cache.notifications.unshift(notif);
+
+    await syncItem('/tradeRequests', updatedReq);
+    await syncItem('/notifications', notif);
+    notifyListeners();
+};
+
+// 3. Accept Trade (Locks items)
+export const acceptTradeRequest = async (requestId: string) => {
+    const idx = cache.tradeRequests.findIndex(r => r.id === requestId);
+    if (idx === -1) return;
+    const req = cache.tradeRequests[idx];
+    const actor = localStorage.getItem(SESSION_USER_KEY);
+    
+    // Lock items
+    const allItemIds = [...req.senderItems, ...req.recipientItems];
+    allItemIds.forEach(id => {
         const item = cache.exhibits.find(e => e.id === id);
-        if (item && item.owner === sender) {
-            item.owner = recipient;
-            item.tradeStatus = 'NONE'; // Reset status
+        if (item) {
+            item.lockedInTradeId = req.id;
+            updateExhibit(item); // Should silently update locally and sync
+        }
+    });
+
+    req.status = 'ACCEPTED';
+    req.updatedAt = new Date().toISOString();
+    cache.tradeRequests[idx] = req;
+    
+    await saveToLocalCache();
+
+    // Notify Sender (if recipient accepted) or Recipient (if sender accepted counter)
+    // Actually whoever clicked accept is 'actor', notify the other.
+    const otherParty = actor === req.sender ? req.recipient : req.sender;
+    const notif = notifyTrade(req, 'TRADE_ACCEPTED', `Сделка принята! Ожидание завершения.`);
+    notif.recipient = otherParty;
+    notif.actor = actor || 'System';
+    cache.notifications.unshift(notif);
+
+    await syncItem('/tradeRequests', req);
+    await syncItem('/notifications', notif);
+    notifyListeners();
+};
+
+// 4. Complete Trade (Transfer ownership)
+export const completeTradeRequest = async (requestId: string) => {
+    const idx = cache.tradeRequests.findIndex(r => r.id === requestId);
+    if (idx === -1) return;
+    const req = cache.tradeRequests[idx];
+    if (req.status !== 'ACCEPTED') return; // Can only complete accepted trades
+
+    // Perform Transfer
+    req.senderItems.forEach(id => {
+        const item = cache.exhibits.find(e => e.id === id);
+        if (item) {
+            item.owner = req.recipient; // Sender -> Recipient
+            item.tradeStatus = 'NONE';
+            item.lockedInTradeId = undefined;
             updateExhibit(item);
         }
     });
 
-    // Target Item from Recipient -> Sender
-    const targetItem = cache.exhibits.find(e => e.id === request.targetItemId);
-    if (targetItem && targetItem.owner === recipient) {
-        targetItem.owner = sender;
-        targetItem.tradeStatus = 'NONE'; // Reset status
-        updateExhibit(targetItem);
-    }
+    req.recipientItems.forEach(id => {
+        const item = cache.exhibits.find(e => e.id === id);
+        if (item) {
+            item.owner = req.sender; // Recipient -> Sender
+            item.tradeStatus = 'NONE';
+            item.lockedInTradeId = undefined;
+            updateExhibit(item);
+        }
+    });
 
-    // 2. Update Request Status
-    request.status = 'ACCEPTED';
-    cache.tradeRequests[reqIndex] = request;
-
-    // 3. Notify Sender
-    const notification: Notification = {
-        id: crypto.randomUUID(),
-        type: 'TRADE_ACCEPTED',
-        actor: recipient,
-        recipient: sender,
-        targetId: request.id,
-        targetPreview: 'Обмен завершен успешно!',
-        timestamp: new Date().toLocaleString(),
-        isRead: false
-    };
-    cache.notifications.unshift(notification);
+    req.status = 'COMPLETED';
+    req.updatedAt = new Date().toISOString();
+    cache.tradeRequests[idx] = req;
 
     await saveToLocalCache();
+
+    // Notify both (logic simplified, sending to both or relying on UI updates)
+    // We notify the partner that user marked it complete? 
+    // Usually one person clicks complete -> it's done for both.
+    const actor = localStorage.getItem(SESSION_USER_KEY);
+    const otherParty = actor === req.sender ? req.recipient : req.sender;
+    
+    const notif = notifyTrade(req, 'TRADE_COMPLETED', `Сделка завершена! Оцените партнера.`);
+    notif.recipient = otherParty;
+    notif.actor = actor || 'System';
+    cache.notifications.unshift(notif);
+
+    // Also notify self to rate?
+    const selfNotif = { ...notif, id: crypto.randomUUID(), recipient: actor || '', targetPreview: "Сделка завершена успешно" };
+    if (actor) cache.notifications.unshift(selfNotif);
+
+    await syncItem('/tradeRequests', req);
     notifyListeners();
 };
 
-export const declineTradeRequest = async (requestId: string) => {
-    const reqIndex = cache.tradeRequests.findIndex(r => r.id === requestId);
-    if (reqIndex !== -1) {
-        cache.tradeRequests[reqIndex].status = 'DECLINED';
-        await saveToLocalCache();
-        notifyListeners();
-    }
+// 5. Decline/Cancel
+export const updateTradeStatus = async (requestId: string, status: 'DECLINED' | 'CANCELLED') => {
+    const idx = cache.tradeRequests.findIndex(r => r.id === requestId);
+    if (idx === -1) return;
+    const req = cache.tradeRequests[idx];
+    const actor = localStorage.getItem(SESSION_USER_KEY);
+
+    // Unlock items if they were locked (unlikely for decline/cancel usually happens before accept, but handling edge case)
+    const allItemIds = [...req.senderItems, ...req.recipientItems];
+    allItemIds.forEach(id => {
+        const item = cache.exhibits.find(e => e.id === id);
+        if (item && item.lockedInTradeId === req.id) {
+            item.lockedInTradeId = undefined;
+            updateExhibit(item);
+        }
+    });
+
+    req.status = status;
+    req.updatedAt = new Date().toISOString();
+    cache.tradeRequests[idx] = req;
+    
+    await saveToLocalCache();
+
+    const otherParty = actor === req.sender ? req.recipient : req.sender;
+    const type = status === 'DECLINED' ? 'TRADE_DECLINED' : 'TRADE_CANCELLED';
+    const text = status === 'DECLINED' ? 'Предложение отклонено' : 'Сделка отменена';
+    
+    const notif = notifyTrade(req, type, text);
+    notif.recipient = otherParty;
+    notif.actor = actor || 'System';
+    cache.notifications.unshift(notif);
+
+    await syncItem('/tradeRequests', req);
+    await syncItem('/notifications', notif);
+    notifyListeners();
 };
 
 export const getMyTradeRequests = () => {
     const user = localStorage.getItem(SESSION_USER_KEY);
-    if (!user) return { incoming: [], outgoing: [] };
+    if (!user) return { incoming: [], outgoing: [], history: [], active: [], actionRequired: [] };
+    
+    const all = cache.tradeRequests.sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     
     return {
-        incoming: cache.tradeRequests.filter(r => r.recipient === user && r.status === 'PENDING'),
-        outgoing: cache.tradeRequests.filter(r => r.sender === user),
-        history: cache.tradeRequests.filter(r => (r.sender === user || r.recipient === user) && r.status !== 'PENDING')
+        incoming: all.filter(r => r.recipient === user && (r.status === 'PENDING' || r.status === 'COUNTER_OFFERED')), // Counter offer comes back to original sender usually, need logic check. 
+        // Simplification: "Incoming" = waiting for MY action. 
+        // If I am recipient and status PENDING -> Incoming.
+        // If I am sender and status COUNTER_OFFERED -> Incoming (action required).
+        actionRequired: all.filter(r => (r.recipient === user && r.status === 'PENDING') || (r.sender === user && r.status === 'COUNTER_OFFERED')),
+        
+        outgoing: all.filter(r => (r.sender === user && r.status === 'PENDING') || (r.recipient === user && r.status === 'COUNTER_OFFERED')), // Waiting for other
+        
+        active: all.filter(r => r.status === 'ACCEPTED'),
+        
+        history: all.filter(r => ['COMPLETED', 'DECLINED', 'CANCELLED', 'EXPIRED'].includes(r.status))
     };
 };

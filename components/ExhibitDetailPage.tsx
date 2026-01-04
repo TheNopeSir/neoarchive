@@ -81,7 +81,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
 
   const [showTradeModal, setShowTradeModal] = useState(false);
   
-  // Gallery State
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
 
@@ -125,7 +124,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
       setCurrentSlideIndex(0);
   }, [exhibit.id]);
 
-  // Keyboard Navigation
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
           if (e.key === 'Escape') {
@@ -141,7 +139,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, [slides.length]);
 
-  // Comment Threading
   const commentTree = useMemo(() => {
       const roots = comments.filter(c => !c.parentId).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       const byParent = comments.reduce((acc, c) => {
@@ -152,7 +149,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
           return acc;
       }, {} as Record<string, Comment[]>);
       
-      // Sort replies by time ascending (conversation flow)
       Object.keys(byParent).forEach(key => {
           byParent[key].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
       });
@@ -228,7 +224,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
       setMentionQuery(null);
   };
 
-  // Render Comment Node (Recursive)
   const renderCommentNode = (c: Comment, depth = 0) => {
       const isCommentLiked = c.likedBy && c.likedBy.includes(currentUser);
       const isAuthor = c.author === currentUser;
@@ -264,25 +259,26 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                   </div>
                   <p className="font-mono text-sm opacity-80 pl-8 break-words">{renderTextWithMentions(c.text, onAuthorClick)}</p>
               </div>
-              {/* Recursive Replies */}
               {replies.map(reply => renderCommentNode(reply, depth + 1))}
           </div>
       );
   };
 
+  const recipientProfile = users.find(u => u.username === exhibit.owner);
+
   return (
     <div className={`w-full min-h-full pb-20 animate-in slide-in-from-right-8 fade-in duration-500 ${isWinamp ? 'font-mono text-gray-300' : theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
       
-      {showTradeModal && currentUserProfile && allExhibits && (
+      {showTradeModal && currentUserProfile && allExhibits && recipientProfile && (
           <TradeOfferModal
             targetItem={exhibit}
             currentUser={currentUserProfile}
             userInventory={allExhibits.filter(e => e.owner === currentUser)}
+            recipient={recipientProfile}
             onClose={() => setShowTradeModal(false)}
           />
       )}
 
-      {/* Fullscreen Gallery Modal */}
       {isFullscreen && (
           <div className="fixed inset-0 z-50 bg-black/95 flex flex-col animate-in fade-in duration-200">
               <div className="absolute top-4 right-4 z-50 flex gap-4">
@@ -317,10 +313,8 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
           </div>
       )}
 
-      {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
       
-        {/* Winamp-style Header Bar */}
         {isWinamp && (
             <div className="bg-[#282828] border-t border-l border-[#505050] border-b border-r border-[#101010] p-1 mb-6 flex items-center justify-between">
                 <div className="flex items-center gap-2 px-2 bg-gradient-to-r from-[#000080] to-[#000040] w-full">
@@ -329,7 +323,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
             </div>
         )}
 
-        {/* Breadcrumbs & Navigation */}
         <div className="flex flex-col gap-4 mb-8 border-b border-white/10 pb-4">
             <div className="flex items-center gap-2 text-[10px] font-mono opacity-50 uppercase">
                 <span className="flex items-center gap-1 hover:text-green-500 cursor-pointer" onClick={() => onBack()}><Home size={10}/> HOME</span>
@@ -378,7 +371,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
 
         <div className="md:grid md:grid-cols-2 md:gap-12 items-start">
             
-            {/* LEFT COLUMN: Media */}
             <div className="space-y-6 md:sticky md:top-24">
                 <div 
                     className={`relative aspect-square md:aspect-[4/3] w-full overflow-hidden border transition-all duration-500 group ${isWinamp ? 'bg-black border-[#505050]' : (theme === 'dark' ? 'rounded-2xl border-white/10 bg-black' : 'rounded-2xl border-black/10 bg-white')} ${isCursed ? 'shadow-[0_0_30px_red]' : ''}`}
@@ -426,18 +418,16 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                     </div>
                 )}
 
-                {/* ACTION BUTTONS (MOBILE EDIT/DELETE + TRADE) */}
                 <div className="grid grid-cols-2 gap-3 mt-4">
-                    {!isOwner && (tradeStatus === 'FOR_TRADE' || tradeStatus === 'FOR_SALE') && (
+                    {!isOwner && (tradeStatus === 'FOR_TRADE' || tradeStatus === 'FOR_SALE' || tradeStatus === 'NONE' || !tradeStatus) && (
                         <button 
                             onClick={() => setShowTradeModal(true)}
-                            className={`col-span-2 flex items-center justify-center gap-2 px-4 py-4 bg-blue-600 text-white rounded-xl font-pixel text-[10px] uppercase font-bold hover:bg-blue-500 shadow-lg animate-pulse-slow`}
+                            className={`col-span-2 flex items-center justify-center gap-2 px-4 py-4 bg-blue-600 text-white rounded-xl font-pixel text-[10px] uppercase font-bold hover:bg-blue-500 shadow-lg`}
                         >
                             <RefreshCw size={16}/> ПРЕДЛОЖИТЬ ОБМЕН
                         </button>
                     )}
 
-                    {/* Mobile Only Edit/Delete Buttons */}
                     {(isOwner || isAdmin) && (
                         <>
                             {onEdit && (
@@ -455,7 +445,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                 </div>
             </div>
 
-            {/* RIGHT COLUMN: Info */}
             <div className="mt-8 md:mt-0">
                 <div className={`p-6 md:p-10 border mb-6 ${isWinamp ? 'bg-[#191919] border-[#505050]' : (theme === 'dark' ? 'bg-dark-surface border-white/10 rounded-3xl' : 'bg-white border-black/10 shadow-xl rounded-3xl')}`}>
                     <div className="flex flex-col items-start gap-6 mb-8">
@@ -499,7 +488,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                         </div>
                     </div>
 
-                    {/* "Who Liked" Section */}
                     {exhibit.likedBy && exhibit.likedBy.length > 0 && (
                         <div className={`flex items-center gap-4 mb-8 p-4 rounded-2xl border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-white/5 border-white/5'}`}>
                             <div className="flex -space-x-4 ml-4">
@@ -531,7 +519,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                     {exhibit.condition && ( <div className={`p-5 border ${isWinamp ? 'bg-black border-[#505050]' : 'bg-black/20 border-white/5 rounded-xl'}`}><div className="text-[9px] uppercase opacity-40 mb-2 font-pixel tracking-widest">СОСТОЯНИЕ</div><div className="font-black font-mono text-sm text-green-400 uppercase">{exhibit.condition}</div></div> )}
                     </div>
 
-                    {/* Linked Artifacts */}
                     {linkedArtifacts.length > 0 && (
                         <div className={`mb-12 p-8 border ${isWinamp ? 'bg-[#191919] border-[#505050]' : 'bg-white/5 border-white/10 rounded-2xl'}`}>
                             <h3 className="font-pixel text-[10px] opacity-70 uppercase tracking-widest mb-6 flex items-center gap-2"><Link2 size={16}/> СВЯЗАННЫЕ ЭКСПОНАТЫ</h3>
@@ -553,7 +540,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                     
                     <div className="space-y-6 mb-10">
                         {comments.length === 0 ? ( <div className="text-center py-12 opacity-30 text-xs font-pixel uppercase tracking-widest border border-dashed border-white/10 rounded-xl">ЛОГИ ПУСТЫ</div> ) : ( 
-                            // Render Root Comments
                             commentTree.roots.map(rootComment => renderCommentNode(rootComment))
                         )}
                     </div>
@@ -623,7 +609,6 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
         {similarArtifacts.length > 0 && (
                 <div className="mt-20">
                     <h3 className="font-pixel text-[10px] opacity-50 mb-8 flex items-center gap-2 tracking-[0.2em] uppercase"><Sparkles size={16} className="text-purple-400" /> РЕКОМЕНДУЕМЫЕ ОБЪЕКТЫ (AI MATCH)</h3>
-                    {/* Changed grid density to make cards smaller: start with 2, move up quickly */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                         {similarArtifacts.map(sim => (
                             <ExhibitCard 
