@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  LayoutGrid, PlusCircle, Search, Bell, FolderPlus, ArrowLeft, Folder, Plus, Globe
+  LayoutGrid, PlusCircle, Search, Bell, FolderPlus, ArrowLeft, Folder, Plus, Globe,
+  List as ListIcon, Zap, TrendingUp, Sparkles, Filter, Camera, User, Heart
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
@@ -30,7 +31,7 @@ import UserWishlistView from './components/UserWishlistView';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem, Guild } from './types';
-import { DefaultCategory } from './constants';
+import { DefaultCategory, getArtifactTier } from './constants';
 import useSwipe from './hooks/useSwipe';
 
 export default function App() {
@@ -61,6 +62,10 @@ export default function App() {
   // Filtering State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
   const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'>('ARTIFACTS');
+  
+  // NEW: Feed View Controls
+  const [feedViewMode, setFeedViewMode] = useState<'GRID' | 'LIST'>('GRID');
+  const [feedType, setFeedType] = useState<'FOR_YOU' | 'FOLLOWING'>('FOR_YOU');
 
   // Pagination
   const [feedPage, setFeedPage] = useState(1);
@@ -81,12 +86,33 @@ export default function App() {
   const [guestbookInput, setGuestbookInput] = useState('');
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
+  // --- DERIVED DATA FOR HERO & STORIES ---
+  const heroData = useMemo(() => {
+      const topItems = exhibits.filter(e => !e.isDraft && (getArtifactTier(e) === 'LEGENDARY' || getArtifactTier(e) === 'EPIC'));
+      // Pseudo-random selection based on hour to keep it stable for a bit
+      const hour = new Date().getHours();
+      const findOfTheDay = topItems.length > 0 ? topItems[hour % topItems.length] : exhibits[0];
+      const totalLikes = exhibits.reduce((acc, curr) => acc + curr.likes, 0);
+      return { findOfTheDay, totalStats: { items: exhibits.length, likes: totalLikes, users: db.getFullDatabase().users.length } };
+  }, [exhibits]);
+
+  const stories = useMemo(() => {
+      if (!user) return [];
+      const following = user.following || [];
+      const recentPosts = exhibits
+          .filter(e => following.includes(e.owner) && !e.isDraft)
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      // Get unique users who posted recently
+      const storyUsers = Array.from(new Set(recentPosts.map(e => e.owner))).slice(0, 10);
+      return storyUsers.map(u => ({ username: u, avatar: db.getUserAvatar(u), latestItem: recentPosts.find(e => e.owner === u) }));
+  }, [user, exhibits]);
+
   // --- ROUTING LOGIC ---
 
   // Central function to sync state from URL
   const syncFromUrl = useCallback(async () => {
       const path = window.location.pathname;
-      // const search = new URLSearchParams(window.location.search);
       const segments = path.split('/').filter(Boolean); // Remove empty strings
       const root = segments[0];
 
@@ -115,7 +141,6 @@ export default function App() {
           }
       } else if (root === 'artifact') {
           const id = segments[1];
-          // Explicitly type to allow both undefined (cache miss) and null (API miss)
           let item: Exhibit | null | undefined = db.getFullDatabase().exhibits.find(e => e.id === id);
           if (!item) {
               try { item = await db.fetchExhibitById(id); } catch(e){}
@@ -124,11 +149,10 @@ export default function App() {
               setSelectedExhibit(item);
               setView('EXHIBIT');
           } else {
-              setView('FEED'); // Fallback if not found
+              setView('FEED'); 
           }
       } else if (root === 'collection') {
           const id = segments[1];
-          // Explicitly type to allow both undefined (cache miss) and null (API miss)
           let col: Collection | null | undefined = db.getFullDatabase().collections.find(c => c.id === id);
           if (!col) {
               try { col = await db.fetchCollectionById(id); } catch(e){}
@@ -149,7 +173,6 @@ export default function App() {
       }
   }, []);
 
-  // Handle Browser Back/Forward Buttons
   useEffect(() => {
       const handlePopState = () => {
           syncFromUrl();
@@ -159,7 +182,6 @@ export default function App() {
   }, [syncFromUrl]);
 
   const navigateTo = (newView: ViewState, params?: { username?: string; item?: Exhibit; collection?: Collection; wishlistItem?: WishlistItem; guild?: Guild; highlightCommentId?: string }) => {
-      // 1. Update State
       if (params?.username) setViewedProfileUsername(params.username);
       if (params?.item) {
           setSelectedExhibit(params.item);
@@ -171,7 +193,6 @@ export default function App() {
       
       setView(newView);
 
-      // 2. Push to History
       let path = '/';
       if (newView === 'USER_PROFILE') path = `/u/${params?.username || viewedProfileUsername}`;
       else if (newView === 'USER_WISHLIST') path = `/u/${params?.username || viewedProfileUsername}/wishlist`;
@@ -188,11 +209,9 @@ export default function App() {
   };
 
   const handleBack = () => {
-      // Let the browser handle the stack. popstate will fire and syncRoute will update the view.
       if (window.history.length > 1) {
           window.history.back();
       } else {
-          // If no history (e.g., opened link directly), go to feed
           navigateTo('FEED');
       }
   };
@@ -246,7 +265,6 @@ export default function App() {
           if (activeUser) { 
               setUser(activeUser);
               if (activeUser.settings?.theme) setTheme(activeUser.settings.theme);
-              // Sync view from URL on initial load
               await syncFromUrl();
           } else { 
               setView('AUTH'); 
@@ -333,9 +351,6 @@ export default function App() {
              setUser(u);
              if (u.settings?.theme) setTheme(u.settings.theme);
              if (!remember) localStorage.removeItem('neo_active_user');
-             // On login, check URL. If it was root, go FEED. If deep link, syncFromUrl will handle it via reload or we just go FEED.
-             // Ideally we stay on the requested page if protected.
-             // For now, simpler to just go FEED or syncFromUrl.
              syncFromUrl();
           }} />
         </div>
@@ -343,7 +358,6 @@ export default function App() {
     );
   }
 
-  // --- THEME CLASSES ---
   const getThemeClasses = () => {
       switch(theme) {
           case 'xp': return 'bg-[#ECE9D8] text-black font-sans';
@@ -493,6 +507,7 @@ export default function App() {
                 />
             )}
 
+            {/* Other views remain same ... */}
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
                 <div className="max-w-4xl mx-auto p-4 pb-24">
                     <CollectionDetailPage 
@@ -777,17 +792,17 @@ export default function App() {
                 </div>
             )}
 
+            {/* --- FEED VIEW: UPDATED --- */}
             {view === 'FEED' && (
-                <div className="p-4 pb-24 space-y-6" {...globalSwipeHandlers}>
-                    {/* Header - Visible only on mobile since desktop has Top Nav */}
-                    <header className="md:hidden flex justify-between items-center mb-4 sticky top-0 z-30 py-2 backdrop-blur-md bg-transparent">
+                <div className="pb-24 space-y-6" {...globalSwipeHandlers}>
+                    {/* Mobile Header */}
+                    <header className="md:hidden flex justify-between items-center px-4 pt-4 sticky top-0 z-30 backdrop-blur-xl bg-transparent">
                         <div className="flex items-center gap-2">
                             <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-black font-pixel text-xs ${theme === 'winamp' ? 'bg-[#292929] text-[#00ff00] border border-[#505050]' : 'bg-green-500'}`}>NA</div>
                             <h1 className={`text-lg font-pixel font-bold tracking-tighter ${theme === 'winamp' ? 'text-[#00ff00]' : ''}`}>NeoArchive</h1>
                         </div>
                         {user && (
                             <div className="flex gap-4">
-                                <button onClick={() => navigateTo('SEARCH')}><Search className="opacity-70 hover:opacity-100" /></button>
                                 <button onClick={() => navigateTo('ACTIVITY')} className="relative">
                                     <Bell className="opacity-70 hover:opacity-100" />
                                     {notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
@@ -796,41 +811,181 @@ export default function App() {
                         )}
                     </header>
 
-                    {/* Filters */}
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                        {['ВСЕ', ...Object.values(DefaultCategory)].map(cat => (
-                            <button 
-                                key={cat}
-                                onClick={() => setSelectedCategory(cat)}
-                                className={`px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? 'bg-green-500 text-black border-green-500' : 'border-white/10 opacity-60 hover:opacity-100'}`}
-                            >
-                                {cat}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Feed Grid - Updated density for desktop and 2 columns for mobile */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-6">
-                        {exhibits
-                            .filter(e => !e.isDraft && (selectedCategory === 'ВСЕ' || e.category === selectedCategory))
-                            .map(item => (
-                                <ExhibitCard 
-                                    key={item.id} 
-                                    item={item} 
-                                    theme={theme}
-                                    onClick={handleExhibitClick}
-                                    isLiked={item.likedBy?.includes(user?.username || '') || false}
-                                    onLike={(e) => handleLike(item.id, e)}
-                                    onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
-                                />
-                            ))
-                        }
-                    </div>
-                    {exhibits.length === 0 && (
-                        <div className="text-center py-20 opacity-30 font-mono text-xs">
-                            НЕТ ДАННЫХ В ПОТОКЕ
+                    {/* HERO SECTION */}
+                    {heroData.findOfTheDay && (
+                        <div className="px-4">
+                            <div className={`relative w-full aspect-[2/1] md:aspect-[3/1] rounded-3xl overflow-hidden cursor-pointer group ${theme === 'winamp' ? 'border-2 border-[#505050]' : 'shadow-2xl'}`} onClick={() => handleExhibitClick(heroData.findOfTheDay)}>
+                                <div className="absolute inset-0">
+                                    <img src={heroData.findOfTheDay.imageUrls[0]} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
+                                    <div className={`absolute inset-0 bg-gradient-to-t ${theme === 'light' ? 'from-white/90 via-transparent' : 'from-black/90 via-black/20'} to-transparent`} />
+                                </div>
+                                <div className="absolute top-4 left-4">
+                                    <div className="px-3 py-1 bg-yellow-500 text-black font-pixel text-[10px] font-bold rounded-full flex items-center gap-1 shadow-lg animate-pulse">
+                                        <Sparkles size={12} /> НАХОДКА ДНЯ
+                                    </div>
+                                </div>
+                                <div className="absolute bottom-0 left-0 w-full p-6">
+                                    <h2 className={`text-2xl md:text-4xl font-pixel font-black mb-1 line-clamp-1 ${theme === 'light' ? 'text-black' : 'text-white'}`}>{heroData.findOfTheDay.title}</h2>
+                                    <div className="flex items-center gap-2">
+                                        <img src={db.getUserAvatar(heroData.findOfTheDay.owner)} className="w-6 h-6 rounded-full border border-white/50" />
+                                        <span className={`text-xs font-mono font-bold ${theme === 'light' ? 'text-black/70' : 'text-white/80'}`}>@{heroData.findOfTheDay.owner}</span>
+                                    </div>
+                                </div>
+                                <div className="absolute top-4 right-4 hidden md:flex flex-col gap-2 items-end">
+                                    <div className="px-3 py-1 bg-black/50 backdrop-blur-md rounded-lg border border-white/10 text-[10px] font-mono text-white">
+                                        TOTAL_ITEMS: <span className="text-green-400">{heroData.totalStats.items}</span>
+                                    </div>
+                                    <div className="px-3 py-1 bg-black/50 backdrop-blur-md rounded-lg border border-white/10 text-[10px] font-mono text-white">
+                                        USERS: <span className="text-blue-400">{heroData.totalStats.users}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
+
+                    {/* STORIES CAROUSEL */}
+                    {stories.length > 0 && (
+                        <div className="pl-4">
+                            <h3 className="font-pixel text-[10px] opacity-50 mb-3 flex items-center gap-2 tracking-widest"><Zap size={12} className="text-yellow-500"/> ОБНОВЛЕНИЯ ПОДПИСОК</h3>
+                            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide pr-4">
+                                {stories.map((story, i) => (
+                                    <div key={i} onClick={() => story.latestItem && handleExhibitClick(story.latestItem)} className="flex flex-col items-center gap-2 cursor-pointer group min-w-[70px]">
+                                        <div className="relative p-[2px] rounded-full bg-gradient-to-tr from-green-500 to-blue-500">
+                                            <div className={`rounded-full p-[2px] ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}>
+                                                <img src={story.avatar} className="w-14 h-14 rounded-full object-cover" />
+                                            </div>
+                                        </div>
+                                        <span className="text-[10px] font-bold truncate max-w-[70px]">@{story.username}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* FEED CONTROLS & SEARCH */}
+                    <div className={`sticky top-[52px] md:top-[64px] z-20 pt-2 pb-2 px-4 transition-all ${theme === 'dark' ? 'bg-dark-bg/95 backdrop-blur-md' : theme === 'winamp' ? 'bg-[#191919] border-b border-[#505050]' : 'bg-light-bg/95 backdrop-blur-md'}`}>
+                        {/* Search Input Trigger */}
+                        <div className="mb-4">
+                            <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10' : theme === 'winamp' ? 'bg-black border-[#00ff00]' : 'bg-white border-black/10 shadow-sm'}`}>
+                                <Search size={16} className="opacity-50" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Поиск по артефактам, людям..." 
+                                    className={`bg-transparent border-none outline-none text-xs w-full font-mono ${theme === 'winamp' ? 'text-[#00ff00] placeholder-green-900' : ''}`}
+                                    onFocus={() => navigateTo('SEARCH')} 
+                                    readOnly
+                                />
+                                <Camera size={16} className="opacity-50 cursor-pointer hover:opacity-100" onClick={(e) => { e.stopPropagation(); navigateTo('CREATE_WISHLIST'); }} />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                            {/* Feed Type Toggles */}
+                            <div className={`flex p-1 rounded-xl ${theme === 'dark' ? 'bg-white/5' : theme === 'winamp' ? 'bg-[#292929] border border-[#505050]' : 'bg-black/5'}`}>
+                                <button 
+                                    onClick={() => setFeedType('FOR_YOU')} 
+                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${feedType === 'FOR_YOU' ? (theme === 'winamp' ? 'bg-[#00ff00] text-black' : 'bg-green-500 text-black shadow-lg') : 'opacity-50 hover:opacity-100'}`}
+                                >
+                                    FOR YOU
+                                </button>
+                                <button 
+                                    onClick={() => setFeedType('FOLLOWING')} 
+                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${feedType === 'FOLLOWING' ? (theme === 'winamp' ? 'bg-[#00ff00] text-black' : 'bg-green-500 text-black shadow-lg') : 'opacity-50 hover:opacity-100'}`}
+                                >
+                                    FOLLOWING
+                                </button>
+                            </div>
+
+                            {/* View Mode Toggles */}
+                            <div className="flex gap-1">
+                                <button onClick={() => setFeedViewMode('GRID')} className={`p-2 rounded-lg transition-all ${feedViewMode === 'GRID' ? 'bg-white/10 text-green-500' : 'opacity-50'}`}><LayoutGrid size={18}/></button>
+                                <button onClick={() => setFeedViewMode('LIST')} className={`p-2 rounded-lg transition-all ${feedViewMode === 'LIST' ? 'bg-white/10 text-green-500' : 'opacity-50'}`}><ListIcon size={18}/></button>
+                            </div>
+                        </div>
+
+                        {/* Category Filters */}
+                        <div className="flex gap-2 overflow-x-auto pt-4 pb-1 scrollbar-hide">
+                            <button 
+                                onClick={() => setSelectedCategory('ВСЕ')}
+                                className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? 'bg-white text-black border-white' : 'border-current opacity-40 hover:opacity-100'}`}
+                            >
+                                ALL
+                            </button>
+                            {Object.values(DefaultCategory).map(cat => (
+                                <button 
+                                    key={cat}
+                                    onClick={() => setSelectedCategory(cat)}
+                                    className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'winamp' ? 'bg-[#00ff00] text-black border-[#00ff00]' : 'bg-green-500 text-black border-green-500') : 'border-white/10 opacity-60 hover:opacity-100'}`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* FEED GRID/LIST */}
+                    <div className="px-4">
+                        {exhibits
+                            .filter(e => !e.isDraft)
+                            .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
+                            .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
+                            .length === 0 ? (
+                                <div className="text-center py-20 opacity-30 font-mono text-xs border-2 border-dashed border-white/10 rounded-3xl">
+                                    НЕТ ДАННЫХ В ПОТОКЕ
+                                    <br/>
+                                    {feedType === 'FOLLOWING' && "Подпишитесь на кого-нибудь!"}
+                                </div>
+                            ) : (
+                                <div className={`grid gap-4 ${feedViewMode === 'GRID' ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6' : 'grid-cols-1'}`}>
+                                    {exhibits
+                                        .filter(e => !e.isDraft)
+                                        .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
+                                        .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
+                                        .map(item => (
+                                            feedViewMode === 'GRID' ? (
+                                                <ExhibitCard 
+                                                    key={item.id} 
+                                                    item={item} 
+                                                    theme={theme}
+                                                    onClick={handleExhibitClick}
+                                                    isLiked={item.likedBy?.includes(user?.username || '') || false}
+                                                    onLike={(e) => handleLike(item.id, e)}
+                                                    onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                                                />
+                                            ) : (
+                                                // LIST VIEW CARD (Inline)
+                                                <div 
+                                                    key={item.id} 
+                                                    onClick={() => handleExhibitClick(item)}
+                                                    className={`flex gap-4 p-3 rounded-xl border cursor-pointer hover:scale-[1.01] transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'winamp' ? 'bg-[#191919] border-[#505050] text-[#00ff00]' : 'bg-white border-black/10 hover:shadow-md'}`}
+                                                >
+                                                    <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-black/20">
+                                                        <img src={item.imageUrls[0]} className="w-full h-full object-cover" />
+                                                    </div>
+                                                    <div className="flex-1 flex flex-col justify-between">
+                                                        <div>
+                                                            <div className="flex justify-between items-start">
+                                                                <span className="text-[10px] font-pixel opacity-50 uppercase">{item.category}</span>
+                                                                <div className="flex items-center gap-2 text-[10px] opacity-60">
+                                                                    <Heart size={12}/> {item.likes}
+                                                                </div>
+                                                            </div>
+                                                            <h3 className="font-bold font-pixel text-sm mt-1">{item.title}</h3>
+                                                            <p className="text-[10px] opacity-60 line-clamp-2 mt-1">{item.description}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-2">
+                                                            <img src={db.getUserAvatar(item.owner)} className="w-5 h-5 rounded-full border border-white/20" />
+                                                            <span className="text-[10px] font-bold">@{item.owner}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        ))
+                                    }
+                                </div>
+                            )
+                        }
+                    </div>
                 </div>
             )}
 
