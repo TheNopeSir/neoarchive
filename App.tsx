@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   LayoutGrid, PlusCircle, Search, Bell, FolderPlus, ArrowLeft, Folder, Plus, Globe,
@@ -649,22 +648,22 @@ export default function App() {
                 </div>
             )}
 
-            {view === 'CREATE_ARTIFACT' && (
+            {view === 'CREATE_ARTIFACT' && user && (
                 <div className="p-4 pb-24">
                     <CreateArtifactView 
                         theme={theme} 
                         onBack={handleBack} 
                         onSave={async (item) => { 
-                            const newItem = { ...item, id: crypto.randomUUID(), owner: user!.username, timestamp: new Date().toLocaleString(), likes: 0, views: 0 }; 
+                            const newItem = { ...item, id: crypto.randomUUID(), owner: user.username, timestamp: new Date().toLocaleString(), likes: 0, views: 0 }; 
                             await db.saveExhibit(newItem); 
                             handleBack(); 
                         }}
-                        userArtifacts={exhibits.filter(e => e.owner === user?.username)}
+                        userArtifacts={exhibits.filter(e => e.owner === user.username)}
                     />
                 </div>
             )}
 
-            {view === 'EDIT_ARTIFACT' && selectedExhibit && (
+            {view === 'EDIT_ARTIFACT' && selectedExhibit && user && (
                 <div className="p-4 pb-24">
                     <CreateArtifactView 
                         theme={theme} 
@@ -674,19 +673,19 @@ export default function App() {
                             await db.updateExhibit(item); 
                             handleBack(); 
                         }}
-                        userArtifacts={exhibits.filter(e => e.owner === user?.username)}
+                        userArtifacts={exhibits.filter(e => e.owner === user.username)}
                     />
                 </div>
             )}
 
-            {view === 'CREATE_COLLECTION' && (
+            {view === 'CREATE_COLLECTION' && user && (
                 <div className="p-4 pb-24">
                     <CreateCollectionView 
                         theme={theme} 
-                        userArtifacts={exhibits.filter(e => e.owner === user!.username && !e.isDraft)}
+                        userArtifacts={exhibits.filter(e => e.owner === user.username && !e.isDraft)}
                         onBack={handleBack} 
                         onSave={async (col) => { 
-                            const newCol = { ...col, id: crypto.randomUUID(), owner: user!.username, timestamp: new Date().toLocaleString(), likes: 0 } as Collection;
+                            const newCol = { ...col, id: crypto.randomUUID(), owner: user.username, timestamp: new Date().toLocaleString(), likes: 0 } as Collection;
                             await db.saveCollection(newCol); 
                             handleBack(); 
                         }}
@@ -694,13 +693,13 @@ export default function App() {
                 </div>
             )}
 
-            {view === 'CREATE_WISHLIST' && (
+            {view === 'CREATE_WISHLIST' && user && (
                 <div className="p-4 pb-24">
                     <CreateWishlistItemView
                         theme={theme}
                         onBack={handleBack}
                         onSave={async (item) => {
-                            const newItem = { ...item, owner: user!.username };
+                            const newItem = { ...item, owner: user.username };
                             await db.saveWishlistItem(newItem);
                             handleBack();
                         }}
@@ -928,7 +927,7 @@ export default function App() {
                         {exhibits
                             .filter(e => !e.isDraft)
                             .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
-                            .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
+                            .filter(e => feedType === 'FOR_YOU' ? true : (user?.following?.includes(e.owner) ?? false))
                             .length === 0 ? (
                                 <div className="text-center py-20 opacity-30 font-mono text-xs border-2 border-dashed border-white/10 rounded-3xl">
                                     НЕТ ДАННЫХ В ПОТОКЕ
@@ -940,7 +939,7 @@ export default function App() {
                                     {exhibits
                                         .filter(e => !e.isDraft)
                                         .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
-                                        .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
+                                        .filter(e => feedType === 'FOR_YOU' ? true : (user?.following?.includes(e.owner) ?? false))
                                         .map(item => (
                                             feedViewMode === 'GRID' ? (
                                                 <ExhibitCard 
@@ -948,7 +947,7 @@ export default function App() {
                                                     item={item} 
                                                     theme={theme}
                                                     onClick={handleExhibitClick}
-                                                    isLiked={item.likedBy?.includes(user?.username || '') || false}
+                                                    isLiked={item.likedBy?.includes(user?.username ?? '') ?? false}
                                                     onLike={(e) => handleLike(item.id, e)}
                                                     onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
                                                 />
