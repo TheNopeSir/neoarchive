@@ -1,3 +1,4 @@
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem, Guild, Duel, TradeRequest, TradeRequestStatus, TradeType, NotificationType } from '../types';
 
 // Internal Cache (In-Memory)
@@ -340,7 +341,19 @@ export const sendTradeRequest = async (p: any) => { /*...*/ };
 export const acceptTradeRequest = async (id: string) => { /*...*/ };
 export const updateTradeStatus = async (id: string, s: string) => { /*...*/ };
 export const completeTradeRequest = async (id: string) => { /*...*/ };
-export const getStorageEstimate = async () => { return null; };
+
+// Updated getStorageEstimate to prevent 'never' type inference
+export const getStorageEstimate = async (): Promise<StorageEstimate | undefined> => {
+    try {
+        if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
+            return await navigator.storage.estimate();
+        }
+    } catch (e) {
+        console.warn("Storage estimate not supported");
+    }
+    return undefined;
+};
+
 export const clearLocalCache = async () => { await idb.clear(); };
 export const logoutUser = async () => { localStorage.removeItem(SESSION_USER_KEY); notifyListeners(); };
 export const loginUser = async (e:string, p:string) => { return {} as UserProfile; };
