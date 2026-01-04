@@ -223,19 +223,21 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
       <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/10">
         <button onClick={onBack} className={`flex items-center gap-2 font-pixel text-[10px] opacity-70 hover:opacity-100 uppercase tracking-widest ${isWinamp ? 'text-[#00ff00]' : ''}`}><ArrowLeft size={14} /> НАЗАД</button>
         <div className="flex gap-4">
-          {(isOwner || isAdmin) && onEdit && (
-              <button onClick={() => onEdit(exhibit)} className="text-purple-400 hover:text-purple-300 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase">
-                  <Edit2 size={14} /> ИЗМЕНИТЬ
-              </button>
-          )}
-          {(isOwner || isAdmin) && onDelete && ( 
-              <button 
-                onClick={() => onDelete(exhibit.id)} 
-                className="text-red-500 hover:text-red-400 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase"
-              >
-                  <Trash2 size={14} /> УДАЛИТЬ
-              </button>
-          )}
+          <div className="hidden md:flex gap-4">
+            {(isOwner || isAdmin) && onEdit && (
+                <button onClick={() => onEdit(exhibit)} className="text-purple-400 hover:text-purple-300 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase">
+                    <Edit2 size={14} /> ИЗМЕНИТЬ
+                </button>
+            )}
+            {(isOwner || isAdmin) && onDelete && ( 
+                <button 
+                  onClick={() => onDelete(exhibit.id)} 
+                  className="text-red-500 hover:text-red-400 transition-all flex items-center gap-2 font-pixel text-[10px] uppercase"
+                >
+                    <Trash2 size={14} /> УДАЛИТЬ
+                </button>
+            )}
+          </div>
           <div className="relative">
             <button onClick={() => setShowShareMenu(!showShareMenu)} className={`flex items-center gap-2 opacity-70 hover:opacity-100 transition-all ${shareCopied ? 'text-green-500' : ''}`}><Share2 size={18} /></button>
             {showShareMenu && (
@@ -312,6 +314,21 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                   >
                       <RefreshCw size={14}/> ПРЕДЛОЖИТЬ ОБМЕН
                   </button>
+              )}
+
+              {(isOwner || isAdmin) && (
+                 <>
+                    {onEdit && (
+                        <button onClick={() => onEdit(exhibit)} className={`md:hidden flex items-center justify-center gap-2 px-4 py-3 border rounded font-pixel text-[10px] uppercase font-bold hover:bg-purple-500/10 ${isWinamp ? 'border-purple-500 text-purple-500' : 'border-purple-500/50 text-purple-400'}`}>
+                            <Edit2 size={14} /> ИЗМЕНИТЬ
+                        </button>
+                    )}
+                    {onDelete && (
+                        <button onClick={() => onDelete(exhibit.id)} className={`md:hidden flex items-center justify-center gap-2 px-4 py-3 border rounded font-pixel text-[10px] uppercase font-bold hover:bg-red-500/10 ${isWinamp ? 'border-red-500 text-red-500' : 'border-red-500/50 text-red-500'}`}>
+                            <Trash2 size={14} /> УДАЛИТЬ
+                        </button>
+                    )}
+                 </>
               )}
           </div>
         </div>
@@ -506,9 +523,10 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                 </div>
             </div>
         </div>
+      </div>
 
-        {similarArtifacts.length > 0 && (
-            <div className="mt-12 col-span-2">
+      {similarArtifacts.length > 0 && (
+            <div className="mt-12">
                 <h3 className="font-pixel text-[10px] opacity-50 mb-4 flex items-center gap-2 tracking-[0.2em] uppercase"><Sparkles size={14} className="text-purple-400" /> РЕКОМЕНДУЕМЫЕ ОБЪЕКТЫ (AI MATCH)</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {similarArtifacts.map(sim => (
@@ -524,8 +542,7 @@ const ExhibitDetailPage: React.FC<ExhibitDetailPageProps> = ({
                     ))}
                 </div>
             </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
