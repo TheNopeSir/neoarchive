@@ -50,7 +50,6 @@ export interface Exhibit {
   currency?: 'RUB' | 'USD' | 'ETH';
   tradeRequest?: string; // What they want in return
   relatedIds?: string[]; // IDs of connected items within user's collection
-  lockedInTradeId?: string; // ID of the trade if item is locked
 }
 
 export interface Collection {
@@ -66,7 +65,7 @@ export interface Collection {
   likedBy: string[];
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION' | 'TRADE_OFFER' | 'TRADE_ACCEPTED' | 'TRADE_DECLINED' | 'TRADE_COMPLETED' | 'TRADE_CANCELLED' | 'TRADE_COUNTER';
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION' | 'TRADE_OFFER' | 'TRADE_ACCEPTED';
 
 export interface Notification {
   id: string;
@@ -133,13 +132,6 @@ export interface UserProfile {
   isAdmin?: boolean;
   telegram?: string;
   guildId?: string;
-  reputation?: number;
-  tradeStats?: {
-      total: number;
-      completed: number;
-      ratingSum: number;
-      ratingCount: number;
-  };
 }
 
 export interface Guild {
@@ -165,34 +157,14 @@ export interface Duel {
     logs: string[];
 }
 
-export type TradeRequestStatus = 'PENDING' | 'COUNTER_OFFERED' | 'ACCEPTED' | 'COMPLETED' | 'DECLINED' | 'CANCELLED' | 'EXPIRED';
-export type TradeType = 'DIRECT' | 'MULTI' | 'GIFT' | 'MONEY';
-
-export interface TradeMessage {
-    author: string;
-    text: string;
-    timestamp: string;
-}
-
 export interface TradeRequest {
     id: string;
     sender: string;
     recipient: string;
-    senderItems: string[]; // IDs of items from sender
-    recipientItems: string[]; // IDs of items from recipient
-    type: TradeType;
-    status: TradeRequestStatus;
-    messages: TradeMessage[];
-    createdAt: string;
-    updatedAt: string;
-    price?: number; // For MONEY trades
-    currency?: 'RUB';
-    isWishlistFulfillment?: boolean; // If this trade serves a wishlist item
-    wishlistId?: string;
-    ratings?: {
-        sender?: number;
-        recipient?: number;
-    };
+    offeredItemIds: string[]; // Items the sender gives
+    targetItemId: string; // Item the sender wants
+    status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    timestamp: string;
 }
 
 export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'USER_WISHLIST' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_WISHLIST' | 'EDIT_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'SOCIAL_LIST' | 'WISHLIST_DETAIL' | 'COMMUNITY_HUB' | 'MY_COLLECTION' | 'GUILD_DETAIL';

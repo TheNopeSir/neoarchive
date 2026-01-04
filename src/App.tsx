@@ -1,1 +1,4 @@
-// This file is deprecated and should be removed. Logic moved to root App.tsx.
+
+import React from 'react';
+const App = () => <div>App Moved</div>;
+export default App;

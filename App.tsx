@@ -2,16 +2,18 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   LayoutGrid, PlusCircle, Search, Bell, FolderPlus, ArrowLeft, Folder, Plus, Globe,
-  Heart, SkipBack, Play, Square, Pause, User, WifiOff, AlertTriangle
+  List as ListIcon, Zap, TrendingUp, Sparkles, Filter, Camera, User, Heart
 } from 'lucide-react';
 
 import MatrixRain from './components/MatrixRain';
 import CRTOverlay from './components/CRTOverlay';
 import MatrixLogin from './components/MatrixLogin';
+import ExhibitCard from './components/ExhibitCard';
 import UserProfileView from './components/UserProfileView';
 import ExhibitDetailPage from './components/ExhibitDetailPage';
 import CommunityHub from './components/CommunityHub'; 
 import RetroLoader from './components/RetroLoader';
+import CollectionCard from './components/CollectionCard';
 import PixelSnow from './components/PixelSnow';
 import ActivityView from './components/ActivityView';
 import SEO from './components/SEO';
@@ -26,12 +28,10 @@ import SocialListView from './components/SocialListView';
 import SearchView from './components/SearchView';
 import GuildDetailView from './components/GuildDetailView';
 import UserWishlistView from './components/UserWishlistView';
-import FeedView from './components/FeedView';
-import ToastContainer from './components/ToastContainer';
 
 import * as db from './services/storageService';
 import { UserProfile, Exhibit, Collection, ViewState, Notification, Message, GuestbookEntry, Comment, WishlistItem, Guild } from './types';
-import { getArtifactTier } from './constants';
+import { DefaultCategory, getArtifactTier } from './constants';
 import useSwipe from './hooks/useSwipe';
 
 export default function App() {
@@ -40,7 +40,7 @@ export default function App() {
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
-  const [isOffline, setIsOffline] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   const [user, setUser] = useState<UserProfile | null>(null);
   const [exhibits, setExhibits] = useState<Exhibit[]>([]);
@@ -55,13 +55,21 @@ export default function App() {
   const [selectedWishlistItem, setSelectedWishlistItem] = useState<WishlistItem | null>(null);
   const [selectedGuild, setSelectedGuild] = useState<Guild | null>(null);
   const [viewedProfileUsername, setViewedProfileUsername] = useState<string>('');
+  
+  // Advanced Notification State
   const [highlightCommentId, setHighlightCommentId] = useState<string | undefined>(undefined);
 
-  // Feed State
+  // Filtering State
   const [selectedCategory, setSelectedCategory] = useState<string>('ВСЕ');
-  const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'WISHLIST'>('ARTIFACTS');
+  const [feedMode, setFeedMode] = useState<'ARTIFACTS' | 'COLLECTIONS' | 'WISHLIST'>('ARTIFACTS');
+  
+  // NEW: Feed View Controls
   const [feedViewMode, setFeedViewMode] = useState<'GRID' | 'LIST'>('GRID');
   const [feedType, setFeedType] = useState<'FOR_YOU' | 'FOLLOWING'>('FOR_YOU');
+
+  // Pagination
+  const [feedPage, setFeedPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
   // Social/Edit State
   const [socialListType, setSocialListType] = useState<'followers' | 'following'>('followers');
@@ -78,7 +86,16 @@ export default function App() {
   const [guestbookInput, setGuestbookInput] = useState('');
   const guestbookInputRef = useRef<HTMLInputElement>(null);
 
-  // --- STORIES ---
+  // --- DERIVED DATA FOR HERO & STORIES ---
+  const heroData = useMemo(() => {
+      const topItems = exhibits.filter(e => !e.isDraft && (getArtifactTier(e) === 'LEGENDARY' || getArtifactTier(e) === 'EPIC'));
+      // Pseudo-random selection based on hour to keep it stable for a bit
+      const hour = new Date().getHours();
+      const findOfTheDay = topItems.length > 0 ? topItems[hour % topItems.length] : exhibits[0];
+      const totalLikes = exhibits.reduce((acc, curr) => acc + curr.likes, 0);
+      return { findOfTheDay, totalStats: { items: exhibits.length, likes: totalLikes, users: db.getFullDatabase().users.length } };
+  }, [exhibits]);
+
   const stories = useMemo(() => {
       if (!user) return [];
       const following = user.following || [];
@@ -86,11 +103,14 @@ export default function App() {
           .filter(e => following.includes(e.owner) && !e.isDraft)
           .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       
+      // Get unique users who posted recently
       const storyUsers = Array.from(new Set(recentPosts.map(e => e.owner))).slice(0, 10);
       return storyUsers.map(u => ({ username: u, avatar: db.getUserAvatar(u), latestItem: recentPosts.find(e => e.owner === u) }));
   }, [user, exhibits]);
 
   // --- ROUTING LOGIC ---
+
+  // Central function to sync state from URL
   const syncFromUrl = useCallback(async () => {
       const path = window.location.pathname;
       const segments = path.split('/').filter(Boolean); // Remove empty strings
@@ -198,9 +218,13 @@ export default function App() {
 
   const globalSwipeHandlers = useSwipe({
     onSwipeLeft: () => {
-      if (view === 'FEED') navigateTo('COMMUNITY_HUB');
-      else if (view === 'COMMUNITY_HUB') navigateTo('ACTIVITY');
-      else if (view === 'ACTIVITY' && user) navigateTo('USER_PROFILE', { username: user.username });
+      if (view === 'FEED') {
+          navigateTo('COMMUNITY_HUB');
+      } else if (view === 'COMMUNITY_HUB') {
+          navigateTo('ACTIVITY');
+      } else if (view === 'ACTIVITY') {
+          if (user) navigateTo('USER_PROFILE', { username: user.username });
+      }
     },
     onSwipeRight: () => {
         if (view !== 'FEED') handleBack();
@@ -215,10 +239,6 @@ export default function App() {
     setNotifications(data.notifications || []);
     setMessages(data.messages || []);
     setGuestbook(data.guestbook || []);
-    
-    // Check offline status helper
-    setIsOffline(db.isOffline());
-
     if (user) {
        const updatedUser = data.users.find(u => u.username === user.username);
        if (updatedUser) setUser(updatedUser);
@@ -234,8 +254,10 @@ export default function App() {
     };
   }, [refreshData]);
 
-  // Initial Boot
   useEffect(() => {
+    document.body.style.overflowY = 'scroll';
+    const safetyTimer = setTimeout(() => { setIsInitializing(false); setShowSplash(false); }, 6000); 
+    
     const init = async () => {
       try {
           const activeUser = await db.initializeDatabase();
@@ -250,12 +272,34 @@ export default function App() {
       } catch (e) { 
           setView('AUTH'); 
       } finally { 
+          clearTimeout(safetyTimer); 
           setIsInitializing(false); 
-          setTimeout(() => setShowSplash(false), 500); 
+          setTimeout(() => setShowSplash(false), 300); 
       }
     };
     init();
   }, []);
+
+  const loadMore = useCallback(async () => {
+      if (isLoadingMore || !hasMore || feedMode !== 'ARTIFACTS') return;
+      setIsLoadingMore(true);
+      const nextPage = feedPage + 1;
+      const items = await db.loadFeedBatch(nextPage, 12);
+      if (items.length < 12) setHasMore(false);
+      setFeedPage(nextPage);
+      refreshData();
+      setIsLoadingMore(false);
+  }, [feedPage, hasMore, isLoadingMore, feedMode, refreshData]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 800) loadMore();
+    };
+    if (view === 'FEED') {
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }
+  }, [view, loadMore]);
 
   const handleExhibitClick = async (item: Exhibit) => {
     const sessionKey = `neo_viewed_${item.id}`;
@@ -281,14 +325,9 @@ export default function App() {
             likes: isLiked ? item.likes - 1 : item.likes + 1,
             likedBy: isLiked ? item.likedBy.filter(u => u !== user.username) : [...(item.likedBy || []), user.username]
         };
-        // Optimistic update
         setExhibits(prev => prev.map(ex => ex.id === id ? updatedItem : ex));
         if (selectedExhibit?.id === id) setSelectedExhibit(updatedItem);
-        
-        await db.updateExhibit(updatedItem);
-        if (!isLiked && item.owner !== user.username) {
-            db.createNotification(item.owner, 'LIKE', user.username, item.id, item.title);
-        }
+        await db.updateExhibit(updatedItem); 
     }
   };
 
@@ -344,18 +383,10 @@ export default function App() {
         {theme === 'dark' && <CRTOverlay />}
         {theme !== 'xp' && theme !== 'winamp' && <PixelSnow theme={theme === 'dark' ? 'dark' : 'light'} />}
         
-        <ToastContainer />
-
-        {/* OFFLINE BANNER */}
-        {isOffline && (
-            <div className="fixed top-16 md:top-20 left-0 right-0 z-40 bg-yellow-500/90 text-black text-center py-1 px-4 text-xs font-bold font-mono flex justify-center items-center gap-2">
-                <WifiOff size={14}/> OFFLINE MODE / SYNCHRONIZING...
-            </div>
-        )}
-
         {/* --- DESKTOP TOP NAVIGATION --- */}
         {user && (
             <nav className={`hidden md:flex fixed top-0 left-0 w-full z-50 px-6 h-16 items-center justify-between ${getDesktopNavClasses()}`}>
+                {/* Logo Area */}
                 <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigateTo('FEED')}>
                     <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-xs ${theme === 'winamp' ? 'border border-[#505050] bg-black text-[#00ff00]' : theme === 'xp' ? 'bg-[url(https://upload.wikimedia.org/wikipedia/commons/e/e2/Windows_logo_and_wordmark_-_2001-2006.svg)] bg-contain bg-no-repeat bg-center w-8' : 'bg-green-500 text-black font-pixel'}`}>
                         {theme !== 'xp' && 'NA'}
@@ -363,6 +394,7 @@ export default function App() {
                     <span className={`font-bold tracking-widest ${theme === 'winamp' ? 'text-lg font-winamp' : theme === 'xp' ? 'font-sans italic text-lg drop-shadow' : 'font-pixel text-lg'}`}>NeoArchive</span>
                 </div>
 
+                {/* Desktop Menu Links */}
                 <div className="flex items-center gap-6">
                     <button onClick={() => navigateTo('FEED')} className={`flex items-center gap-2 hover:opacity-100 transition-opacity ${view === 'FEED' ? 'opacity-100 font-bold' : 'opacity-60'}`}>
                         <LayoutGrid size={18}/> {theme === 'winamp' ? 'LIBRARY' : 'Лента'}
@@ -375,6 +407,7 @@ export default function App() {
                     </button>
                 </div>
 
+                {/* Right Actions */}
                 <div className="flex items-center gap-4">
                     <button onClick={() => navigateTo('SEARCH')} className="opacity-70 hover:opacity-100"><Search size={20}/></button>
                     <button onClick={() => navigateTo('ACTIVITY')} className="relative opacity-70 hover:opacity-100">
@@ -390,32 +423,8 @@ export default function App() {
             </nav>
         )}
 
+        {/* Adjust padding for desktop top nav */}
         <div className="md:pt-16">
-            {view === 'FEED' && user && (
-                <FeedView 
-                    theme={theme}
-                    user={user}
-                    stories={stories}
-                    exhibits={exhibits}
-                    wishlist={wishlist}
-                    
-                    feedMode={feedMode}
-                    setFeedMode={setFeedMode}
-                    feedViewMode={feedViewMode}
-                    setFeedViewMode={setFeedViewMode}
-                    feedType={feedType}
-                    setFeedType={setFeedType}
-                    selectedCategory={selectedCategory}
-                    setSelectedCategory={setSelectedCategory}
-
-                    onNavigate={(v, p) => navigateTo(v as ViewState, p)}
-                    onExhibitClick={handleExhibitClick}
-                    onLike={handleLike}
-                    onUserClick={(u) => navigateTo('USER_PROFILE', { username: u })}
-                    onWishlistClick={(w) => { setSelectedWishlistItem(w); setView('WISHLIST_DETAIL'); }}
-                />
-            )}
-
             {view === 'ACTIVITY' && user && (
                 <div className="p-4 pb-24" {...globalSwipeHandlers}>
                     <ActivityView 
@@ -457,20 +466,12 @@ export default function App() {
                         const updatedExhibit = { ...selectedExhibit, comments: [...(selectedExhibit.comments || []), comment] };
                         setSelectedExhibit(updatedExhibit);
                         await db.updateExhibit(updatedExhibit);
-                        
-                        // Notify Owner
-                        if (selectedExhibit.owner !== user.username) {
-                            db.createNotification(selectedExhibit.owner, 'COMMENT', user.username, selectedExhibit.id, selectedExhibit.title);
-                        }
                     }}
                     onCommentLike={async (commentId) => {
                         if (!user) return;
                         const updatedComments = selectedExhibit.comments.map(c => {
                             if (c.id === commentId) {
                                 const isLiked = c.likedBy?.includes(user.username);
-                                if (!isLiked && c.author !== user.username) {
-                                    db.createNotification(c.author, 'LIKE_COMMENT', user.username, selectedExhibit.id, c.text.slice(0, 30));
-                                }
                                 return {
                                     ...c,
                                     likes: isLiked ? c.likes - 1 : c.likes + 1,
@@ -490,14 +491,7 @@ export default function App() {
                         await db.updateExhibit(updatedExhibit);
                     }}
                     onAuthorClick={(author) => navigateTo('USER_PROFILE', { username: author })}
-                    onFollow={(u) => { 
-                        if(user) {
-                            db.toggleFollow(user.username, u);
-                            if (!user.following.includes(u)) { 
-                                db.createNotification(u, 'FOLLOW', user.username);
-                            }
-                        }
-                    }}
+                    onFollow={(u) => { if(user) db.toggleFollow(user.username, u); }}
                     onMessage={(u) => { navigateTo('DIRECT_CHAT', { username: u }); }}
                     onDelete={async (id) => { await db.deleteExhibit(id); handleBack(); }}
                     onEdit={(item) => navigateTo('EDIT_ARTIFACT', { item })}
@@ -513,9 +507,7 @@ export default function App() {
                 />
             )}
 
-            {/* Other views remain as they were, contextually correct */}
-            {/* ... CollectionDetail, GuildDetail, WishlistDetail, etc ... */}
-            
+            {/* Other views remain same ... */}
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
                 <div className="max-w-4xl mx-auto p-4 pb-24">
                     <CollectionDetailPage 
@@ -527,7 +519,7 @@ export default function App() {
                         onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
                         currentUser={user?.username || ''}
                         onDelete={async (id) => { await db.deleteCollection(id); handleBack(); }}
-                        onLike={async (id) => { }}
+                        onLike={async (id) => { /* Collection like logic */ }}
                     />
                 </div>
             )}
@@ -550,7 +542,6 @@ export default function App() {
                     currentUser={user.username}
                     onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
                     onDelete={async (id) => { await db.deleteWishlistItem(id); handleBack(); }}
-                    userInventory={exhibits.filter(e => e.owner === user.username)}
                 />
             )}
 
@@ -739,10 +730,6 @@ export default function App() {
                         onGuestbookPost={async (text) => {
                             const entry = { id: crypto.randomUUID(), author: user.username, targetUser: viewedProfileUsername, text, timestamp: new Date().toLocaleString(), isRead: false };
                             await db.saveGuestbookEntry(entry);
-                            
-                            if (viewedProfileUsername !== user.username) {
-                                db.createNotification(viewedProfileUsername, 'GUESTBOOK', user.username, entry.id, text.slice(0, 30));
-                            }
                             refreshData();
                         }}
                         refreshData={refreshData}
@@ -805,29 +792,232 @@ export default function App() {
                 </div>
             )}
 
-            {/* Bottom Nav remains standard */}
-            {user && (
-                <div className={`md:hidden fixed bottom-0 left-0 w-full z-40 border-t safe-area-pb ${theme === 'winamp' ? 'bg-[#292929] border-[#505050]' : theme === 'dark' ? 'bg-black/90 border-white/10 backdrop-blur-md' : 'bg-white/90 border-black/10 backdrop-blur-md'}`}>
-                    {theme === 'winamp' ? (
-                        <div className="flex justify-around items-center p-2">
-                            <button onClick={() => navigateTo('FEED')} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] ${view === 'FEED' ? 'text-wa-green' : 'text-gray-500'}`}><SkipBack size={16} fill="currentColor"/></button>
-                            <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] ${view === 'COMMUNITY_HUB' ? 'text-wa-green' : 'text-gray-500'}`}><Play size={16} fill="currentColor"/></button>
-                            <button onClick={() => navigateTo('CREATE_HUB')} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] ${view.includes('CREATE') ? 'text-wa-gold' : 'text-gray-500'}`}><span className="font-winamp text-xl">⚡</span></button>
-                            <button onClick={() => navigateTo('ACTIVITY')} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] relative ${view === 'ACTIVITY' ? 'text-wa-green' : 'text-gray-500'}`}><Pause size={16} fill="currentColor"/>{notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full" />}</button>
-                            <button onClick={() => navigateTo('USER_PROFILE', { username: user.username })} className={`w-10 h-8 flex items-center justify-center border-t border-l border-[#505050] border-b border-r border-black active:border-t-black active:border-l-black active:border-b-[#505050] active:border-r-[#505050] bg-[#191919] ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'text-wa-green' : 'text-gray-500'}`}><User size={16} fill="currentColor" /></button>
+            {/* --- FEED VIEW: UPDATED --- */}
+            {view === 'FEED' && (
+                <div className="pb-24 space-y-6" {...globalSwipeHandlers}>
+                    {/* Mobile Header */}
+                    <header className="md:hidden flex justify-between items-center px-4 pt-4 sticky top-0 z-30 backdrop-blur-xl bg-transparent">
+                        <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-black font-pixel text-xs ${theme === 'winamp' ? 'bg-[#292929] text-[#00ff00] border border-[#505050]' : 'bg-green-500'}`}>NA</div>
+                            <h1 className={`text-lg font-pixel font-bold tracking-tighter ${theme === 'winamp' ? 'text-[#00ff00]' : ''}`}>NeoArchive</h1>
                         </div>
-                    ) : (
-                        <div className="flex justify-around items-center p-3">
-                            <button onClick={() => navigateTo('FEED')} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}><LayoutGrid size={20} /></button>
-                            <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`flex flex-col items-center gap-1 ${view === 'COMMUNITY_HUB' ? 'text-green-500' : 'opacity-50'}`}><Globe size={20} /></button>
-                            <button onClick={() => navigateTo('CREATE_HUB')} className="flex flex-col items-center justify-center -mt-8"><div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 bg-green-500 text-black`}><Plus size={28} /></div></button>
-                            <button onClick={() => navigateTo('ACTIVITY')} className={`flex flex-col items-center gap-1 relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}><Bell size={20} />{notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-0 right-1 w-2 h-2 bg-red-500 rounded-full" />}</button>
-                            <button onClick={() => navigateTo('USER_PROFILE', { username: user.username })} className={`flex flex-col items-center gap-1 ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'text-green-500' : 'opacity-50'}`}><div className={`w-6 h-6 rounded-full overflow-hidden border ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'border-green-500' : 'border-transparent'}`}><img src={user.avatarUrl} className="w-full h-full object-cover" /></div></button>
+                        {user && (
+                            <div className="flex gap-4">
+                                <button onClick={() => navigateTo('ACTIVITY')} className="relative">
+                                    <Bell className="opacity-70 hover:opacity-100" />
+                                    {notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
+                                </button>
+                            </div>
+                        )}
+                    </header>
+
+                    {/* HERO SECTION */}
+                    {heroData.findOfTheDay && (
+                        <div className="px-4">
+                            <div className={`relative w-full aspect-[2/1] md:aspect-[3/1] rounded-3xl overflow-hidden cursor-pointer group ${theme === 'winamp' ? 'border-2 border-[#505050]' : 'shadow-2xl'}`} onClick={() => handleExhibitClick(heroData.findOfTheDay)}>
+                                <div className="absolute inset-0">
+                                    <img src={heroData.findOfTheDay.imageUrls[0]} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
+                                    <div className={`absolute inset-0 bg-gradient-to-t ${theme === 'light' ? 'from-white/90 via-transparent' : 'from-black/90 via-black/20'} to-transparent`} />
+                                </div>
+                                <div className="absolute top-4 left-4">
+                                    <div className="px-3 py-1 bg-yellow-500 text-black font-pixel text-[10px] font-bold rounded-full flex items-center gap-1 shadow-lg animate-pulse">
+                                        <Sparkles size={12} /> НАХОДКА ДНЯ
+                                    </div>
+                                </div>
+                                <div className="absolute bottom-0 left-0 w-full p-6">
+                                    <h2 className={`text-2xl md:text-4xl font-pixel font-black mb-1 line-clamp-1 ${theme === 'light' ? 'text-black' : 'text-white'}`}>{heroData.findOfTheDay.title}</h2>
+                                    <div className="flex items-center gap-2">
+                                        <img src={db.getUserAvatar(heroData.findOfTheDay.owner)} className="w-6 h-6 rounded-full border border-white/50" />
+                                        <span className={`text-xs font-mono font-bold ${theme === 'light' ? 'text-black/70' : 'text-white/80'}`}>@{heroData.findOfTheDay.owner}</span>
+                                    </div>
+                                </div>
+                                <div className="absolute top-4 right-4 hidden md:flex flex-col gap-2 items-end">
+                                    <div className="px-3 py-1 bg-black/50 backdrop-blur-md rounded-lg border border-white/10 text-[10px] font-mono text-white">
+                                        TOTAL_ITEMS: <span className="text-green-400">{heroData.totalStats.items}</span>
+                                    </div>
+                                    <div className="px-3 py-1 bg-black/50 backdrop-blur-md rounded-lg border border-white/10 text-[10px] font-mono text-white">
+                                        USERS: <span className="text-blue-400">{heroData.totalStats.users}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
+
+                    {/* STORIES CAROUSEL */}
+                    {stories.length > 0 && (
+                        <div className="pl-4">
+                            <h3 className="font-pixel text-[10px] opacity-50 mb-3 flex items-center gap-2 tracking-widest"><Zap size={12} className="text-yellow-500"/> ОБНОВЛЕНИЯ ПОДПИСОК</h3>
+                            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide pr-4">
+                                {stories.map((story, i) => (
+                                    <div key={i} onClick={() => story.latestItem && handleExhibitClick(story.latestItem)} className="flex flex-col items-center gap-2 cursor-pointer group min-w-[70px]">
+                                        <div className="relative p-[2px] rounded-full bg-gradient-to-tr from-green-500 to-blue-500">
+                                            <div className={`rounded-full p-[2px] ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}>
+                                                <img src={story.avatar} className="w-14 h-14 rounded-full object-cover" />
+                                            </div>
+                                        </div>
+                                        <span className="text-[10px] font-bold truncate max-w-[70px]">@{story.username}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* FEED CONTROLS & SEARCH */}
+                    <div className={`sticky top-[52px] md:top-[64px] z-20 pt-2 pb-2 px-4 transition-all ${theme === 'dark' ? 'bg-dark-bg/95 backdrop-blur-md' : theme === 'winamp' ? 'bg-[#191919] border-b border-[#505050]' : 'bg-light-bg/95 backdrop-blur-md'}`}>
+                        {/* Search Input Trigger */}
+                        <div className="mb-4">
+                            <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10' : theme === 'winamp' ? 'bg-black border-[#00ff00]' : 'bg-white border-black/10 shadow-sm'}`}>
+                                <Search size={16} className="opacity-50" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Поиск по артефактам, людям..." 
+                                    className={`bg-transparent border-none outline-none text-xs w-full font-mono ${theme === 'winamp' ? 'text-[#00ff00] placeholder-green-900' : ''}`}
+                                    onFocus={() => navigateTo('SEARCH')} 
+                                    readOnly
+                                />
+                                <Camera size={16} className="opacity-50 cursor-pointer hover:opacity-100" onClick={(e) => { e.stopPropagation(); navigateTo('CREATE_WISHLIST'); }} />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                            {/* Feed Type Toggles */}
+                            <div className={`flex p-1 rounded-xl ${theme === 'dark' ? 'bg-white/5' : theme === 'winamp' ? 'bg-[#292929] border border-[#505050]' : 'bg-black/5'}`}>
+                                <button 
+                                    onClick={() => setFeedType('FOR_YOU')} 
+                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${feedType === 'FOR_YOU' ? (theme === 'winamp' ? 'bg-[#00ff00] text-black' : 'bg-green-500 text-black shadow-lg') : 'opacity-50 hover:opacity-100'}`}
+                                >
+                                    FOR YOU
+                                </button>
+                                <button 
+                                    onClick={() => setFeedType('FOLLOWING')} 
+                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${feedType === 'FOLLOWING' ? (theme === 'winamp' ? 'bg-[#00ff00] text-black' : 'bg-green-500 text-black shadow-lg') : 'opacity-50 hover:opacity-100'}`}
+                                >
+                                    FOLLOWING
+                                </button>
+                            </div>
+
+                            {/* View Mode Toggles */}
+                            <div className="flex gap-1">
+                                <button onClick={() => setFeedViewMode('GRID')} className={`p-2 rounded-lg transition-all ${feedViewMode === 'GRID' ? 'bg-white/10 text-green-500' : 'opacity-50'}`}><LayoutGrid size={18}/></button>
+                                <button onClick={() => setFeedViewMode('LIST')} className={`p-2 rounded-lg transition-all ${feedViewMode === 'LIST' ? 'bg-white/10 text-green-500' : 'opacity-50'}`}><ListIcon size={18}/></button>
+                            </div>
+                        </div>
+
+                        {/* Category Filters */}
+                        <div className="flex gap-2 overflow-x-auto pt-4 pb-1 scrollbar-hide">
+                            <button 
+                                onClick={() => setSelectedCategory('ВСЕ')}
+                                className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === 'ВСЕ' ? 'bg-white text-black border-white' : 'border-current opacity-40 hover:opacity-100'}`}
+                            >
+                                ALL
+                            </button>
+                            {Object.values(DefaultCategory).map(cat => (
+                                <button 
+                                    key={cat}
+                                    onClick={() => setSelectedCategory(cat)}
+                                    className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (theme === 'winamp' ? 'bg-[#00ff00] text-black border-[#00ff00]' : 'bg-green-500 text-black border-green-500') : 'border-white/10 opacity-60 hover:opacity-100'}`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* FEED GRID/LIST */}
+                    <div className="px-4">
+                        {exhibits
+                            .filter(e => !e.isDraft)
+                            .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
+                            .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
+                            .length === 0 ? (
+                                <div className="text-center py-20 opacity-30 font-mono text-xs border-2 border-dashed border-white/10 rounded-3xl">
+                                    НЕТ ДАННЫХ В ПОТОКЕ
+                                    <br/>
+                                    {feedType === 'FOLLOWING' && "Подпишитесь на кого-нибудь!"}
+                                </div>
+                            ) : (
+                                <div className={`grid gap-4 ${feedViewMode === 'GRID' ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6' : 'grid-cols-1'}`}>
+                                    {exhibits
+                                        .filter(e => !e.isDraft)
+                                        .filter(e => selectedCategory === 'ВСЕ' || e.category === selectedCategory)
+                                        .filter(e => feedType === 'FOR_YOU' ? true : user.following.includes(e.owner))
+                                        .map(item => (
+                                            feedViewMode === 'GRID' ? (
+                                                <ExhibitCard 
+                                                    key={item.id} 
+                                                    item={item} 
+                                                    theme={theme}
+                                                    onClick={handleExhibitClick}
+                                                    isLiked={item.likedBy?.includes(user?.username || '') || false}
+                                                    onLike={(e) => handleLike(item.id, e)}
+                                                    onAuthorClick={(u) => navigateTo('USER_PROFILE', { username: u })}
+                                                />
+                                            ) : (
+                                                // LIST VIEW CARD (Inline)
+                                                <div 
+                                                    key={item.id} 
+                                                    onClick={() => handleExhibitClick(item)}
+                                                    className={`flex gap-4 p-3 rounded-xl border cursor-pointer hover:scale-[1.01] transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : theme === 'winamp' ? 'bg-[#191919] border-[#505050] text-[#00ff00]' : 'bg-white border-black/10 hover:shadow-md'}`}
+                                                >
+                                                    <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-black/20">
+                                                        <img src={item.imageUrls[0]} className="w-full h-full object-cover" />
+                                                    </div>
+                                                    <div className="flex-1 flex flex-col justify-between">
+                                                        <div>
+                                                            <div className="flex justify-between items-start">
+                                                                <span className="text-[10px] font-pixel opacity-50 uppercase">{item.category}</span>
+                                                                <div className="flex items-center gap-2 text-[10px] opacity-60">
+                                                                    <Heart size={12}/> {item.likes}
+                                                                </div>
+                                                            </div>
+                                                            <h3 className="font-bold font-pixel text-sm mt-1">{item.title}</h3>
+                                                            <p className="text-[10px] opacity-60 line-clamp-2 mt-1">{item.description}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-2">
+                                                            <img src={db.getUserAvatar(item.owner)} className="w-5 h-5 rounded-full border border-white/20" />
+                                                            <span className="text-[10px] font-bold">@{item.owner}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        ))
+                                    }
+                                </div>
+                            )
+                        }
+                    </div>
                 </div>
             )}
 
+            {/* BOTTOM NAVIGATION - Mobile Only */}
+            {user && (
+                <div className={`md:hidden fixed bottom-0 left-0 w-full z-40 border-t safe-area-pb ${theme === 'winamp' ? 'bg-[#292929] border-[#505050]' : theme === 'dark' ? 'bg-black/90 border-white/10 backdrop-blur-md' : 'bg-white/90 border-black/10 backdrop-blur-md'}`}>
+                    <div className="flex justify-around items-center p-3">
+                        <button onClick={() => navigateTo('FEED')} className={`flex flex-col items-center gap-1 ${view === 'FEED' ? 'text-green-500' : 'opacity-50'}`}>
+                            {theme === 'winamp' ? <div className="w-4 h-4 bg-[#00ff00] shadow-[0_0_5px_#00ff00]"/> : <LayoutGrid size={20} />}
+                        </button>
+                        <button onClick={() => navigateTo('COMMUNITY_HUB')} className={`flex flex-col items-center gap-1 ${view === 'COMMUNITY_HUB' ? 'text-green-500' : 'opacity-50'}`}>
+                            {theme === 'winamp' ? <div className="w-4 h-4 bg-[#00ff00] shadow-[0_0_5px_#00ff00] opacity-50"/> : <Globe size={20} />}
+                        </button>
+                        <button onClick={() => navigateTo('CREATE_HUB')} className="flex flex-col items-center justify-center -mt-8">
+                            <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 ${theme === 'winamp' ? 'bg-[#292929] border-2 border-wa-gold text-wa-gold shadow-[0_0_10px_#FFD700]' : 'bg-green-500 text-black'}`}>
+                                <Plus size={28} />
+                            </div>
+                        </button>
+                        <button onClick={() => navigateTo('ACTIVITY')} className={`flex flex-col items-center gap-1 relative ${view === 'ACTIVITY' ? 'text-green-500' : 'opacity-50'}`}>
+                            {theme === 'winamp' ? <div className="w-4 h-4 bg-[#00ff00] shadow-[0_0_5px_#00ff00] opacity-50"/> : <Bell size={20} />}
+                            {notifications.some(n => n.recipient === user.username && !n.isRead) && <div className="absolute top-0 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+                        </button>
+                        <button onClick={() => navigateTo('USER_PROFILE', { username: user.username })} className={`flex flex-col items-center gap-1 ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'text-green-500' : 'opacity-50'}`}>
+                            <div className={`w-6 h-6 rounded-full overflow-hidden border ${view === 'USER_PROFILE' && viewedProfileUsername === user.username ? 'border-green-500' : 'border-transparent'}`}>
+                                <img src={user.avatarUrl} className="w-full h-full object-cover" />
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modals for Add to Collection */}
             {isAddingToCollection && user && (
                 <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
                     <div className={`w-full max-w-sm rounded-xl p-6 ${theme === 'winamp' ? 'bg-[#292929] border border-[#505050] text-gray-300' : 'bg-dark-surface border border-white/10 text-white'}`}>
@@ -840,10 +1030,6 @@ export default function App() {
                                         if(col.exhibitIds.includes(isAddingToCollection)) return;
                                         const updated = { ...col, exhibitIds: [...col.exhibitIds, isAddingToCollection] };
                                         await db.updateCollection(updated);
-                                        const item = exhibits.find(e => e.id === isAddingToCollection);
-                                        if (item && item.owner !== user.username) {
-                                            db.createNotification(item.owner, 'LIKE', user.username, item.id, item.title + " (Saved)");
-                                        }
                                         setIsAddingToCollection(null);
                                         alert('Добавлено!');
                                     }}
