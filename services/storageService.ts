@@ -130,7 +130,6 @@ const loadFromCache = async (): Promise<boolean> => {
 
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
-    // Increase timeout for initial sync stability
     const timeoutId = setTimeout(() => controller.abort(), 15000); 
     
     try {
@@ -144,14 +143,17 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
         const res = await fetch(`${API_BASE}${endpoint}`, options);
         clearTimeout(timeoutId);
         
-        if (!res.ok) throw new Error(`API Error ${res.status}`);
+        if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.error || `API Error ${res.status}`);
+        }
         isOfflineMode = false;
         return await res.json();
     } catch (error: any) {
         clearTimeout(timeoutId);
         console.warn(`API Fail: ${endpoint}`, error);
         isOfflineMode = true;
-        notifyListeners(); // Notify UI about offline state
+        notifyListeners(); 
         throw error;
     }
 };
@@ -171,34 +173,26 @@ const mergeArrays = <T>(local: T[], server: T[], key: keyof T = 'id' as keyof T)
 // --- FEED RANKING ALGORITHM ---
 export const calculateFeedScore = (item: Exhibit, currentUser?: UserProfile): number => {
     const now = new Date().getTime();
-    // Parse date safely. Handle various formats if necessary, but assume ISO or standard string
     const createdAt = new Date(item.timestamp).getTime(); 
-    if (isNaN(createdAt)) return 0; // Invalid date fallback
+    if (isNaN(createdAt)) return 0;
 
     const hoursOld = (now - createdAt) / (1000 * 60 * 60);
-    
     let score = 0;
 
-    // 1. FRESHNESS (Decay factor)
-    // Newer items get significantly higher base score
     if (hoursOld < 2) score += 100;
     else if (hoursOld < 12) score += 80;
     else if (hoursOld < 24) score += 60;
     else if (hoursOld < 72) score += 40;
     else score += Math.max(0, 20 - (hoursOld / 24));
 
-    // 2. POPULARITY (Engagement)
-    // Normalized by age to allow new items to compete
     const rawPopularity = (item.likes * 2) + ((item.comments?.length || 0) * 5) + (item.views * 0.1);
     const ageFactor = Math.sqrt(Math.max(1, hoursOld));
     score += (rawPopularity / ageFactor) * 10;
 
-    // 3. SOCIAL (Following)
     if (currentUser && currentUser.following.includes(item.owner)) {
-        score += 50; // Huge boost for following
+        score += 50; 
     }
 
-    // 4. TRADE BONUS
     if (item.tradeStatus === 'FOR_TRADE' || item.tradeStatus === 'FOR_SALE') {
         score += 15;
     }
@@ -211,28 +205,22 @@ export const calculateFeedScore = (item: Exhibit, currentUser?: UserProfile): nu
 const performCloudSync = async () => {
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
     try {
-        // Parallel fetch for speed
         const [feedData, userData, notifData] = await Promise.allSettled([
-            apiCall('/feed?page=1&limit=50'), // Fetch more initially
+            apiCall('/feed?page=1&limit=50'),
             activeUser ? apiCall(`/sync?username=${activeUser}`) : Promise.resolve(null),
             activeUser ? apiCall(`/notifications?username=${activeUser}`) : Promise.resolve(null)
         ]);
 
         let hasUpdates = false;
 
-        // Process Feed
         if (feedData.status === 'fulfilled' && Array.isArray(feedData.value)) {
             const prevLen = cache.exhibits.length;
             cache.exhibits = mergeArrays(cache.exhibits, feedData.value);
-            // Sort by actual time first to ensure cache is sane
             cache.exhibits.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             if (cache.exhibits.length !== prevLen) hasUpdates = true;
         }
 
-        // Process User Data & Notifications
         if (userData.status === 'fulfilled' && userData.value) {
-             // ... merge logic for collections, user profile ...
-             // Simplified for brevity, assume similar merge logic
              if (userData.value.collections) cache.collections = mergeArrays(cache.collections, userData.value.collections);
              if (userData.value.users) cache.users = mergeArrays(cache.users, userData.value.users, 'username');
              hasUpdates = true;
@@ -259,8 +247,6 @@ const performCloudSync = async () => {
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
     const hasCache = await loadFromCache();
     
-    // CRITICAL FIX: If cache is empty, we MUST wait for network sync
-    // Otherwise the user sees a blank screen.
     if (!hasCache || cache.exhibits.length === 0) {
         console.log("⚡ [System] Cache empty, performing blocking sync...");
         try {
@@ -269,7 +255,6 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
             console.error("Critical: Initial sync failed");
         }
     } else {
-        // If we have cache, render immediately and sync in background
         performCloudSync(); 
     }
     
@@ -280,7 +265,64 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     return null;
 };
 
-// ... (Rest of exports remain same, simplified for XML limit) ...
+// AUTHENTICATION FUNCTIONS - NOW CONNECTED TO API
+export const loginUser = async (identifier: string, password: string): Promise<UserProfile> => {
+    try {
+        const user = await apiCall('/auth/login', 'POST', { identifier, password });
+        if (user) {
+            cache.users = mergeArrays(cache.users, [user], 'username');
+            localStorage.setItem(SESSION_USER_KEY, user.username);
+            notifyListeners();
+            return user;
+        }
+    } catch (e) {
+        console.error("Login failed", e);
+        throw e;
+    }
+    throw new Error("Login failed");
+};
+
+export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
+    try {
+        const user = await apiCall('/auth/register', 'POST', { username, password, tagline, email });
+        if (user) {
+            cache.users = mergeArrays(cache.users, [user], 'username');
+            localStorage.setItem(SESSION_USER_KEY, user.username);
+            notifyListeners();
+            return user;
+        }
+    } catch (e) {
+        console.error("Register failed", e);
+        throw e;
+    }
+    throw new Error("Registration failed");
+};
+
+export const loginViaTelegram = async (tgUser: any): Promise<UserProfile> => {
+    try {
+        const user = await apiCall('/auth/telegram', 'POST', tgUser);
+        if (user) {
+            cache.users = mergeArrays(cache.users, [user], 'username');
+            localStorage.setItem(SESSION_USER_KEY, user.username);
+            notifyListeners();
+            return user;
+        }
+    } catch (e) {
+        throw e;
+    }
+    throw new Error("TG Auth Failed");
+};
+
+export const recoverPassword = async (email: string) => {
+    return await apiCall('/auth/recover', 'POST', { email });
+};
+
+export const logoutUser = async () => { 
+    localStorage.removeItem(SESSION_USER_KEY); 
+    notifyListeners(); 
+};
+
+// ... (Other exports) ...
 export const startLiveUpdates = () => { /* Same as before */ };
 export const stopLiveUpdates = () => { /* Same as before */ };
 export const getFullDatabase = () => ({ ...cache });
@@ -292,7 +334,6 @@ export const updateExhibit = async (e: Exhibit) => {
     notifyListeners();
 };
 export const fetchExhibitById = async (id: string) => { 
-    // Fallback if not in cache
     try {
         const item = await apiCall(`/exhibits/${id}`);
         if (item) {
@@ -305,8 +346,6 @@ export const fetchExhibitById = async (id: string) => {
 };
 export const fetchCollectionById = async (id: string) => { return null; };
 export const loadFeedBatch = async (page: number, limit: number) => {
-    // This function now mostly acts as a trigger to fetch more from server
-    // but returns what is in local cache sliced
     try {
         const newItems = await apiCall(`/feed?page=${page}&limit=${limit}`);
         if (Array.isArray(newItems)) {
@@ -319,17 +358,17 @@ export const loadFeedBatch = async (page: number, limit: number) => {
     return []; 
 };
 export const saveExhibit = async (e: Exhibit) => { cache.exhibits.unshift(e); await apiCall('/exhibits', 'POST', e); notifyListeners(); };
-export const deleteExhibit = async (id: string) => { /*...*/ };
-export const saveCollection = async (c: Collection) => { /*...*/ };
-export const updateCollection = async (c: Collection) => { /*...*/ };
-export const deleteCollection = async (id: string) => { /*...*/ };
-export const saveWishlistItem = async (w: WishlistItem) => { /*...*/ };
-export const deleteWishlistItem = async (id: string) => { /*...*/ };
-export const saveMessage = async (m: Message) => { /*...*/ };
-export const saveGuestbookEntry = async (e: GuestbookEntry) => { /*...*/ };
-export const updateGuestbookEntry = async (e: GuestbookEntry) => { /*...*/ };
-export const deleteGuestbookEntry = async (id: string) => { /*...*/ };
-export const updateUserProfile = async (u: UserProfile) => { /*...*/ };
+export const deleteExhibit = async (id: string) => { await apiCall(`/exhibits/${id}`, 'DELETE'); cache.exhibits = cache.exhibits.filter(e => e.id !== id); notifyListeners(); };
+export const saveCollection = async (c: Collection) => { await apiCall('/collections', 'POST', c); cache.collections.push(c); notifyListeners(); };
+export const updateCollection = async (c: Collection) => { await apiCall('/collections', 'POST', c); cache.collections = cache.collections.map(col => col.id === c.id ? c : col); notifyListeners(); };
+export const deleteCollection = async (id: string) => { await apiCall(`/collections/${id}`, 'DELETE'); cache.collections = cache.collections.filter(c => c.id !== id); notifyListeners(); };
+export const saveWishlistItem = async (w: WishlistItem) => { await apiCall('/wishlist', 'POST', w); cache.wishlist.push(w); notifyListeners(); };
+export const deleteWishlistItem = async (id: string) => { await apiCall(`/wishlist/${id}`, 'DELETE'); cache.wishlist = cache.wishlist.filter(w => w.id !== id); notifyListeners(); };
+export const saveMessage = async (m: Message) => { await apiCall('/messages', 'POST', m); cache.messages.push(m); notifyListeners(); };
+export const saveGuestbookEntry = async (e: GuestbookEntry) => { await apiCall('/guestbook', 'POST', e); cache.guestbook.push(e); notifyListeners(); };
+export const updateGuestbookEntry = async (e: GuestbookEntry) => { await apiCall('/guestbook', 'POST', e); cache.guestbook = cache.guestbook.map(g => g.id === e.id ? e : g); notifyListeners(); };
+export const deleteGuestbookEntry = async (id: string) => { await apiCall(`/guestbook/${id}`, 'DELETE'); cache.guestbook = cache.guestbook.filter(g => g.id !== id); notifyListeners(); };
+export const updateUserProfile = async (u: UserProfile) => { await apiCall('/users', 'POST', { id: u.username, ...u }); cache.users = cache.users.map(us => us.username === u.username ? u : us); notifyListeners(); };
 export const toggleFollow = async (me: string, them: string) => { /*...*/ };
 export const createGuild = async (g: Guild) => { /*...*/ };
 export const joinGuild = async (code: string, user: string) => { return false; };
@@ -342,7 +381,6 @@ export const acceptTradeRequest = async (id: string) => { /*...*/ };
 export const updateTradeStatus = async (id: string, s: string) => { /*...*/ };
 export const completeTradeRequest = async (id: string) => { /*...*/ };
 
-// Updated getStorageEstimate to prevent 'never' type inference
 export const getStorageEstimate = async (): Promise<StorageEstimate | undefined> => {
     try {
         if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
@@ -355,11 +393,31 @@ export const getStorageEstimate = async (): Promise<StorageEstimate | undefined>
 };
 
 export const clearLocalCache = async () => { await idb.clear(); };
-export const logoutUser = async () => { localStorage.removeItem(SESSION_USER_KEY); notifyListeners(); };
-export const loginUser = async (e:string, p:string) => { return {} as UserProfile; };
-export const registerUser = async (u:string, p:string, t:string, e:string) => { return {} as UserProfile; };
-export const loginViaTelegram = async (u:any) => { return {} as UserProfile; };
-export const recoverPassword = async (e:string) => { return {}; };
-export const fileToBase64 = async (f: File) => "";
-export const createNotification = async (r:string, t:NotificationType, a:string, id?:string, p?:string) => {};
-export const markNotificationsRead = async (u:string) => {};
+export const fileToBase64 = async (f: File) => {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(f);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = error => reject(error);
+    });
+};
+export const createNotification = async (r:string, t:NotificationType, a:string, id?:string, p?:string) => {
+    const notif: Notification = {
+        id: crypto.randomUUID(),
+        type: t,
+        recipient: r,
+        actor: a,
+        targetId: id,
+        targetPreview: p,
+        timestamp: new Date().toISOString(),
+        isRead: false
+    };
+    await apiCall('/notifications', 'POST', notif);
+    // Optimistic
+    cache.notifications.unshift(notif);
+    notifyListeners();
+};
+export const markNotificationsRead = async (username: string) => {
+    cache.notifications.forEach(n => { if(n.recipient === username) n.isRead = true; });
+    notifyListeners();
+};

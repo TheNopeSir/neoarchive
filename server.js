@@ -110,20 +110,138 @@ pool.connect((err, client, release) => {
     });
 });
 
-// ... (Email functions remain same) ...
-const sendRecoveryEmail = async (email, newPassword) => { /* ... */ };
-const sendConfirmationEmail = async (email, username, link) => { /* ... */ };
-
 // --- API ROUTES ---
 
-// ... (Auth routes remain same) ...
+// AUTH: REGISTER
+app.post('/api/auth/register', async (req, res) => {
+    const { username, password, tagline, email } = req.body;
+    
+    if (!username || !password || !email) {
+        return res.status(400).json({ error: "Заполните все поля" });
+    }
 
-// NOTIFICATIONS API (Enhanced)
+    const cleanUsername = username.trim();
+    const cleanEmail = email.toLowerCase().trim();
+
+    try {
+        // Check for duplicates
+        const existing = await query(
+            `SELECT username FROM users WHERE username = $1 OR data->>'email' = $2`, 
+            [cleanUsername, cleanEmail]
+        );
+        
+        if (existing.rows.length > 0) {
+            return res.status(400).json({ error: "Пользователь или Email уже заняты" });
+        }
+
+        const newUser = {
+            username: cleanUsername,
+            email: cleanEmail,
+            password, // In production, use bcrypt/argon2
+            tagline: tagline || "Новый пользователь",
+            avatarUrl: `https://ui-avatars.com/api/?name=${cleanUsername}&background=random&color=fff`,
+            joinedDate: new Date().toLocaleDateString(),
+            following: [],
+            followers: [],
+            achievements: [{ id: 'HELLO_WORLD', current: 1, target: 1, unlocked: true }],
+            settings: { theme: 'dark' },
+            isAdmin: false
+        };
+
+        await query(
+            `INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`,
+            [cleanUsername, newUser]
+        );
+
+        res.json(newUser);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// AUTH: LOGIN
+app.post('/api/auth/login', async (req, res) => {
+    const { identifier, password } = req.body;
+    
+    if (!identifier || !password) return res.status(400).json({ error: "Missing credentials" });
+
+    try {
+        // Find by username OR email
+        // Note: JSONB queries can be slow on large datasets without GIN index, but fine for prototype
+        let result = await query(`SELECT data FROM users WHERE username = $1`, [identifier]);
+        
+        if (result.rows.length === 0) {
+            result = await query(`SELECT data FROM users WHERE data->>'email' = $1`, [identifier.toLowerCase()]);
+        }
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Пользователь не найден" });
+        }
+
+        const user = result.rows[0].data;
+
+        // Simple password check (replace with hash compare in prod)
+        if (user.password !== password) {
+            return res.status(401).json({ error: "Неверный пароль" });
+        }
+
+        res.json(user);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// AUTH: TELEGRAM
+app.post('/api/auth/telegram', async (req, res) => {
+    const tgUser = req.body;
+    // In a real app, verify hash here using BOT_TOKEN
+    
+    const username = tgUser.username || `tg_${tgUser.id}`;
+    
+    try {
+        const result = await query(`SELECT data FROM users WHERE username = $1`, [username]);
+        
+        if (result.rows.length > 0) {
+            return res.json(result.rows[0].data);
+        }
+
+        // Create new if not exists
+        const newUser = {
+            username,
+            email: `tg_${tgUser.id}@telegram.neolink`,
+            tagline: "Telegram User",
+            password: crypto.randomUUID(), // Random pass, they rely on TG auth
+            avatarUrl: tgUser.photo_url || `https://ui-avatars.com/api/?name=${username}`,
+            joinedDate: new Date().toLocaleDateString(),
+            following: [],
+            followers: [],
+            achievements: [],
+            settings: { theme: 'dark' },
+            telegramId: tgUser.id
+        };
+
+        await query(`INSERT INTO users (username, data, updated_at) VALUES ($1, $2, NOW())`, [username, newUser]);
+        res.json(newUser);
+
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// AUTH: RECOVER
+app.post('/api/auth/recover', async (req, res) => {
+    const { email } = req.body;
+    // Mock recovery for now
+    console.log(`Recovery requested for ${email}`);
+    res.json({ success: true, message: "Если почта существует, мы отправили инструкцию." });
+});
+
+// NOTIFICATIONS API
 app.get('/api/notifications', async (req, res) => {
     const { username } = req.query;
     if (!username) return res.status(400).json({ error: "Username required" });
     try {
-        // Fetch up to 300 recent notifications for smart merging on client
+        // Fetch up to 300 recent notifications
         const result = await query(
             `SELECT data FROM notifications WHERE data->>'recipient' = $1 ORDER BY created_at DESC LIMIT 300`,
             [username]
@@ -134,17 +252,24 @@ app.get('/api/notifications', async (req, res) => {
     }
 });
 
-// ... (Other routes remain same) ...
-
-// Generic CRUD with updated_at enforcement
+// GENERIC CRUD API
 const createCrudRoutes = (table) => {
+    // GET ONE
+    app.get(`/api/${table}/:id`, async (req, res) => {
+        try {
+            const result = await query(`SELECT data FROM "${table}" WHERE id = $1`, [req.params.id]);
+            if (result.rows.length === 0) return res.status(404).json({ error: "Not found" });
+            res.json(result.rows[0].data);
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    // UPSERT (Create or Update)
     app.post(`/api/${table}`, async (req, res) => {
         try {
             const { id } = req.body;
             const recordId = id || req.body.id;
             if (!recordId) return res.status(400).json({ error: "ID is required" });
             
-            // Ensure payload has timestamp
             const payload = { ...req.body, updatedAt: new Date().toISOString() };
 
             await query(
@@ -160,6 +285,7 @@ const createCrudRoutes = (table) => {
         }
     });
 
+    // DELETE
     app.delete(`/api/${table}/:id`, async (req, res) => {
         try {
             await query(`DELETE FROM "${table}" WHERE id = $1`, [req.params.id]);
@@ -178,13 +304,42 @@ createCrudRoutes('guestbook');
 createCrudRoutes('wishlist');
 createCrudRoutes('tradeRequests');
 
-// ... (Rest of server.js) ...
+// SYNC (Basic implementation for User Data + Collections)
+app.get('/api/sync', async (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.json({});
+    
+    try {
+        const userRes = await query(`SELECT data FROM users WHERE username = $1`, [username]);
+        const user = userRes.rows[0]?.data;
+        
+        const colsRes = await query(`SELECT data FROM collections WHERE data->>'owner' = $1`, [username]);
+        const collections = colsRes.rows.map(r => r.data);
+
+        res.json({ users: user ? [user] : [], collections });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// FEED API
+app.get('/api/feed', async (req, res) => {
+    const limit = parseInt(req.query.limit) || 20;
+    try {
+        // Fetch most recent exhibits
+        // Note: In production, use pagination cursor or offset
+        const result = await query(`SELECT data FROM exhibits ORDER BY created_at DESC LIMIT $1`, [limit]);
+        res.json(result.rows.map(r => r.data));
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 app.get('*', async (req, res) => {
     const filePath = path.join(__dirname, 'dist', 'index.html');
     fs.readFile(filePath, 'utf8', async (err, htmlData) => {
         if (err) return res.status(500).send('Server Error');
-        res.send(htmlData); // Simplified for brevity, assume SEO logic exists
+        res.send(htmlData);
     });
 });
 
