@@ -60,6 +60,8 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
 
+    console.log(`[API] ${method} ${endpoint}...`);
+
     try {
         const headers: any = { 'Content-Type': 'application/json' };
         const options: RequestInit = { method, headers, signal: controller.signal };
@@ -68,13 +70,19 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
         const res = await fetch(`${API_BASE}${endpoint}`, options);
         clearTimeout(timeoutId);
 
+        console.log(`[API] ${method} ${endpoint} -> ${res.status}`);
+
         if (!res.ok) {
             const errText = await res.text();
             throw new Error(`API Error ${res.status}: ${errText.slice(0, 100)}`);
         }
-        return await res.json();
+
+        const data = await res.json();
+        console.log(`[API] ${method} ${endpoint} -> OK, items: ${Array.isArray(data) ? data.length : 'object'}`);
+        return data;
     } catch (e: any) {
         clearTimeout(timeoutId);
+        console.error(`[API] ${method} ${endpoint} -> ERROR:`, e.message);
         if (e.name === 'AbortError') {
             throw new Error(`Request timeout: ${endpoint}`);
         }
