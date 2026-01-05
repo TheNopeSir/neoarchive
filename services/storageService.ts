@@ -158,7 +158,11 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
             const errText = await res.text();
             throw new Error(`API Error ${res.status}: ${errText.slice(0, 100)}`);
         }
-        return await res.json();
+
+        console.log(`[API] ${method} ${endpoint} - parsing JSON...`);
+        const json = await res.json();
+        console.log(`[API] ${method} ${endpoint} - JSON parsed, items: ${Array.isArray(json) ? json.length : 'object'}`);
+        return json;
     } catch (e: any) {
         clearTimeout(timeoutId);
         const duration = Date.now() - startTime;
