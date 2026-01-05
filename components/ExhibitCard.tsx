@@ -1,186 +1,155 @@
 
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Heart, Eye } from 'lucide-react';
+import React, { useState } from 'react';
+import { Heart, Eye, Image as ImageIcon } from 'lucide-react';
 import { Exhibit } from '../types';
-import { getArtifactTier, TIER_CONFIG } from '../constants';
-import useSwipe from '../hooks/useSwipe';
+import { getArtifactTier, TIER_CONFIG, TRADE_STATUS_CONFIG } from '../constants';
 import { getUserAvatar } from '../services/storageService';
 
 interface ExhibitCardProps {
   item: Exhibit;
-  similarExhibits: Exhibit[];
-  theme: 'dark' | 'light';
+  theme: 'dark' | 'light' | 'xp' | 'winamp';
   onClick: (item: Exhibit) => void;
   isLiked: boolean;
-  isFavorited: boolean;
   onLike: (e: React.MouseEvent) => void;
-  onFavorite: (e: React.MouseEvent) => void;
   onAuthorClick: (author: string) => void;
 }
 
-const ExhibitCard: React.FC<ExhibitCardProps> = ({ 
-  item, 
-  theme, 
-  onClick,
-  isLiked,
-  onLike,
-  onAuthorClick
-}) => {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isLikeAnimating, setIsLikeAnimating] = useState(false);
-
-  useEffect(() => {
-    if (isLiked) {
-        setIsLikeAnimating(true);
-        const timer = setTimeout(() => setIsLikeAnimating(false), 400);
-        return () => clearTimeout(timer);
-    }
-  }, [isLiked]);
-
-  const images = Array.isArray(item.imageUrls) ? item.imageUrls : [];
-  const displayValue = item.condition || item.quality || "АРТЕФАКТ";
+const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked, onLike, onAuthorClick }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
   const tier = getArtifactTier(item);
-  const tierStyle = TIER_CONFIG[tier];
-  const Icon = tierStyle.icon;
+  const config = TIER_CONFIG[tier];
+  const Icon = config.icon;
+  const isCursed = tier === 'CURSED';
+  
+  // Trade Status Logic
+  const tradeStatus = item.tradeStatus || 'NONE';
+  const tradeConfig = TRADE_STATUS_CONFIG[tradeStatus];
 
-  const handleNextImage = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (images.length === 0) return;
-    setCurrentImageIndex((prev) => (prev + 1) % images.length);
-  };
+  const isXP = theme === 'xp';
+  const isWinamp = theme === 'winamp';
+  
+  const imageUrl = item.imageUrls?.[0] || 'https://placehold.co/600x400?text=NO+IMAGE';
 
-  const handlePrevImage = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (images.length === 0) return;
-    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
-  };
+  if (isWinamp) {
+      return (
+        <div 
+            onClick={() => onClick(item)}
+            className="group cursor-pointer flex flex-col h-full min-h-[200px] bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] overflow-hidden"
+        >
+            {/* Winamp Title Bar */}
+            <div className="h-4 bg-gradient-to-r from-wa-blue-light to-wa-blue-dark flex items-center justify-between px-1 cursor-default select-none">
+                <span className="text-white font-winamp text-[10px] tracking-widest uppercase truncate w-[85%]">{item.title}</span>
+                <div className="w-2 h-2 bg-[#DCDCDC] border border-t-white border-l-white border-r-[#505050] border-b-[#505050]"></div>
+            </div>
 
-  const swipeHandlers = useSwipe({
-    onSwipeLeft: handleNextImage,
-    onSwipeRight: handlePrevImage,
-  });
-
-  const handleLikeClick = (e: React.MouseEvent) => {
-      setIsLikeAnimating(true);
-      onLike(e);
-      setTimeout(() => setIsLikeAnimating(false), 400);
-  };
-
-  const handleAuthorClickInternal = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      onAuthorClick(item.owner);
-  };
-
-  const safeImageSrc = images.length > 0 ? images[currentImageIndex] : 'https://placehold.co/400x300?text=No+Image';
-
-  return (
-    <article 
-      onClick={() => onClick(item)}
-      className={`group relative cursor-pointer flex flex-col h-full rounded-xl overflow-hidden border-2 transition-all duration-300 hover:-translate-y-2 ${
-        theme === 'dark' 
-        ? `bg-dark-surface ${tierStyle.borderDark} hover:border-white/50` 
-        : `bg-white ${tierStyle.borderLight} hover:border-black/50`
-      }`}
-    >
-      <div 
-        className="relative aspect-square w-full bg-black/5 group/image overflow-hidden"
-        {...swipeHandlers}
-      >
-         <img 
-           src={safeImageSrc} 
-           alt={item.title} 
-           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-         />
-         
-         <div className={`absolute top-2 left-2 px-2 py-1 text-[8px] md:text-[10px] font-bold rounded backdrop-blur-md border ${
-            theme === 'dark' 
-            ? 'bg-black/60 text-white border-white/10' 
-            : 'bg-white/80 text-black border-black/5'
-         }`}>
-            {item.category}
-         </div>
-
-         <div className={`absolute top-2 right-2 px-1.5 py-1 rounded text-[8px] md:text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg ${tierStyle.badge}`}>
-            <Icon size={10} className={tierStyle.name === 'LEGENDARY' ? 'fill-yellow-200' : 'fill-white'} />
-            {tierStyle.name}
-         </div>
-         
-         {images.length > 1 && (
-           <>
-              <button onClick={handlePrevImage} className="absolute left-1 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 text-white rounded-full opacity-0 group-hover/image:opacity-100 transition-all backdrop-blur-sm">
-                <ChevronLeft size={16} />
-              </button>
-              <button onClick={handleNextImage} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 text-white rounded-full opacity-0 group-hover/image:opacity-100 transition-all backdrop-blur-sm">
-                <ChevronRight size={16} />
-              </button>
-              <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
-                  {images.map((_, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`w-1 h-1 rounded-full ${currentImageIndex === idx ? 'bg-white' : 'bg-white/40'}`}
-                      />
-                  ))}
-              </div>
-           </>
-         )}
-      </div>
-
-      <div className="p-2 md:p-3 flex flex-col flex-1 relative">
-         <div className="flex justify-between items-start gap-3 mb-1">
-             <h3 className={`text-[10px] md:text-sm font-bold leading-tight line-clamp-2 ${theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}`}>
-                {item.title}
-             </h3>
-         </div>
-
-         <div className={`mt-1 font-mono text-[9px] md:text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${theme === 'dark' ? 'text-dark-primary' : 'text-light-accent'}`}>
-             <span className="truncate">{displayValue}</span>
-         </div>
-
-         <div className="mt-auto pt-3 flex justify-between items-center border-t border-dashed border-opacity-20 border-gray-500">
-             {/* VISIBLE ON ALL DEVICES */}
-             <div 
-               onClick={handleAuthorClickInternal}
-               className={`flex text-[10px] truncate max-w-[60%] opacity-60 items-center gap-1 cursor-pointer hover:underline hover:opacity-100 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
-             >
-                <div className="w-4 h-4 rounded-full bg-gray-500 overflow-hidden flex-shrink-0 border border-gray-500">
-                     <img src={getUserAvatar(item.owner)} alt={item.owner} />
+            {/* Content Area */}
+            <div className="p-2 flex flex-col h-full">
+                {/* Image 'Screen' */}
+                <div className="relative aspect-square mb-2 bg-black border-2 border-t-[#101010] border-l-[#101010] border-r-[#505050] border-b-[#505050] flex items-center justify-center overflow-hidden">
+                    {!isLoaded && <div className="text-wa-green font-winamp text-xs animate-pulse">LOADING...</div>}
+                    <img 
+                        src={imageUrl} 
+                        alt={item.title} 
+                        loading="lazy"
+                        onLoad={() => setIsLoaded(true)}
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
+                    />
+                    <div className="absolute bottom-1 right-1 text-[8px] font-winamp text-wa-green bg-black/50 px-1">{item.category}</div>
                 </div>
-                @{item.owner}
-             </div>
-             
-             <div className="flex items-center gap-2 w-auto justify-end">
-                 <div className={`flex items-center gap-1 text-[9px] md:text-[10px] opacity-60 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    <Eye size={12} />
-                    <span>{item.views}</span>
-                 </div>
 
-                 <button 
-                    onClick={handleLikeClick}
-                    className={`flex items-center gap-1 px-2 py-1 rounded transition-all active:scale-95 group/like relative overflow-hidden ${
-                        isLiked 
-                        ? (theme === 'dark' ? 'text-green-400 bg-green-400/10' : 'text-green-500 bg-green-50') 
-                        : (theme === 'dark' ? 'text-gray-500 hover:text-white hover:bg-white/10' : 'text-gray-400 hover:text-black hover:bg-black/5')
-                    }`}
-                 >
-                     <Heart 
-                        size={14} 
-                        className={`transition-all duration-300 ${isLiked ? 'fill-current' : 'group-hover/like:scale-110'} ${isLikeAnimating ? 'scale-150 rotate-[-15deg]' : ''}`} 
-                     />
-                     <span 
-                        key={item.likes}
-                        className={`text-[9px] md:text-[10px] font-bold transition-all duration-300 ${isLikeAnimating ? 'text-green-500 scale-110' : ''} animate-[spin_0.1s_ease-out_reverse]`}
-                        style={{ animation: isLikeAnimating ? 'none' : undefined }}
-                     >
-                         {item.likes}
-                     </span>
-                     {isLikeAnimating && (
-                         <span className="absolute inset-0 rounded-full border-2 border-green-500 opacity-0 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_1]" />
-                     )}
-                  </button>
+                {/* Meta Info - Playlist Style */}
+                <div className="flex justify-between items-end mt-auto font-winamp text-wa-green text-[12px] leading-none">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] text-[#00A000]">{item.views} kbps</span>
+                        <span className="truncate max-w-[80px]" onClick={(e) => { e.stopPropagation(); onAuthorClick(item.owner); }}>{item.owner}.mp3</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); onLike(e); }} className={`hover:text-wa-gold ${isLiked ? 'text-wa-gold' : 'text-wa-green'}`}>
+                            {isLiked ? '★' : '☆'}
+                        </button>
+                        <span>{item.likes}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  // Standard Render for other themes
+  return (
+    <div 
+      onClick={() => onClick(item)}
+      className={`group cursor-pointer flex flex-col h-full transition-all duration-300 hover:-translate-y-2 
+        ${isXP 
+          ? 'rounded-t-lg shadow-lg border-2 border-[#0058EE] bg-white' 
+          : `rounded-2xl overflow-hidden border-2 ${theme === 'dark' ? `bg-dark-surface border-white/10 hover:border-green-500/50 ${config.shadow}` : 'bg-white border-black/5 hover:border-black/20 shadow-lg'}`
+        } 
+        ${isCursed ? 'animate-pulse' : ''}`
+      }
+    >
+      {/* XP Window Header */}
+      {isXP && (
+          <div className="h-6 bg-gradient-to-r from-[#0058EE] to-[#3F8CF3] rounded-t-[4px] flex items-center justify-between px-2 shadow-sm">
+             <span className="text-white font-bold text-[10px] drop-shadow-md truncate font-sans">{item.title}</span>
+             <div className="flex gap-1">
+                 <div className="w-3 h-3 bg-[#D64434] rounded-[2px] border border-white/30 shadow-inner"></div>
              </div>
-         </div>
+          </div>
+      )}
+
+      <div className={`relative aspect-square overflow-hidden bg-black/20 ${!isXP ? 'rounded-t-2xl' : ''}`}>
+        {!isLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-800 animate-pulse">
+                <ImageIcon size={24} className="text-white/20" />
+            </div>
+        )}
+        
+        <img 
+            src={imageUrl} 
+            alt={item.title} 
+            loading="lazy"
+            onLoad={() => setIsLoaded(true)}
+            className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
+        />
+        
+        {!isXP && <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg backdrop-blur-md text-[8px] font-pixel border uppercase bg-black/60 text-white border-white/10">{item.category}</div>}
+        
+        <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-lg flex items-center gap-1 text-[8px] font-pixel font-bold shadow-xl border border-white/10 ${config.badge}`}>
+            <Icon size={10} /> {config.name}
+        </div>
+
+        {tradeStatus !== 'NONE' && (
+            <div className={`absolute bottom-2 left-2 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] font-bold tracking-wide shadow-lg uppercase border !bg-zinc-900/95 backdrop-blur-md ${tradeConfig.color.replace(/bg-[\w/-]+/, '')}`}>
+                {tradeConfig.icon && React.createElement(tradeConfig.icon, { size: 12, strokeWidth: 2.5 })} 
+                {tradeConfig.badge}
+            </div>
+        )}
       </div>
-    </article>
+
+      <div className={`p-4 flex flex-col flex-1 ${isXP ? 'bg-[#ECE9D8]' : ''}`}>
+        {!isXP && <h3 className={`text-sm font-bold font-pixel mb-1 line-clamp-2 leading-tight ${isCursed ? 'text-red-500' : ''}`}>{item.title}</h3>}
+        <div className={`mt-1 font-mono text-[10px] ${isXP ? 'text-black opacity-80' : 'opacity-60'}`}>
+            <span className="truncate uppercase">{item.condition || item.quality}</span>
+            {isXP && <div className="text-[9px] text-gray-600 mt-1 uppercase tracking-wide">{item.category}</div>}
+        </div>
+        
+        <div className={`mt-auto pt-4 flex items-center justify-between border-t border-dashed ${isXP ? 'border-gray-400' : 'border-white/10'}`}>
+            <div onClick={(e) => { e.stopPropagation(); onAuthorClick(item.owner); }} className="flex items-center gap-2 group/author">
+                <img src={getUserAvatar(item.owner)} className={`w-5 h-5 rounded-full border ${isXP ? 'border-gray-400' : 'border-white/20'}`} />
+                <span className={`text-[10px] font-pixel opacity-50 group-hover/author:opacity-100 transition-opacity ${isXP ? 'text-black' : ''}`}>@{item.owner}</span>
+            </div>
+            
+            <div className="flex items-center gap-3">
+                <div className={`flex items-center gap-1 text-[10px] ${isXP ? 'text-black/60' : 'opacity-40'}`}>
+                    <Eye size={12} /> <span>{item.views}</span>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); onLike(e); }} className={`flex items-center gap-1 text-[10px] transition-all hover:scale-110 ${isLiked ? 'text-green-400' : (isXP ? 'text-black/60' : 'opacity-40')}`}>
+                    <Heart size={14} fill={isLiked ? "currentColor" : "none"} /> <span>{item.likes}</span>
+                </button>
+            </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

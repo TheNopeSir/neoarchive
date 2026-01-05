@@ -1,16 +1,27 @@
+
 import React, { useEffect, useState } from 'react';
 import { Database, AlertTriangle, Trash2 } from 'lucide-react';
 import { getStorageEstimate, clearLocalCache } from '../services/storageService';
 
 interface StorageMonitorProps {
-    theme: 'dark' | 'light';
+    theme: 'dark' | 'light' | 'xp' | 'winamp';
 }
 
 const StorageMonitor: React.FC<StorageMonitorProps> = ({ theme }) => {
     const [stats, setStats] = useState<{usage: number, quota: number, percentage: number} | null>(null);
 
     useEffect(() => {
-        getStorageEstimate().then(setStats);
+        getStorageEstimate().then((estimate) => {
+            if (estimate && typeof estimate.usage === 'number' && typeof estimate.quota === 'number') {
+                const usage = estimate.usage;
+                const quota = estimate.quota;
+                setStats({
+                    usage,
+                    quota,
+                    percentage: (usage / quota) * 100
+                });
+            }
+        });
     }, []);
 
     if (!stats) return null;
@@ -26,13 +37,14 @@ const StorageMonitor: React.FC<StorageMonitorProps> = ({ theme }) => {
 
     const isCritical = stats.percentage > 90;
     const isWarning = stats.percentage > 70;
+    const isWinamp = theme === 'winamp';
     
     let colorClass = 'bg-green-500';
     if (isWarning) colorClass = 'bg-yellow-500';
     if (isCritical) colorClass = 'bg-red-500';
 
     return (
-        <div className={`p-4 rounded border animate-in fade-in slide-in-from-bottom-2 ${theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
+        <div className={`p-4 rounded border animate-in fade-in slide-in-from-bottom-2 ${isWinamp ? 'bg-[#191919] border-[#505050] text-[#00ff00]' : theme === 'dark' ? 'bg-dark-surface border-dark-dim' : 'bg-white border-light-dim'}`}>
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 font-pixel text-xs">
                     <Database size={14} />
@@ -41,7 +53,7 @@ const StorageMonitor: React.FC<StorageMonitorProps> = ({ theme }) => {
                 <span className="font-mono text-xs font-bold">{stats.percentage.toFixed(1)}%</span>
             </div>
             
-            <div className={`w-full h-2 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'} mb-2`}>
+            <div className={`w-full h-2 rounded-full overflow-hidden ${isWinamp ? 'bg-[#282828]' : theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'} mb-2`}>
                 <div className={`h-full transition-all duration-500 ${colorClass}`} style={{ width: `${stats.percentage}%` }}></div>
             </div>
             

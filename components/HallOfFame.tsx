@@ -1,71 +1,77 @@
 
 import React from 'react';
-import { Trophy, ArrowLeft, Lock } from 'lucide-react';
-import { BADGES } from '../constants';
+import { Trophy, ArrowLeft, Lock, CheckCircle2 } from 'lucide-react';
+import { BADGE_CONFIG } from '../constants';
+import { AchievementProgress } from '../types';
 
 interface HallOfFameProps {
-  theme: 'dark' | 'light';
-  achievedIds: string[];
+  theme: 'dark' | 'light' | 'xp' | 'winamp';
+  achievements: AchievementProgress[];
   onBack: () => void;
 }
 
-const HallOfFame: React.FC<HallOfFameProps> = ({ theme, achievedIds, onBack }) => {
-  const allBadges = Object.entries(BADGES);
-  const total = allBadges.length;
-  const unlocked = achievedIds.length;
-  const progress = Math.round((unlocked / total) * 100);
-
+const HallOfFame: React.FC<HallOfFameProps> = ({ theme, achievements, onBack }) => {
+  const isWinamp = theme === 'winamp';
+  
   return (
-    <div className="max-w-4xl mx-auto animate-in fade-in pb-20">
-        <button onClick={onBack} className="flex items-center gap-2 mb-8 hover:underline opacity-70 font-pixel text-xs">
+    <div className={`max-w-4xl mx-auto animate-in fade-in pb-20 px-4 ${isWinamp ? 'font-mono text-gray-300' : ''}`}>
+        <button onClick={onBack} className={`flex items-center gap-2 mb-8 hover:underline opacity-70 font-pixel text-xs ${isWinamp ? 'text-[#00ff00]' : ''}`}>
              <ArrowLeft size={16} /> НАЗАД
         </button>
 
-        <div className="text-center mb-10">
-            <h1 className="text-2xl md:text-5xl font-pixel font-bold mb-4 flex items-center justify-center gap-2 md:gap-4">
-                <Trophy size={32} className="text-yellow-500 md:w-12 md:h-12" /> ЗАЛ СЛАВЫ
+        <div className="text-center mb-12">
+            <h1 className={`text-3xl md:text-5xl font-pixel font-black mb-4 flex items-center justify-center gap-4 ${isWinamp ? 'text-[#00ff00]' : ''}`}>
+                <Trophy size={40} className="text-yellow-500" /> ЗАЛ СЛАВЫ
             </h1>
-            <p className="font-mono text-xs md:text-base opacity-70">Глобальный реестр достижений сети NeoArchive.</p>
+            <p className="font-mono text-sm opacity-60 uppercase tracking-widest">Прогресс синхронизации нейронных узлов.</p>
         </div>
 
-        {/* Global Progress Bar */}
-        <div className="mb-12">
-            <div className="flex justify-between font-pixel text-xs mb-2">
-                <span>ПРОГРЕСС СИНХРОНИЗАЦИИ</span>
-                <span>{progress}%</span>
-            </div>
-            <div className={`w-full h-4 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                <div 
-                    className="h-full bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-200 transition-all duration-1000 ease-out"
-                    style={{ width: `${progress}%` }}
-                ></div>
-            </div>
-        </div>
-
-        {/* Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
-            {allBadges.map(([id, badge]) => {
-                const isUnlocked = achievedIds.includes(id);
-                // Dynamically import Icon (mocked here by checking types in App, but simple fallback)
-                // In a real app we would pass the icon component or map it
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {Object.entries(BADGE_CONFIG).map(([id, config]) => {
+                const progress = achievements.find(a => a.id === id) || { current: 0, target: config.target, unlocked: false };
+                const percent = Math.min(100, (progress.current / config.target) * 100);
                 
                 return (
                     <div 
                         key={id}
-                        className={`relative p-4 md:p-6 rounded-xl border-2 flex flex-col items-center text-center transition-all ${
-                            isUnlocked 
-                             ? (theme === 'dark' ? 'bg-dark-surface border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 'bg-white border-orange-400 shadow-lg')
-                             : (theme === 'dark' ? 'bg-black/40 border-gray-800 opacity-50 grayscale' : 'bg-gray-100 border-gray-300 opacity-60 grayscale')
+                        className={`relative p-6 rounded-3xl border-2 transition-all group ${
+                            isWinamp 
+                             ? (progress.unlocked ? 'bg-[#191919] border-[#00ff00]' : 'bg-[#191919] border-[#505050] opacity-50')
+                             : (progress.unlocked 
+                                 ? 'bg-dark-surface border-green-500/50 shadow-[0_0_20px_rgba(74,222,128,0.2)]'
+                                 : 'bg-black/40 border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100'
+                               )
                         }`}
                     >
-                        <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center mb-4 ${isUnlocked ? badge.color : 'bg-gray-600'} text-white shadow-inner`}>
-                             {isUnlocked ? <Trophy size={20} className="md:w-6 md:h-6" /> : <Lock size={20} className="md:w-6 md:h-6" />}
+                        <div className="flex items-start gap-4 mb-6">
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${progress.unlocked ? config.color : 'bg-white/10'} text-black shadow-lg`}>
+                                 <config.icon size={28} className={progress.unlocked ? 'text-black' : 'text-white/30'} />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className={`font-pixel text-sm font-black mb-1 flex items-center gap-2 ${isWinamp && progress.unlocked ? 'text-[#00ff00]' : ''}`}>
+                                    {config.label}
+                                    {progress.unlocked && <CheckCircle2 size={14} className="text-green-400" />}
+                                </h3>
+                                <p className="font-mono text-[10px] opacity-60 leading-relaxed uppercase">{config.desc}</p>
+                            </div>
                         </div>
-                        <h3 className="font-pixel text-[10px] md:text-sm font-bold mb-1">{badge.label}</h3>
-                        <p className="font-mono text-[9px] md:text-[10px] opacity-70">{badge.desc}</p>
+
+                        {/* Individual Progress Bar */}
+                        <div className="space-y-2">
+                            <div className="flex justify-between font-mono text-[9px] font-bold">
+                                <span>ПРОГРЕСС: {progress.current} / {config.target}</span>
+                                <span>{Math.round(percent)}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full transition-all duration-1000 ${progress.unlocked ? 'bg-green-500 shadow-[0_0_10px_#4ade80]' : 'bg-white/20'}`}
+                                    style={{ width: `${percent}%` }}
+                                />
+                            </div>
+                        </div>
                         
-                        {!isUnlocked && (
-                            <div className="absolute top-2 right-2 text-[8px] font-pixel bg-black text-white px-2 py-1 rounded">LOCKED</div>
+                        {!progress.unlocked && (
+                            <div className="absolute top-4 right-4"><Lock size={14} className="opacity-20" /></div>
                         )}
                     </div>
                 );

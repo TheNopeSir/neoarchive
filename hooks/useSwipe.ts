@@ -9,56 +9,49 @@ interface SwipeInput {
 }
 
 interface SwipeOutput {
-    onTouchStart: (e: TouchEvent) => void;
-    onTouchMove: (e: TouchEvent) => void;
+    onTouchStart: (e: TouchEvent<any>) => void;
+    onTouchMove: (e: TouchEvent<any>) => void;
     onTouchEnd: () => void;
 }
 
-const minSwipeDistance = 50;
+const useSwipe = ({ onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown }: SwipeInput): SwipeOutput => {
+    const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
+    const [touchEnd, setTouchEnd] = useState<{ x: number, y: number } | null>(null);
 
-export default function useSwipe({ onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown }: SwipeInput): SwipeOutput {
-    const [touchStart, setTouchStart] = useState<number | null>(null);
-    const [touchEnd, setTouchEnd] = useState<number | null>(null);
-    const [touchStartY, setTouchStartY] = useState<number | null>(null);
-    const [touchEndY, setTouchEndY] = useState<number | null>(null);
+    // Increased threshold to 75px to prevent accidental swipes while scrolling vertically
+    const minSwipeDistance = 75;
 
-    const onTouchStart = (e: TouchEvent) => {
-        setTouchEnd(null); // Reset
-        setTouchStart(e.targetTouches[0].clientX);
-        setTouchEndY(null);
-        setTouchStartY(e.targetTouches[0].clientY);
+    const onTouchStart = (e: TouchEvent<any>) => {
+        setTouchEnd(null);
+        setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
     };
 
-    const onTouchMove = (e: TouchEvent) => {
-        setTouchEnd(e.targetTouches[0].clientX);
-        setTouchEndY(e.targetTouches[0].clientY);
+    const onTouchMove = (e: TouchEvent<any>) => {
+        setTouchEnd({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
     };
 
     const onTouchEnd = () => {
-        if (!touchStart || !touchEnd || !touchStartY || !touchEndY) return;
+        if (!touchStart || !touchEnd) return;
 
-        const distanceX = touchStart - touchEnd;
-        const distanceY = touchStartY - touchEndY;
-        const isHorizontalSwipe = Math.abs(distanceX) > Math.abs(distanceY);
+        const distanceX = touchStart.x - touchEnd.x;
+        const distanceY = touchStart.y - touchEnd.y;
+        const isLeftSwipe = distanceX > minSwipeDistance;
+        const isRightSwipe = distanceX < -minSwipeDistance;
+        const isUpSwipe = distanceY > minSwipeDistance;
+        const isDownSwipe = distanceY < -minSwipeDistance;
 
-        if (isHorizontalSwipe) {
-            const isLeftSwipe = distanceX > minSwipeDistance;
-            const isRightSwipe = distanceX < -minSwipeDistance;
-
-            if (isLeftSwipe && onSwipeLeft) onSwipeLeft();
-            if (isRightSwipe && onSwipeRight) onSwipeRight();
+        if (Math.abs(distanceX) > Math.abs(distanceY)) {
+             // Horizontal
+             if (isLeftSwipe && onSwipeLeft) onSwipeLeft();
+             if (isRightSwipe && onSwipeRight) onSwipeRight();
         } else {
-            const isUpSwipe = distanceY > minSwipeDistance;
-            const isDownSwipe = distanceY < -minSwipeDistance;
-
-            if (isUpSwipe && onSwipeUp) onSwipeUp();
-            if (isDownSwipe && onSwipeDown) onSwipeDown();
+             // Vertical
+             if (isUpSwipe && onSwipeUp) onSwipeUp();
+             if (isDownSwipe && onSwipeDown) onSwipeDown();
         }
     };
 
-    return {
-        onTouchStart,
-        onTouchMove,
-        onTouchEnd
-    };
-}
+    return { onTouchStart, onTouchMove, onTouchEnd };
+};
+
+export default useSwipe;

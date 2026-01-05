@@ -1,55 +1,81 @@
 
 export interface Comment {
   id: string;
+  parentId?: string; // For replies
   author: string;
   text: string;
   timestamp: string;
-  likes: number; // Added
-  likedBy: string[]; // Added
+  likes: number;
+  likedBy: string[];
+}
+
+export type TierType = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'CURSED';
+
+export type TradeStatus = 'NONE' | 'FOR_TRADE' | 'FOR_SALE' | 'GIFT' | 'NOT_FOR_SALE';
+
+export type WishlistPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'GRAIL';
+
+export interface WishlistItem {
+    id: string;
+    title: string;
+    category: string;
+    owner: string;
+    priority: WishlistPriority;
+    notes?: string;
+    referenceImageUrl?: string; // Image of what user wants
+    timestamp: string;
 }
 
 export interface Exhibit {
   id: string;
-  slug?: string; // SEO Friendly URL
+  slug?: string;
   title: string;
   description: string;
   imageUrls: string[];
   videoUrl?: string; 
   category: string; 
-  subcategory?: string; // Added
+  subcategory?: string;
   owner: string;
   timestamp: string;
   likes: number;
-  likedBy?: string[]; // List of users who liked this
+  likedBy: string[]; 
   views: number;
-  // rating removed
   condition?: string;
   quality: string;
   specs: Record<string, string>;
   comments: Comment[];
-  isDraft?: boolean; // Added
+  isDraft?: boolean;
+  tradeStatus?: TradeStatus; 
+  price?: number;
+  currency?: 'RUB' | 'USD' | 'ETH';
+  tradeRequest?: string; // What they want in return
+  relatedIds?: string[]; // IDs of connected items within user's collection
+  lockedInTradeId?: string; // ID of the trade if item is locked
 }
 
 export interface Collection {
   id: string;
-  slug?: string; // SEO Friendly URL
+  slug?: string;
   title: string;
   description: string;
   owner: string;
   coverImage: string;
-  exhibitIds: string[]; // IDs of exhibits in this collection
+  exhibitIds: string[];
   timestamp: string;
+  likes: number;
+  likedBy: string[];
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT'; // Added LIKE_COMMENT
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'GUESTBOOK' | 'LIKE_COMMENT' | 'MENTION' | 'TRADE_OFFER' | 'TRADE_ACCEPTED' | 'TRADE_DECLINED' | 'TRADE_COMPLETED' | 'TRADE_CANCELLED' | 'TRADE_COUNTER';
 
 export interface Notification {
   id: string;
   type: NotificationType;
-  actor: string; // Username who triggered it
-  recipient: string; // Username who receives it
-  targetId?: string; // ID of exhibit (if applicable)
-  targetPreview?: string; // Text preview
+  actor: string;
+  recipient: string;
+  targetId?: string;
+  targetPreview?: string;
+  contextId?: string; 
   timestamp: string;
   isRead: boolean;
 }
@@ -74,22 +100,99 @@ export interface GuestbookEntry {
 
 export type UserStatus = 'ONLINE' | 'AWAY' | 'DND' | 'INVISIBLE' | 'FREE_FOR_CHAT';
 
+export interface AchievementProgress {
+  id: string;
+  current: number;
+  target: number;
+  unlocked: boolean;
+}
+
+export interface AppSettings {
+    theme?: 'dark' | 'light' | 'xp' | 'winamp';
+    notificationsEnabled?: boolean;
+    soundEnabled?: boolean;
+    publicProfile?: boolean;
+    showEmail?: boolean;
+}
+
 export interface UserProfile {
   username: string;
-  email: string; // Required for Auth
+  email: string;
   tagline: string;
+  bio?: string; // Extended biography
   status?: UserStatus;
   avatarUrl: string;
+  coverUrl?: string; // Profile Banner
   joinedDate: string;
-  following: string[]; // List of usernames
-  achievements?: string[]; // List of Badge IDs
-  preferences?: Record<string, number>; // RECOMMENDATION ENGINE WEIGHTS
-  // Auth simulation fields
+  following: string[];
+  followers: string[]; 
+  achievements: AchievementProgress[]; 
+  preferences?: Record<string, number>;
+  settings?: AppSettings;
   password?: string;
   isAdmin?: boolean;
   telegram?: string;
+  guildId?: string;
+  reputation?: number;
+  tradeStats?: {
+      total: number;
+      completed: number;
+      ratingSum: number;
+      ratingCount: number;
+  };
 }
 
-// Consolidated Views: 
-// FEED (Global + Subs), PROFILE (My Items + Favorites), ACTIVITY (Notifs + Messages), SEARCH, CREATE_HUB, MY_COLLECTION
-export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'MY_COLLECTION';
+export interface Guild {
+    id: string;
+    name: string;
+    description: string;
+    leader: string;
+    members: string[];
+    bannerUrl?: string; // Avatar/Banner
+    rules?: string; // Rules text
+    inviteCode?: string; // For invite links
+    isPrivate: boolean;
+}
+
+export interface Duel {
+    id: string;
+    challenger: string;
+    opponent: string;
+    challengerItem: string; // Exhibit ID
+    opponentItem?: string; // Exhibit ID
+    winner?: string;
+    status: 'PENDING' | 'ACTIVE' | 'FINISHED';
+    logs: string[];
+}
+
+export type TradeRequestStatus = 'PENDING' | 'COUNTER_OFFERED' | 'ACCEPTED' | 'COMPLETED' | 'DECLINED' | 'CANCELLED' | 'EXPIRED';
+export type TradeType = 'DIRECT' | 'MULTI' | 'GIFT' | 'MONEY';
+
+export interface TradeMessage {
+    author: string;
+    text: string;
+    timestamp: string;
+}
+
+export interface TradeRequest {
+    id: string;
+    sender: string;
+    recipient: string;
+    senderItems: string[]; // IDs of items from sender
+    recipientItems: string[]; // IDs of items from recipient
+    type: TradeType;
+    status: TradeRequestStatus;
+    messages: TradeMessage[];
+    createdAt: string;
+    updatedAt: string;
+    price?: number; // For MONEY trades
+    currency?: 'RUB';
+    isWishlistFulfillment?: boolean; // If this trade serves a wishlist item
+    wishlistId?: string;
+    ratings?: {
+        sender?: number;
+        recipient?: number;
+    };
+}
+
+export type ViewState = 'AUTH' | 'FEED' | 'PROFILE' | 'USER_PROFILE' | 'USER_WISHLIST' | 'CREATE_HUB' | 'CREATE_ARTIFACT' | 'CREATE_WISHLIST' | 'EDIT_ARTIFACT' | 'CREATE_COLLECTION' | 'EDIT_COLLECTION' | 'EXHIBIT' | 'COLLECTIONS' | 'COLLECTION_DETAIL' | 'ADMIN' | 'SETTINGS' | 'ACTIVITY' | 'SEARCH' | 'HALL_OF_FAME' | 'DIRECT_CHAT' | 'SOCIAL_LIST' | 'WISHLIST_DETAIL' | 'COMMUNITY_HUB' | 'MY_COLLECTION' | 'GUILD_DETAIL';

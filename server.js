@@ -1,235 +1,358 @@
-
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
-import os from 'os';
+import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+import crypto from 'crypto';
+import fs from 'fs';
+
+// Загружаем настройки из файла .env
+dotenv.config();
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ==========================================
-// ⚙️ НАСТРОЙКИ СЕРВЕРА И БД
+// ⚙️ НАСТРОЙКИ СЕРВЕРА
 // ==========================================
 
-const PORT = 3000;
-
-// Конфигурация подключения к PostgreSQL (Timeweb)
-const pool = new Pool({
-    user: 'gen_user', // Updated based on Adminer URL screenshot (NeoBD is likely cluster name)
-    host: '89.169.46.157',
-    database: 'default_db',
-    password: '9H@DDCb.gQm.S}',
-    port: 5432,
-    ssl: {
-        rejectUnauthorized: false // Timeweb self-signed certs fix
-    },
-    max: 20, // Max clients in pool
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-});
-
-// ==========================================
-
+const PORT = process.env.PORT || 3000;
 const app = express();
 
-app.use(cors({
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
-
-// Increased limit for base64 images
+app.use(cors({ origin: true, credentials: true, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }));
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'dist')));
 
-// Test DB Connection
-pool.connect((err, client, release) => {
-    if (err) {
-        return console.error('❌ [Database] Ошибка подключения к PostgreSQL:', err.stack);
-    }
-    client.query('SELECT NOW()', (err, result) => {
-        release();
-        if (err) {
-            return console.error('❌ [Database] Ошибка выполнения запроса:', err.stack);
-        }
-        console.log('✅ [Database] Успешное подключение к NeoBD @ 89.169.46.157');
-    });
+// Логгер запросов
+app.use((req, res, next) => {
+    console.log(`[REQUEST] ${req.method} ${req.url}`);
+    next();
 });
 
-// --- API ROUTES ---
+// ==========================================
+// 📧 SMTP CONFIGURATION
+// ==========================================
 
-// Helper to execute queries safely
-const query = async (text, params) => {
+// Проверка наличия настроек почты
+if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.warn("\n⚠️  ВНИМАНИЕ: Настройки SMTP (почты) не найдены в файле .env!");
+    console.warn("⚠️  Функции регистрации и восстановления пароля могут не работать.");
+    console.warn("⚠️  Создайте файл .env и заполните SMTP_USER и SMTP_PASS.\n");
+}
+
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.timeweb.ru', // Timeweb default
+    port: parseInt(process.env.SMTP_PORT || '465'),
+    secure: parseInt(process.env.SMTP_PORT || '465') === 465, 
+    auth: {
+        // Данные берутся из файла .env
+        user: process.env.SMTP_USER, 
+        pass: process.env.SMTP_PASS,
+    },
+});
+
+// ==========================================
+// 💽 DATABASE CONNECTION
+// ==========================================
+
+const pool = new Pool({
+    user: process.env.DB_USER || 'gen_user',
+    host: process.env.DB_HOST || '89.169.46.157',
+    database: process.env.DB_NAME || 'default_db',
+    password: process.env.DB_PASSWORD || '9H@DDCb.gQm.S}',
+    port: 5432,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000,
+});
+
+pool.on('error', (err) => {
+    console.error('❌ [Database] Unexpected error on idle client', err);
+});
+
+const query = async (text, params = []) => {
     try {
-        const start = Date.now();
-        const res = await pool.query(text, params);
-        // const duration = Date.now() - start;
-        // console.log('executed query', { text, duration, rows: res.rowCount });
-        return res;
+        return await pool.query(text, params);
     } catch (err) {
-        console.error("Query Error", err.message);
+        console.error(`❌ [Database] Query Failed: ${text}`, err.message);
         throw err;
     }
 };
 
-// 1. AUTHENTICATION
-app.post('/api/auth/login', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        // Ищем пользователя, где JSON поле email и password совпадают
-        // В продакшене пароли должны быть хешированы, здесь используем прямое сравнение для миграции
-        const result = await query(
-            `SELECT data FROM users WHERE data->>'email' = $1 AND data->>'password' = $2`, 
-            [email, password]
-        );
+// Хелпер для объединения колонок SQL и JSON поля 'data' (если есть)
+const mapRow = (row) => {
+    if (!row) return null;
+    const { data, ...rest } = row;
+    // Если есть колонка data с JSON, мержим её с остальными колонками
+    // Остальные колонки имеют приоритет (например id, owner, created_at)
+    return { ...(data || {}), ...rest };
+};
 
-        if (result.rows.length > 0) {
-            res.json({ success: true, user: result.rows[0].data });
-        } else {
-            res.status(401).json({ success: false, error: "Неверный email или пароль" });
-        }
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
+// ==========================================
+// API ROUTES
+// ==========================================
 
+// HEALTH CHECK
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+
+// AUTH: REGISTER
 app.post('/api/auth/register', async (req, res) => {
-    const { username, email, password, data } = req.body;
-    try {
-        // Проверка на существование
-        const check = await query(
-            `SELECT 1 FROM users WHERE data->>'username' = $1 OR data->>'email' = $2`,
-            [username, email]
-        );
+    const { username, password, tagline, email } = req.body;
+    if (!username || !password || !email) return res.status(400).json({ error: "Заполните все поля" });
 
-        if (check.rows.length > 0) {
-            return res.status(400).json({ success: false, error: "Пользователь уже существует" });
+    try {
+        // Проверяем существование
+        const check = await query(`SELECT * FROM users WHERE username = $1 OR email = $2`, [username, email]);
+        if (check.rows.length > 0) return res.status(400).json({ error: "Пользователь или Email уже занят" });
+
+        const newUser = {
+            username,
+            email,
+            password, 
+            tagline: tagline || "Новый пользователь",
+            avatarUrl: `https://ui-avatars.com/api/?name=${username}&background=random&color=fff`,
+            joinedDate: new Date().toLocaleDateString(),
+            following: [],
+            followers: [],
+            achievements: [{ id: 'HELLO_WORLD', current: 1, target: 1, unlocked: true }],
+            settings: { theme: 'dark' },
+            isAdmin: false
+        };
+
+        // Вставляем и в JSON колонку 'data', и в обычные колонки, если они есть
+        // Используем ON CONFLICT DO NOTHING для безопасности
+        await query(
+            `INSERT INTO users (username, email, data) VALUES ($1, $2, $3) RETURNING *`, 
+            [username, email, newUser]
+        );
+        
+        // Welcome Email
+        try {
+            await transporter.sendMail({
+                from: `"NeoArchive" <${process.env.SMTP_USER}>`,
+                to: email,
+                subject: 'WELCOME TO THE ARCHIVE',
+                text: `Welcome, ${username}.`,
+                html: `<div style="background: black; color: #00ff00; padding: 20px;"><h1>NEO_ARCHIVE // CONNECTED</h1><p>Добро пожаловать, <strong>${username}</strong>.</p></div>`
+            });
+            console.log(`[MAIL] Welcome email sent to ${email}`);
+        } catch (mailError) {
+            console.error("[MAIL] Failed:", mailError.message);
         }
 
-        // Вставка
-        // Используем email или username как ID для простоты, или генерируем UUID на клиенте
-        // Предполагаем, что клиент присылает полный объект user в 'data'
-        await query(
-            `INSERT INTO users (id, data, updated_at) VALUES ($1, $2, NOW())`,
-            [username, data] // ID таблицы = username
-        );
-
-        res.json({ success: true, user: data });
+        res.json(newUser);
     } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
+        console.error(e);
+        res.status(500).json({ error: e.message });
     }
 });
 
-// 2. GLOBAL SYNC
-app.get('/api/sync', async (req, res) => {
+// AUTH: LOGIN
+app.post('/api/auth/login', async (req, res) => {
+    const { identifier, password } = req.body;
+    
     try {
-        const [users, exhibits, collections, notifications, messages, guestbook] = await Promise.all([
-            query('SELECT data FROM users'),
-            query('SELECT data FROM exhibits ORDER BY updated_at DESC LIMIT 1000'),
-            query('SELECT data FROM collections ORDER BY updated_at DESC'),
-            query('SELECT data FROM notifications ORDER BY updated_at DESC LIMIT 500'),
-            query('SELECT data FROM messages ORDER BY updated_at ASC LIMIT 1000'),
-            query('SELECT data FROM guestbook ORDER BY updated_at DESC LIMIT 500')
-        ]);
+        // Ищем по username или email
+        const result = await query(
+            `SELECT * FROM users WHERE username = $1 OR email = $1`, 
+            [identifier]
+        );
         
-        res.json({
-            users: users.rows.map(r => r.data),
-            exhibits: exhibits.rows.map(r => r.data),
-            collections: collections.rows.map(r => r.data),
-            notifications: notifications.rows.map(r => r.data),
-            messages: messages.rows.map(r => r.data),
-            guestbook: guestbook.rows.map(r => r.data),
-        });
+        if (result.rows.length === 0) return res.status(404).json({ error: "Пользователь не найден" });
+
+        const user = mapRow(result.rows[0]);
+        
+        // Проверка пароля (в реальном проекте нужен хэш!)
+        if (user.password !== password) return res.status(401).json({ error: "Неверный пароль" });
+
+        res.json(user);
     } catch (e) {
-        console.error("Sync Error:", e.message);
-        res.status(500).json({ error: "Sync failed" });
+        console.error(e);
+        res.status(500).json({ error: "Ошибка сервера при входе" });
     }
 });
 
-// 3. USER UPDATE
-app.post('/api/users/update', async (req, res) => {
+// AUTH: RECOVER
+app.post('/api/auth/recover', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email обязателен" });
+
     try {
-        await query(
-            `INSERT INTO users (id, data, updated_at) VALUES ($1, $2, NOW()) 
-             ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()`,
-            [req.body.username, req.body]
-        );
+        const result = await query(`SELECT * FROM users WHERE email = $1`, [email]);
+        
+        if (result.rows.length === 0) {
+            // Симулируем успех для безопасности
+            return res.json({ success: true, message: "Если email существует, мы отправили инструкцию." });
+        }
+
+        const rawUser = result.rows[0];
+        const user = mapRow(rawUser);
+        const newPass = crypto.randomBytes(4).toString('hex');
+        
+        // Обновляем пароль в JSON 'data' и, если надо, в отдельной колонке (если бы она была)
+        user.password = newPass;
+        
+        await query(`UPDATE users SET data = $1 WHERE email = $2`, [user, email]);
+
+        try {
+            await transporter.sendMail({
+                from: `"NeoArchive Security" <${process.env.SMTP_USER}>`,
+                to: email,
+                subject: 'PASSWORD RESET // NEO_ARCHIVE',
+                html: `
+                <div style="background: #000; color: #0f0; padding: 20px; font-family: monospace;">
+                    <h2>/// SYSTEM OVERRIDE</h2>
+                    <p>Identity: <strong>${user.username}</strong></p>
+                    <p>New Access Key:</p>
+                    <h1 style="border: 1px dashed #0f0; display: inline-block; padding: 10px;">${newPass}</h1>
+                </div>
+                `
+            });
+            console.log(`[MAIL] Recovery sent to ${email}`);
+        } catch (mailError) {
+            console.error("[MAIL] Recovery Failed:", mailError);
+            return res.status(500).json({ error: "Ошибка отправки письма" });
+        }
+
         res.json({ success: true });
-    } catch (e) { 
-        res.status(500).json({ success: false, error: e.message });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Ошибка восстановления" });
     }
 });
 
-// 4. GENERIC CRUD (Upsert & Delete)
+// FEED (GET ALL EXHIBITS)
+app.get('/api/feed', async (req, res) => {
+    try {
+        // Запрашиваем ВСЕ колонки, чтобы не терять id, likes, owner и т.д.
+        const result = await query(`SELECT * FROM exhibits ORDER BY created_at DESC LIMIT 100`);
+        const items = result.rows.map(mapRow);
+        res.json(items);
+    } catch (e) {
+        console.error("Feed Error:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// SYNC (User Data + Collections)
+app.get('/api/sync', async (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.json({});
+    try {
+        const userRes = await query(`SELECT * FROM users WHERE username = $1`, [username]);
+        const colsRes = await query(`SELECT * FROM collections WHERE owner = $1`, [username]);
+        
+        res.json({ 
+            users: userRes.rows.map(mapRow), 
+            collections: colsRes.rows.map(mapRow) 
+        });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// GENERIC CRUD ROUTES
 const createCrudRoutes = (table) => {
+    // GET ONE
+    app.get(`/api/${table}/:id`, async (req, res) => {
+        try {
+            const result = await query(`SELECT * FROM "${table}" WHERE id = $1`, [req.params.id]);
+            if (result.rows.length === 0) return res.status(404).json({ error: "Not found" });
+            res.json(mapRow(result.rows[0]));
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    // CREATE / UPDATE
     app.post(`/api/${table}`, async (req, res) => {
         try {
-            const { id, ...rest } = req.body;
-            // Предполагаем, что тело запроса - это объект данных целиком
-            // Извлекаем ID из тела JSON
-            const recordId = id || req.body.id;
+            const { id } = req.body;
+            // Пытаемся извлечь основные поля для записи в отдельные колонки, если они существуют в схеме
+            // Для упрощения пишем всё в data, а триггеры БД или логика выше должны разруливать
+            // Но лучше явно передать в колонки если они есть.
             
-            if (!recordId) return res.status(400).json({ error: "ID is required" });
+            // Простейший UPSERT для PostgreSQL:
+            // Предполагаем, что таблица имеет колонки id и data как минимум.
+            // Если у вас таблица со строгой схемой, этот generic метод нужно адаптировать.
+            // Для гибкости: мы обновляем колонку `data` целиком JSON-ом.
+            
+            const recordId = id || req.body.id;
+            if (!recordId) return res.status(400).json({ error: "ID required" });
 
-            await query(
-                `INSERT INTO ${table} (id, data, updated_at) VALUES ($1, $2, NOW()) 
-                 ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()`,
-                [recordId, req.body]
-            );
+            // Попытка записать в owner, если есть такое поле в body
+            const owner = req.body.owner || null;
+
+            // Динамический запрос сложен без знания схемы. 
+            // Используем наиболее вероятный сценарий:
+            await query(`
+                INSERT INTO "${table}" (id, data, updated_at) 
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (id) DO UPDATE SET 
+                    data = $2, 
+                    updated_at = NOW()
+            `, [recordId, req.body]);
+            
+            // Если это exhibits, можно попробовать обновить отдельные поля для сортировки
+            if (table === 'exhibits' && owner) {
+                // Пытаемся обновить owner отдельно, игнорируем ошибку если колонки нет (хотя в pg это вызовет ошибку транзакции)
+                // Поэтому лучше полагаться на то, что view использует data.
+                // Но судя по скрину, колонки есть. 
+                // Для надежности делаем отдельный UPDATE для известных колонок, если запись существует
+                try {
+                     await query(`UPDATE "${table}" SET owner = $2, likes = $3 WHERE id = $1`, [recordId, owner, req.body.likes || 0]);
+                } catch (ign) {}
+            }
 
             res.json({ success: true });
         } catch (e) { 
-            console.error(`${table} Update Error:`, e.message);
+            console.error(`Save ${table} error:`, e.message);
             res.status(500).json({ success: false, error: e.message }); 
         }
     });
 
+    // DELETE
     app.delete(`/api/${table}/:id`, async (req, res) => {
         try {
-            await query(`DELETE FROM ${table} WHERE id = $1`, [req.params.id]);
+            await query(`DELETE FROM "${table}" WHERE id = $1`, [req.params.id]);
             res.json({ success: true });
-        } catch (e) { 
-             res.status(500).json({ success: false, error: e.message }); 
-        }
+        } catch (e) { res.status(500).json({ success: false, error: e.message }); }
     });
 };
 
-createCrudRoutes('exhibits');
-createCrudRoutes('collections');
-createCrudRoutes('notifications');
-createCrudRoutes('messages');
-createCrudRoutes('guestbook');
+['exhibits', 'collections', 'notifications', 'messages', 'guestbook', 'wishlist'].forEach(t => createCrudRoutes(t));
 
-// Handle 404 for API
-app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: `API Endpoint ${req.path} not found` });
+// Fallback for notifications specific query
+app.get('/api/notifications', async (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.status(400).json({ error: "Username required" });
+    try {
+        // Ищем в JSON поле recipient
+        const result = await query(`SELECT * FROM notifications WHERE data->>'recipient' = $1`, [username]);
+        res.json(result.rows.map(mapRow));
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Fallback for SPA
+// ==========================================
+// STATIC FILES & SPA FALLBACK
+// ==========================================
+
+app.use(express.static(path.join(__dirname, 'dist')));
+
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-// Helper to find local IP
-function getLocalIp() {
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
-            }
-        }
+    const filePath = path.join(__dirname, 'dist', 'index.html');
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(200).send(`
+            <style>body{background:#000;color:#0f0;font-family:monospace;padding:2rem;}</style>
+            <h1>NeoArchive Server Online</h1>
+            <p>API is active. Frontend build not found in /dist.</p>
+            <p>Status: OK</p>
+        `);
     }
-    return '0.0.0.0';
-}
+});
 
 app.listen(PORT, '0.0.0.0', () => {
-    const ip = getLocalIp();
-    console.log(`\n🚀 NeoArchive Server (PostgreSQL Edition) running!`);
-    console.log(`   > DB: NeoBD @ 89.169.46.157`);
-    console.log(`   > Local:   http://localhost:${PORT}`);
-    console.log(`   > Network: http://${ip}:${PORT}`);
+    console.log(`\n🚀 NeoArchive Server running on port ${PORT}`);
+    console.log(`➜  API Endpoint: http://localhost:${PORT}/api/feed`);
 });

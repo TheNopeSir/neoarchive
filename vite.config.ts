@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -51,19 +56,31 @@ export default defineConfig({
       }
     })
   ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './'),
+    },
+  },
   server: {
-    host: '0.0.0.0', // Listen on all network interfaces
+    host: '0.0.0.0', 
     port: 3000,
-    strictPort: false, // Try next port if 3000 is taken (avoids collision with server.js)
-    cors: true, // Allow CORS
+    strictPort: false, 
+    cors: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3000', // Assuming server.js runs on 3000 locally
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => path, // Don't strip /api
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
-            console.log('🔴 Proxy Error (Server likely down):', err);
+            console.log('🔴 Proxy Error (Backend might be down):', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('Sending Request to the Target:', req.method, req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
           });
         },
       }
@@ -72,6 +89,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    target: 'esnext' // Modern browsers support
+    target: 'esnext'
   }
 })
