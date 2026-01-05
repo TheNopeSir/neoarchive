@@ -57,26 +57,60 @@ const transporter = nodemailer.createTransport({
 // 💽 DATABASE CONNECTION
 // ==========================================
 
-const pool = new Pool({
+const dbConfig = {
     user: process.env.DB_USER || 'gen_user',
     host: process.env.DB_HOST || '89.169.46.157',
     database: process.env.DB_NAME || 'default_db',
     password: process.env.DB_PASSWORD || '9H@DDCb.gQm.S}',
-    port: 5432,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 10000,
-});
+    port: parseInt(process.env.DB_PORT || '5432'),
+    // SSL только если явно указано или для удалённого хоста
+    ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 15000,
+    idleTimeoutMillis: 30000,
+    max: 10, // максимум соединений в пуле
+};
+
+console.log(`[Database] Connecting to ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}...`);
+
+const pool = new Pool(dbConfig);
 
 pool.on('error', (err) => {
-    console.error('❌ [Database] Unexpected error on idle client', err);
+    console.error('❌ [Database] Pool error:', err.message);
 });
 
-const query = async (text, params = []) => {
+pool.on('connect', () => {
+    console.log('✅ [Database] New client connected');
+});
+
+// Тест подключения при старте
+const testDatabaseConnection = async () => {
     try {
-        return await pool.query(text, params);
+        const client = await pool.connect();
+        const result = await client.query('SELECT NOW() as time, current_database() as db');
+        console.log(`✅ [Database] Connected! Server time: ${result.rows[0].time}`);
+        client.release();
+        return true;
     } catch (err) {
-        console.error(`❌ [Database] Query Failed: ${text}`, err.message);
-        throw err;
+        console.error('❌ [Database] Connection test failed:', err.message);
+        console.error('   Check your DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME in .env');
+        return false;
+    }
+};
+
+// Функция запроса с retry логикой
+const query = async (text, params = [], retries = 2) => {
+    for (let attempt = 1; attempt <= retries + 1; attempt++) {
+        try {
+            return await pool.query(text, params);
+        } catch (err) {
+            console.error(`❌ [Database] Query attempt ${attempt} failed: ${err.message}`);
+            if (attempt <= retries && (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === '57P01')) {
+                console.log(`   Retrying in ${attempt}s...`);
+                await new Promise(r => setTimeout(r, attempt * 1000));
+            } else {
+                throw err;
+            }
+        }
     }
 };
 
@@ -93,8 +127,33 @@ const mapRow = (row) => {
 // API ROUTES
 // ==========================================
 
-// HEALTH CHECK
-app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+// HEALTH CHECK (расширенный)
+app.get('/api/health', async (req, res) => {
+    const health = {
+        status: 'ok',
+        timestamp: new Date(),
+        database: 'unknown',
+        smtp: 'unknown'
+    };
+
+    // Проверка БД
+    try {
+        await pool.query('SELECT 1');
+        health.database = 'connected';
+    } catch (e) {
+        health.database = `error: ${e.message}`;
+        health.status = 'degraded';
+    }
+
+    // Проверка SMTP
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+        health.smtp = 'configured';
+    } else {
+        health.smtp = 'not configured';
+    }
+
+    res.json(health);
+});
 
 // AUTH: REGISTER
 app.post('/api/auth/register', async (req, res) => {
@@ -151,25 +210,39 @@ app.post('/api/auth/register', async (req, res) => {
 // AUTH: LOGIN
 app.post('/api/auth/login', async (req, res) => {
     const { identifier, password } = req.body;
-    
+
+    if (!identifier || !password) {
+        return res.status(400).json({ error: "Логин и пароль обязательны" });
+    }
+
     try {
+        console.log(`[Auth] Login attempt for: ${identifier}`);
+
         // Ищем по username или email
         const result = await query(
-            `SELECT * FROM users WHERE username = $1 OR email = $1`, 
+            `SELECT * FROM users WHERE username = $1 OR email = $1`,
             [identifier]
         );
-        
-        if (result.rows.length === 0) return res.status(404).json({ error: "Пользователь не найден" });
+
+        if (result.rows.length === 0) {
+            console.log(`[Auth] User not found: ${identifier}`);
+            return res.status(404).json({ error: "Пользователь не найден" });
+        }
 
         const user = mapRow(result.rows[0]);
-        
-        // Проверка пароля (в реальном проекте нужен хэш!)
-        if (user.password !== password) return res.status(401).json({ error: "Неверный пароль" });
 
+        // Проверка пароля (в реальном проекте нужен хэш!)
+        if (user.password !== password) {
+            console.log(`[Auth] Wrong password for: ${identifier}`);
+            return res.status(401).json({ error: "Неверный пароль" });
+        }
+
+        console.log(`[Auth] Login success: ${identifier}`);
         res.json(user);
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: "Ошибка сервера при входе" });
+        console.error(`[Auth] Login error for ${identifier}:`, e.message);
+        console.error('   Stack:', e.stack);
+        res.status(500).json({ error: `Ошибка сервера при входе: ${e.message}` });
     }
 });
 
@@ -352,7 +425,43 @@ app.get('*', (req, res) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🚀 NeoArchive Server running on port ${PORT}`);
-    console.log(`➜  API Endpoint: http://localhost:${PORT}/api/feed`);
-});
+// Тест SMTP соединения
+const testSmtpConnection = async () => {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.log('⚠️  [SMTP] Credentials not configured');
+        return false;
+    }
+    try {
+        await transporter.verify();
+        console.log('✅ [SMTP] Connection verified');
+        return true;
+    } catch (err) {
+        console.error('❌ [SMTP] Connection failed:', err.message);
+        return false;
+    }
+};
+
+// Запуск сервера с проверками
+const startServer = async () => {
+    console.log('\n═══════════════════════════════════════');
+    console.log('        🚀 NEOARCHIVE SERVER           ');
+    console.log('═══════════════════════════════════════\n');
+
+    // Тест подключения к БД
+    const dbOk = await testDatabaseConnection();
+    if (!dbOk) {
+        console.error('\n⚠️  Сервер запущен, но БД недоступна!');
+        console.error('   Проверьте настройки в файле .env\n');
+    }
+
+    // Тест SMTP
+    await testSmtpConnection();
+
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`\n✅ Server running on port ${PORT}`);
+        console.log(`➜  Health: http://localhost:${PORT}/api/health`);
+        console.log(`➜  API:    http://localhost:${PORT}/api/feed\n`);
+    });
+};
+
+startServer();
