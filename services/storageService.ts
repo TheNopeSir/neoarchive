@@ -16,7 +16,7 @@ let cache = {
     lastSync: 0
 };
 
-const CACHE_STORAGE_KEY = 'neo_archive_db_cache_v2'; 
+const CACHE_STORAGE_KEY = 'neo_archive_db_cache_v3'; // v3: forced cache reset 
 const SESSION_USER_KEY = 'neo_active_user';
 const API_BASE = '/api'; 
 

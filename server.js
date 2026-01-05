@@ -314,13 +314,15 @@ app.get('/api/sync', async (req, res) => {
     if (!username) return res.json({});
     try {
         const userRes = await query(`SELECT * FROM users WHERE username = $1`, [username]);
-        const colsRes = await query(`SELECT * FROM collections WHERE owner = $1`, [username]);
-        
-        res.json({ 
-            users: userRes.rows.map(mapRow), 
-            collections: colsRes.rows.map(mapRow) 
+        // owner хранится в JSONB поле data
+        const colsRes = await query(`SELECT * FROM collections WHERE data->>'owner' = $1`, [username]);
+
+        res.json({
+            users: userRes.rows.map(mapRow),
+            collections: colsRes.rows.map(mapRow)
         });
     } catch(e) {
+        console.error('[Sync] Error:', e.message);
         res.status(500).json({ error: e.message });
     }
 });
@@ -352,29 +354,14 @@ const createCrudRoutes = (table) => {
             const recordId = id || req.body.id;
             if (!recordId) return res.status(400).json({ error: "ID required" });
 
-            // Попытка записать в owner, если есть такое поле в body
-            const owner = req.body.owner || null;
-
-            // Динамический запрос сложен без знания схемы. 
-            // Используем наиболее вероятный сценарий:
+            // UPSERT: все данные хранятся в JSONB колонке 'data'
             await query(`
-                INSERT INTO "${table}" (id, data, updated_at) 
+                INSERT INTO "${table}" (id, data, updated_at)
                 VALUES ($1, $2, NOW())
-                ON CONFLICT (id) DO UPDATE SET 
-                    data = $2, 
+                ON CONFLICT (id) DO UPDATE SET
+                    data = $2,
                     updated_at = NOW()
             `, [recordId, req.body]);
-            
-            // Если это exhibits, можно попробовать обновить отдельные поля для сортировки
-            if (table === 'exhibits' && owner) {
-                // Пытаемся обновить owner отдельно, игнорируем ошибку если колонки нет (хотя в pg это вызовет ошибку транзакции)
-                // Поэтому лучше полагаться на то, что view использует data.
-                // Но судя по скрину, колонки есть. 
-                // Для надежности делаем отдельный UPDATE для известных колонок, если запись существует
-                try {
-                     await query(`UPDATE "${table}" SET owner = $2, likes = $3 WHERE id = $1`, [recordId, owner, req.body.likes || 0]);
-                } catch (ign) {}
-            }
 
             res.json({ success: true });
         } catch (e) { 
