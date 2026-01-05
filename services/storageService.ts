@@ -19,13 +19,22 @@ let cache = {
 const SESSION_USER_KEY = 'neo_active_user';
 const API_BASE = '/api';
 
-// Очистка всех старых кэшей при загрузке
+// Очистка всех старых кэшей и Service Worker при загрузке
 (() => {
+    console.log('[Cache] Cleaning up...');
     localStorage.removeItem('neo_archive_db_cache_v3');
     localStorage.removeItem('neo_archive_db_cache_v2');
     localStorage.removeItem('neo_archive_db_cache_v1');
     localStorage.removeItem('neo_archive_db_cache');
     localStorage.removeItem('neo_archive_cache_version');
+
+    // Отключаем Service Worker - может кэшировать старые ответы
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+            regs.forEach(r => r.unregister());
+            if (regs.length > 0) console.log('[SW] Service Workers unregistered');
+        });
+    }
 })();
 
 // --- OBSERVER PATTERN ---
