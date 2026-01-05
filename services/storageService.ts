@@ -46,10 +46,55 @@ export const subscribe = (listener: ChangeListener) => {
 const notifyListeners = () => listeners.forEach(l => l());
 
 // --- PERSISTENCE HELPERS ---
+
+// Ограничения для кэша
+const CACHE_LIMITS = {
+    exhibits: 50,      // максимум экспонатов в кэше
+    notifications: 30, // максимум уведомлений
+    messages: 50,      // максимум сообщений
+    guestbook: 30,     // максимум записей гостевой
+};
+
+// Очистка кэша от старых данных
+const trimCache = () => {
+    // Оставляем только последние N элементов для каждого типа
+    if (cache.exhibits.length > CACHE_LIMITS.exhibits) {
+        // Сохраняем черновики и последние N
+        const drafts = cache.exhibits.filter(e => e.isDraft);
+        const rest = cache.exhibits.filter(e => !e.isDraft).slice(0, CACHE_LIMITS.exhibits - drafts.length);
+        cache.exhibits = [...drafts, ...rest];
+    }
+    if (cache.notifications.length > CACHE_LIMITS.notifications) {
+        cache.notifications = cache.notifications.slice(0, CACHE_LIMITS.notifications);
+    }
+    if (cache.messages.length > CACHE_LIMITS.messages) {
+        cache.messages = cache.messages.slice(-CACHE_LIMITS.messages);
+    }
+    if (cache.guestbook.length > CACHE_LIMITS.guestbook) {
+        cache.guestbook = cache.guestbook.slice(-CACHE_LIMITS.guestbook);
+    }
+};
+
 const saveCacheToLocal = () => {
     try {
         localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cache));
-    } catch (e) { console.error("Cache save failed", e); }
+    } catch (e) {
+        // QuotaExceededError - localStorage переполнен
+        if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22)) {
+            console.warn("⚠️ localStorage quota exceeded, trimming cache...");
+            trimCache();
+            try {
+                localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cache));
+                console.log("✅ Cache saved after trimming");
+            } catch (e2) {
+                // Всё ещё не помещается - очищаем полностью
+                console.error("❌ Cache still too large, clearing...");
+                localStorage.removeItem(CACHE_STORAGE_KEY);
+            }
+        } else {
+            console.error("Cache save failed", e);
+        }
+    }
 };
 
 const loadCacheFromLocal = () => {
@@ -58,9 +103,15 @@ const loadCacheFromLocal = () => {
         if (stored) {
             const data = JSON.parse(stored);
             cache = { ...cache, ...data };
-            notifyListeners(); 
+            // Превентивная очистка при загрузке
+            trimCache();
+            notifyListeners();
         }
-    } catch (e) { console.error("Cache load failed", e); }
+    } catch (e) {
+        console.error("Cache load failed", e);
+        // Если кэш повреждён - удаляем
+        localStorage.removeItem(CACHE_STORAGE_KEY);
+    }
 };
 
 // --- API HELPER ---
