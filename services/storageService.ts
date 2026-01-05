@@ -16,9 +16,27 @@ let cache = {
     lastSync: 0
 };
 
-const CACHE_STORAGE_KEY = 'neo_archive_db_cache_v3'; // v3: forced cache reset 
+const CACHE_STORAGE_KEY = 'neo_archive_db_cache_v3'; // v3: forced cache reset
+const CACHE_VERSION = 'neo_archive_cache_version';
 const SESSION_USER_KEY = 'neo_active_user';
-const API_BASE = '/api'; 
+const API_BASE = '/api';
+
+// Проверка версии кэша - очищаем старые данные при обновлении
+const checkCacheVersion = () => {
+    const currentVersion = '3';
+    const storedVersion = localStorage.getItem(CACHE_VERSION);
+    if (storedVersion !== currentVersion) {
+        console.log(`[Cache] Version mismatch (${storedVersion} -> ${currentVersion}), clearing old data...`);
+        // Очищаем старые версии кэша
+        localStorage.removeItem('neo_archive_db_cache_v2');
+        localStorage.removeItem('neo_archive_db_cache_v1');
+        localStorage.removeItem('neo_archive_db_cache');
+        localStorage.setItem(CACHE_VERSION, currentVersion);
+    }
+};
+
+// Вызываем при загрузке модуля
+checkCacheVersion(); 
 
 // --- OBSERVER PATTERN ---
 type ChangeListener = () => void;
@@ -115,23 +133,34 @@ const loadCacheFromLocal = () => {
 };
 
 // --- API HELPER ---
+const API_TIMEOUT = 10000; // 10 секунд таймаут
+
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+
     try {
         const headers: any = { 'Content-Type': 'application/json' };
-        const options: RequestInit = { method, headers };
+        const options: RequestInit = { method, headers, signal: controller.signal };
         if (body) options.body = JSON.stringify(body);
-        
+
         const fullPath = `${API_BASE}${endpoint}`;
         const res = await fetch(fullPath, options);
-        
+
+        clearTimeout(timeoutId);
+
         if (!res.ok) {
             const errText = await res.text();
             throw new Error(`API Error ${res.status}: ${errText.slice(0, 100)}`);
         }
         return await res.json();
-    } catch (e) {
-        // Explicitly cast error to any to avoid TS unknown error
-        const message = (e as any).message || String(e);
+    } catch (e: any) {
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') {
+            console.error(`⏱️ API Timeout [${endpoint}]: Request took longer than ${API_TIMEOUT}ms`);
+            throw new Error(`Request timeout: ${endpoint}`);
+        }
+        const message = e.message || String(e);
         console.error(`❌ API Call Failed [${endpoint}]:`, message);
         throw e;
     }
@@ -149,20 +178,29 @@ export const getUserAvatar = (username: string): string => {
 // --- CORE FUNCTIONS ---
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
+    console.log('[Init] Starting database initialization...');
+
     // 1. FAST LOAD
     loadCacheFromLocal();
-    
+    console.log('[Init] Local cache loaded');
+
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
-    
+    console.log(`[Init] Active user session: ${activeUser || 'none'}`);
+
     // 2. BACKGROUND SYNC
     try {
         // Health Check
-        try { await apiCall('/health'); } catch(e) { console.warn("Backend offline or proxy error"); }
+        try {
+            await apiCall('/health');
+            console.log('[Init] Backend health check passed');
+        } catch(e) {
+            console.warn("[Init] Backend offline or proxy error");
+        }
 
         // Fetch global feed
+        console.log('[Init] Fetching feed...');
         const feed = await apiCall('/feed');
         if (Array.isArray(feed)) {
-            // Merge with local drafts if any
             const drafts = cache.exhibits.filter(e => e.isDraft);
             const serverItems = feed.filter(e => !drafts.find(d => d.id === e.id));
             cache.exhibits = [...drafts, ...serverItems];
@@ -171,32 +209,38 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
 
         // Fetch User Data if logged in
         if (activeUser) {
+            console.log(`[Init] Syncing user data for: ${activeUser}`);
             const syncData = await apiCall(`/sync?username=${activeUser}`);
             if (syncData.users && syncData.users.length > 0) {
                 const freshUser = syncData.users[0];
                 const idx = cache.users.findIndex(u => u.username === freshUser.username);
                 if (idx !== -1) cache.users[idx] = freshUser;
                 else cache.users.push(freshUser);
-                
+
                 cache.collections = syncData.collections || [];
-                
+
                 try {
                     const notifs = await apiCall(`/notifications?username=${activeUser}`);
                     if (Array.isArray(notifs)) cache.notifications = notifs;
-                } catch(e) {}
+                } catch(e) {
+                    console.warn('[Init] Failed to fetch notifications');
+                }
 
                 saveCacheToLocal();
                 notifyListeners();
+                console.log('[Init] Initialization complete with user');
                 return freshUser;
             }
         }
     } catch (e) {
-        console.warn("Background sync failed - showing cached data", e);
+        console.warn("[Init] Background sync failed - showing cached data", e);
     }
-    
+
     saveCacheToLocal();
     notifyListeners();
-    return cache.users.find(u => u.username === activeUser) || null;
+    const cachedUser = cache.users.find(u => u.username === activeUser) || null;
+    console.log(`[Init] Initialization complete. User: ${cachedUser?.username || 'guest'}`);
+    return cachedUser;
 };
 
 // AUTH
