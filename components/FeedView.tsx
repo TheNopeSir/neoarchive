@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { 
-  LayoutGrid, List as ListIcon, Search, Heart, 
-  Zap, Radar, SlidersHorizontal, Clock, ArrowUpCircle
+import {
+  LayoutGrid, List as ListIcon, Search, Heart,
+  Zap, Radar, SlidersHorizontal, Clock, ArrowUpCircle,
+  TrendingUp, Star, Flame, Award, ArrowUp, Sparkles, Users, Eye, ChevronRight
 } from 'lucide-react';
 import { UserProfile, Exhibit, WishlistItem } from '../types';
-import { DefaultCategory, CATEGORY_SUBCATEGORIES } from '../constants';
+import { DefaultCategory, CATEGORY_SUBCATEGORIES, getArtifactTier, TIER_CONFIG } from '../constants';
 import * as db from '../services/storageService';
 import { calculateFeedScore } from '../services/storageService';
 import ExhibitCard from './ExhibitCard';
@@ -59,19 +60,108 @@ const FeedView: React.FC<FeedViewProps> = ({
 }) => {
   const isWinamp = theme === 'winamp';
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
-  
+
   // Sorting Mode: SMART (Algo) vs FRESH (Chronological)
   const [sortMode, setSortMode] = useState<'SMART' | 'FRESH'>('SMART');
-  
+
   // Infinite Scroll State
   const [visibleCount, setVisibleCount] = useState(20);
   const observerRef = useRef<HTMLDivElement>(null);
+
+  // NEW: Tier Filter
+  const [selectedTier, setSelectedTier] = useState<string | null>(null);
+
+  // NEW: Show Scroll to Top button
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // NEW: Track scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 500);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Reset subcategory when main category changes
   useEffect(() => {
     setSelectedSubcategory(null);
     setVisibleCount(20); // Reset scroll on filter change
-  }, [selectedCategory, feedType, sortMode]);
+  }, [selectedCategory, feedType, sortMode, selectedTier]);
+
+  // NEW: Calculate Trending Items (last 24h, sorted by engagement)
+  const trendingExhibits = useMemo(() => {
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    return exhibits
+      .filter(e => {
+        if (e.isDraft || e.owner === user.username) return false;
+        const itemDate = new Date(e.timestamp);
+        return itemDate >= yesterday;
+      })
+      .map(e => ({
+        ...e,
+        _trendScore: (e.likes * 10) + (e.views * 2) + ((e.comments?.length || 0) * 5)
+      }))
+      .sort((a, b) => b._trendScore - a._trendScore)
+      .slice(0, 10);
+  }, [exhibits, user.username]);
+
+  // NEW: Personalized Recommendations (based on user's most liked categories)
+  const recommendedExhibits = useMemo(() => {
+    // Get user's favorite categories based on their likes
+    const userLikes = exhibits.filter(e => e.likedBy?.includes(user.username));
+    const categoryCount: Record<string, number> = {};
+    userLikes.forEach(e => {
+      categoryCount[e.category] = (categoryCount[e.category] || 0) + 1;
+    });
+
+    const favCategories = Object.entries(categoryCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cat]) => cat);
+
+    if (favCategories.length === 0) return [];
+
+    return exhibits
+      .filter(e => {
+        if (e.isDraft || e.owner === user.username) return false;
+        if (e.likedBy?.includes(user.username)) return false; // Already liked
+        return favCategories.includes(e.category);
+      })
+      .sort((a, b) => {
+        const scoreA = calculateFeedScore(a, user);
+        const scoreB = calculateFeedScore(b, user);
+        return scoreB - scoreA;
+      })
+      .slice(0, 8);
+  }, [exhibits, user]);
+
+  // NEW: Live Stats
+  const stats = useMemo(() => {
+    const last24h = exhibits.filter(e => {
+      const itemDate = new Date(e.timestamp);
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      return itemDate >= yesterday && !e.isDraft;
+    });
+
+    const activeUsers = new Set(
+      exhibits
+        .filter(e => {
+          const itemDate = new Date(e.timestamp);
+          const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          return itemDate >= yesterday;
+        })
+        .map(e => e.owner)
+    );
+
+    return {
+      newToday: last24h.length,
+      activeUsers: activeUsers.size,
+      totalArtifacts: exhibits.filter(e => !e.isDraft).length
+    };
+  }, [exhibits]);
 
   // --- CORE FILTERING & SORTING LOGIC ---
   const processedExhibits = useMemo(() => {
@@ -84,6 +174,9 @@ const FeedView: React.FC<FeedViewProps> = ({
           // Category Filter
           if (selectedCategory !== 'ВСЕ' && e.category !== selectedCategory) return false;
           if (selectedSubcategory && e.subcategory !== selectedSubcategory) return false;
+
+          // NEW: Tier Filter
+          if (selectedTier && getArtifactTier(e) !== selectedTier) return false;
 
           // Feed Type Filter (Following vs Global)
           if (feedType === 'FOLLOWING' && !user.following.includes(e.owner)) return false;
@@ -114,7 +207,7 @@ const FeedView: React.FC<FeedViewProps> = ({
           return b.id.localeCompare(a.id);
       });
 
-  }, [exhibits, user.username, user.following, selectedCategory, selectedSubcategory, feedType, sortMode]);
+  }, [exhibits, user.username, user.following, selectedCategory, selectedSubcategory, feedType, sortMode, selectedTier]);
 
   const processedWishlist = useMemo(() => {
       return wishlist.filter(w => {
@@ -142,7 +235,7 @@ const FeedView: React.FC<FeedViewProps> = ({
 
   return (
     <div className="pb-24 space-y-4 animate-in fade-in">
-        
+
         {/* 1. MOBILE HEADER */}
         <header className="md:hidden flex justify-between items-center px-4 pt-4 bg-transparent">
             <div className="flex items-center gap-2">
@@ -150,6 +243,35 @@ const FeedView: React.FC<FeedViewProps> = ({
                 <h1 className={`text-lg font-pixel font-bold tracking-tighter ${isWinamp ? 'text-[#00ff00]' : 'text-current'}`}>NeoArchive</h1>
             </div>
         </header>
+
+        {/* NEW: LIVE STATS BANNER */}
+        <div className="px-4 max-w-5xl mx-auto w-full">
+            <div className={`grid grid-cols-3 gap-2 p-4 rounded-xl border backdrop-blur-sm transition-all hover:scale-[1.01] ${
+                isWinamp ? 'bg-[#292929] border-[#505050]' : 'bg-gradient-to-r from-green-500/10 to-blue-500/10 border-white/10'
+            }`}>
+                <div className="text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                        <Sparkles size={12} className="text-green-500" />
+                        <span className={`text-2xl font-pixel font-bold ${isWinamp ? 'text-[#00ff00]' : 'text-green-500'}`}>{stats.newToday}</span>
+                    </div>
+                    <div className="text-[9px] opacity-50 font-mono">НОВЫХ ЗА 24Ч</div>
+                </div>
+                <div className="text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                        <Users size={12} className="text-blue-500" />
+                        <span className={`text-2xl font-pixel font-bold ${isWinamp ? 'text-[#00ff00]' : 'text-blue-500'}`}>{stats.activeUsers}</span>
+                    </div>
+                    <div className="text-[9px] opacity-50 font-mono">АКТИВНЫХ</div>
+                </div>
+                <div className="text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                        <Eye size={12} className="text-purple-500" />
+                        <span className={`text-2xl font-pixel font-bold ${isWinamp ? 'text-[#00ff00]' : 'text-purple-500'}`}>{stats.totalArtifacts}</span>
+                    </div>
+                    <div className="text-[9px] opacity-50 font-mono">АРТЕФАКТОВ</div>
+                </div>
+            </div>
+        </div>
 
         {/* 2. STORIES (Only on Artifacts Mode) */}
         {feedMode === 'ARTIFACTS' && stories.length > 0 && (
@@ -164,6 +286,67 @@ const FeedView: React.FC<FeedViewProps> = ({
                                 </div>
                             </div>
                             <span className="text-[10px] font-bold truncate max-w-[70px]">@{story.username}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {/* NEW: TRENDING SECTION */}
+        {feedMode === 'ARTIFACTS' && trendingExhibits.length > 0 && (
+            <div className="pl-4 max-w-5xl mx-auto w-full">
+                <h3 className="font-pixel text-[10px] opacity-50 mb-3 flex items-center gap-2 tracking-widest">
+                    <TrendingUp size={12} className="text-red-500 animate-pulse"/> TRENDING (24Ч)
+                </h3>
+                <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide pr-4">
+                    {trendingExhibits.slice(0, 5).map((item) => {
+                        const tier = getArtifactTier(item);
+                        const tierConfig = TIER_CONFIG[tier];
+                        return (
+                            <div
+                                key={item.id}
+                                onClick={() => onExhibitClick(item)}
+                                className={`min-w-[140px] rounded-xl border ${tierConfig.borderDark} overflow-hidden cursor-pointer hover:scale-105 transition-transform ${tierConfig.shadow}`}
+                            >
+                                <div className="relative aspect-square">
+                                    <img src={item.imageUrls[0]} className="w-full h-full object-cover" />
+                                    <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-full ${tierConfig.badge} text-[8px] font-bold`}>
+                                        {tier}
+                                    </div>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                                        <div className="text-[10px] font-bold line-clamp-1">{item.title}</div>
+                                        <div className="flex items-center gap-2 text-[8px] opacity-70 mt-1">
+                                            <span className="flex items-center gap-1"><Flame size={8}/> {item._trendScore}</span>
+                                            <span className="flex items-center gap-1"><Heart size={8}/> {item.likes}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+
+        {/* NEW: PERSONALIZED RECOMMENDATIONS */}
+        {feedMode === 'ARTIFACTS' && feedType === 'FOR_YOU' && recommendedExhibits.length > 0 && (
+            <div className="pl-4 max-w-5xl mx-auto w-full">
+                <h3 className="font-pixel text-[10px] opacity-50 mb-3 flex items-center gap-2 tracking-widest">
+                    <Sparkles size={12} className="text-purple-500"/> ДЛЯ ВАС
+                </h3>
+                <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide pr-4">
+                    {recommendedExhibits.slice(0, 6).map((item) => (
+                        <div
+                            key={item.id}
+                            onClick={() => onExhibitClick(item)}
+                            className="min-w-[120px] rounded-xl border border-purple-500/30 overflow-hidden cursor-pointer hover:scale-105 transition-transform bg-purple-500/5"
+                        >
+                            <div className="relative aspect-square">
+                                <img src={item.imageUrls[0]} className="w-full h-full object-cover" />
+                                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                                    <div className="text-[9px] font-bold line-clamp-2">{item.title}</div>
+                                </div>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -221,6 +404,35 @@ const FeedView: React.FC<FeedViewProps> = ({
                             <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all ${selectedCategory === cat ? (isWinamp ? 'bg-[#00ff00] text-black border-[#00ff00]' : 'bg-green-500 text-black border-green-500') : 'border-white/10 opacity-60 hover:opacity-100'}`}>{cat}</button>
                         ))}
                     </div>
+
+                    {/* NEW: Tier Filter */}
+                    {feedMode === 'ARTIFACTS' && (
+                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                            <button
+                                onClick={() => setSelectedTier(null)}
+                                className={`px-3 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap border transition-all ${!selectedTier ? 'bg-white/10 border-white' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                            >
+                                ВСЕ УРОВНИ
+                            </button>
+                            {Object.entries(TIER_CONFIG).map(([tier, config]) => {
+                                const Icon = config.icon;
+                                return (
+                                    <button
+                                        key={tier}
+                                        onClick={() => setSelectedTier(tier)}
+                                        className={`flex items-center gap-1 px-3 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap border transition-all ${
+                                            selectedTier === tier
+                                                ? `${config.bgColor} ${config.color} border-current`
+                                                : 'border-transparent opacity-50 hover:opacity-100'
+                                        }`}
+                                    >
+                                        <Icon size={10} /> {config.name}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     {/* Subcategories */}
                     {selectedCategory !== 'ВСЕ' && CATEGORY_SUBCATEGORIES[selectedCategory] && (
                         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide animate-in slide-in-from-top-2">
@@ -301,6 +513,21 @@ const FeedView: React.FC<FeedViewProps> = ({
                 )}
             </div>
         </div>
+
+        {/* NEW: SCROLL TO TOP BUTTON */}
+        {showScrollTop && (
+            <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className={`fixed bottom-20 right-4 z-40 p-4 rounded-full border-2 backdrop-blur-md shadow-lg transition-all hover:scale-110 active:scale-95 ${
+                    isWinamp
+                        ? 'bg-[#292929] border-[#00ff00] text-[#00ff00]'
+                        : 'bg-green-500 border-green-400 text-black shadow-green-500/50'
+                } animate-in slide-in-from-bottom-10`}
+                aria-label="Scroll to top"
+            >
+                <ArrowUp size={24} className="animate-bounce" />
+            </button>
+        )}
     </div>
   );
 };

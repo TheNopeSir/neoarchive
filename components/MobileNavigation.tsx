@@ -23,30 +23,33 @@ const MobileNavigation: React.FC<MobileNavigationProps> = ({ theme, view, setVie
     ];
 
     return (
-        <div className={`md:hidden fixed bottom-0 left-0 w-full z-50 border-t pb-safe ${
+        <div className={`md:hidden fixed bottom-0 left-0 w-full z-50 border-t pb-safe backdrop-blur-lg ${
             theme === 'dark' ? 'bg-black/95 border-dark-dim text-gray-400' : 'bg-white/95 border-light-dim text-gray-500'
         }`}>
             <div className="flex justify-around items-center h-16">
                 {navItems.map(item => {
                     const isActive = view === item.id || (item.id === 'PROFILE' && view === 'USER_PROFILE') || (item.id === 'ADD' && ['CREATE_HUB', 'CREATE_ARTIFACT', 'CREATE_COLLECTION'].includes(view)) || (item.id === 'ACTIVITY' && ['ACTIVITY', 'DIRECT_CHAT'].includes(view));
                     return (
-                        <button 
+                        <button
                             key={item.id}
                             onClick={item.action}
-                            className={`flex flex-col items-center justify-center w-full h-full gap-1 relative ${
-                                isActive 
-                                ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') 
-                                : ''
+                            className={`flex flex-col items-center justify-center w-full h-full gap-1 relative transition-all duration-200 active:scale-90 ${
+                                isActive
+                                ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent')
+                                : 'hover:scale-110'
                             }`}
                         >
-                            <item.icon 
-                                size={item.highlight ? 28 : 20} 
+                            <item.icon
+                                size={item.highlight ? 28 : 20}
                                 strokeWidth={item.highlight ? 2 : 1.5}
-                                className={item.highlight ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''}
+                                className={`transition-all duration-200 ${item.highlight ? (theme === 'dark' ? 'text-dark-primary' : 'text-light-accent') : ''} ${isActive ? 'animate-bounce-subtle' : ''}`}
                             />
-                            {!item.highlight && <span className="text-[8px] font-pixel mt-1">{item.label}</span>}
+                            {!item.highlight && <span className={`text-[8px] font-pixel mt-1 transition-opacity duration-200 ${isActive ? 'opacity-100' : 'opacity-70'}`}>{item.label}</span>}
                             {item.hasBadge && (
-                                <span className="absolute top-3 right-6 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                                <span className="absolute top-3 right-6 w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-lg shadow-red-500/50"></span>
+                            )}
+                            {isActive && (
+                                <div className={`absolute -top-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${theme === 'dark' ? 'bg-dark-primary' : 'bg-light-accent'} animate-pulse`}></div>
                             )}
                         </button>
                     );

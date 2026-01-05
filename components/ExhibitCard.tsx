@@ -32,9 +32,9 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
 
   if (isWinamp) {
       return (
-        <div 
+        <div
             onClick={() => onClick(item)}
-            className="group cursor-pointer flex flex-col h-full min-h-[200px] bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] overflow-hidden"
+            className="group cursor-pointer flex flex-col h-full min-h-[200px] bg-[#292929] border-t-2 border-l-2 border-r-2 border-b-2 border-t-[#505050] border-l-[#505050] border-r-[#101010] border-b-[#101010] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-wa-green/20 active:scale-95 animate-in fade-in"
         >
             {/* Winamp Title Bar */}
             <div className="h-4 bg-gradient-to-r from-wa-blue-light to-wa-blue-dark flex items-center justify-between px-1 cursor-default select-none">
@@ -77,14 +77,15 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
 
   // Standard Render for other themes
   return (
-    <div 
+    <div
       onClick={() => onClick(item)}
-      className={`group cursor-pointer flex flex-col h-full transition-all duration-300 hover:-translate-y-2 
-        ${isXP 
-          ? 'rounded-t-lg shadow-lg border-2 border-[#0058EE] bg-white' 
-          : `rounded-2xl overflow-hidden border-2 ${theme === 'dark' ? `bg-dark-surface border-white/10 hover:border-green-500/50 ${config.shadow}` : 'bg-white border-black/5 hover:border-black/20 shadow-lg'}`
-        } 
-        ${isCursed ? 'animate-pulse' : ''}`
+      className={`group cursor-pointer flex flex-col h-full transition-all duration-300 hover:-translate-y-2 hover:scale-[1.02] active:scale-95
+        ${isXP
+          ? 'rounded-t-lg shadow-lg border-2 border-[#0058EE] bg-white hover:shadow-2xl'
+          : `rounded-2xl overflow-hidden border-2 ${theme === 'dark' ? `bg-dark-surface border-white/10 hover:border-green-500/50 ${config.shadow} hover:shadow-2xl` : 'bg-white border-black/5 hover:border-black/20 shadow-lg hover:shadow-2xl'}`
+        }
+        ${isCursed ? 'animate-pulse' : ''}
+        animate-in fade-in slide-in-from-bottom-4`
       }
     >
       {/* XP Window Header */}
