@@ -1,7 +1,7 @@
 
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem, Guild, Duel, TradeRequest, TradeRequestStatus, TradeType, NotificationType } from '../types';
 
-// INTERNAL IN-MEMORY CACHE
+// INTERNAL IN-MEMORY CACHE (НЕ сохраняем в localStorage - только сессия)
 let cache = {
     exhibits: [] as Exhibit[],
     collections: [] as Collection[],
@@ -16,27 +16,17 @@ let cache = {
     lastSync: 0
 };
 
-const CACHE_STORAGE_KEY = 'neo_archive_db_cache_v3'; // v3: forced cache reset
-const CACHE_VERSION = 'neo_archive_cache_version';
 const SESSION_USER_KEY = 'neo_active_user';
 const API_BASE = '/api';
 
-// Проверка версии кэша - очищаем старые данные при обновлении
-const checkCacheVersion = () => {
-    const currentVersion = '3';
-    const storedVersion = localStorage.getItem(CACHE_VERSION);
-    if (storedVersion !== currentVersion) {
-        console.log(`[Cache] Version mismatch (${storedVersion} -> ${currentVersion}), clearing old data...`);
-        // Очищаем старые версии кэша
-        localStorage.removeItem('neo_archive_db_cache_v2');
-        localStorage.removeItem('neo_archive_db_cache_v1');
-        localStorage.removeItem('neo_archive_db_cache');
-        localStorage.setItem(CACHE_VERSION, currentVersion);
-    }
-};
-
-// Вызываем при загрузке модуля
-checkCacheVersion(); 
+// Очистка всех старых кэшей при загрузке
+(() => {
+    localStorage.removeItem('neo_archive_db_cache_v3');
+    localStorage.removeItem('neo_archive_db_cache_v2');
+    localStorage.removeItem('neo_archive_db_cache_v1');
+    localStorage.removeItem('neo_archive_db_cache');
+    localStorage.removeItem('neo_archive_cache_version');
+})();
 
 // --- OBSERVER PATTERN ---
 type ChangeListener = () => void;
@@ -63,123 +53,31 @@ export const subscribe = (listener: ChangeListener) => {
 
 const notifyListeners = () => listeners.forEach(l => l());
 
-// --- PERSISTENCE HELPERS ---
-
-// Ограничения для кэша
-const CACHE_LIMITS = {
-    exhibits: 50,      // максимум экспонатов в кэше
-    notifications: 30, // максимум уведомлений
-    messages: 50,      // максимум сообщений
-    guestbook: 30,     // максимум записей гостевой
-};
-
-// Очистка кэша от старых данных
-const trimCache = () => {
-    // Оставляем только последние N элементов для каждого типа
-    if (cache.exhibits.length > CACHE_LIMITS.exhibits) {
-        // Сохраняем черновики и последние N
-        const drafts = cache.exhibits.filter(e => e.isDraft);
-        const rest = cache.exhibits.filter(e => !e.isDraft).slice(0, CACHE_LIMITS.exhibits - drafts.length);
-        cache.exhibits = [...drafts, ...rest];
-    }
-    if (cache.notifications.length > CACHE_LIMITS.notifications) {
-        cache.notifications = cache.notifications.slice(0, CACHE_LIMITS.notifications);
-    }
-    if (cache.messages.length > CACHE_LIMITS.messages) {
-        cache.messages = cache.messages.slice(-CACHE_LIMITS.messages);
-    }
-    if (cache.guestbook.length > CACHE_LIMITS.guestbook) {
-        cache.guestbook = cache.guestbook.slice(-CACHE_LIMITS.guestbook);
-    }
-};
-
-const saveCacheToLocal = () => {
-    try {
-        localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cache));
-    } catch (e) {
-        // QuotaExceededError - localStorage переполнен
-        if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22)) {
-            console.warn("⚠️ localStorage quota exceeded, trimming cache...");
-            trimCache();
-            try {
-                localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cache));
-                console.log("✅ Cache saved after trimming");
-            } catch (e2) {
-                // Всё ещё не помещается - очищаем полностью
-                console.error("❌ Cache still too large, clearing...");
-                localStorage.removeItem(CACHE_STORAGE_KEY);
-            }
-        } else {
-            console.error("Cache save failed", e);
-        }
-    }
-};
-
-const loadCacheFromLocal = () => {
-    try {
-        const stored = localStorage.getItem(CACHE_STORAGE_KEY);
-        if (stored) {
-            const data = JSON.parse(stored);
-            cache = { ...cache, ...data };
-            // Превентивная очистка при загрузке
-            trimCache();
-            notifyListeners();
-        }
-    } catch (e) {
-        console.error("Cache load failed", e);
-        // Если кэш повреждён - удаляем
-        localStorage.removeItem(CACHE_STORAGE_KEY);
-    }
-};
-
 // --- API HELPER ---
-const API_TIMEOUT = 10000; // 10 секунд таймаут
+const API_TIMEOUT = 15000;
 
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
-    const startTime = Date.now();
-
-    console.log(`[API] ${method} ${endpoint} - starting...`);
 
     try {
         const headers: any = { 'Content-Type': 'application/json' };
         const options: RequestInit = { method, headers, signal: controller.signal };
         if (body) options.body = JSON.stringify(body);
 
-        const fullPath = `${API_BASE}${endpoint}`;
-        const res = await fetch(fullPath, options);
-
+        const res = await fetch(`${API_BASE}${endpoint}`, options);
         clearTimeout(timeoutId);
-        const duration = Date.now() - startTime;
-        console.log(`[API] ${method} ${endpoint} - ${res.status} (${duration}ms)`);
 
         if (!res.ok) {
             const errText = await res.text();
             throw new Error(`API Error ${res.status}: ${errText.slice(0, 100)}`);
         }
-
-        console.log(`[API] ${method} ${endpoint} - parsing JSON...`);
-        let json;
-        try {
-            const text = await res.text();
-            console.log(`[API] ${method} ${endpoint} - got text, length: ${text.length}`);
-            json = JSON.parse(text);
-        } catch (parseErr: any) {
-            console.error(`[API] ${method} ${endpoint} - JSON parse error:`, parseErr.message);
-            throw parseErr;
-        }
-        console.log(`[API] ${method} ${endpoint} - JSON parsed, items: ${Array.isArray(json) ? json.length : 'object'}`);
-        return json;
+        return await res.json();
     } catch (e: any) {
         clearTimeout(timeoutId);
-        const duration = Date.now() - startTime;
         if (e.name === 'AbortError') {
-            console.error(`⏱️ API Timeout [${endpoint}]: ${duration}ms (limit: ${API_TIMEOUT}ms)`);
             throw new Error(`Request timeout: ${endpoint}`);
         }
-        const message = e.message || String(e);
-        console.error(`❌ API Failed [${endpoint}]: ${message} (${duration}ms)`);
         throw e;
     }
 };
@@ -196,89 +94,49 @@ export const getUserAvatar = (username: string): string => {
 // --- CORE FUNCTIONS ---
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
-    console.log('[Init] Starting database initialization...');
-
-    // 1. FAST LOAD
-    loadCacheFromLocal();
-    console.log('[Init] Local cache loaded');
-
+    console.log('[Init] Starting...');
     const activeUser = localStorage.getItem(SESSION_USER_KEY);
-    console.log(`[Init] Active user session: ${activeUser || 'none'}`);
 
-    // 2. BACKGROUND SYNC
     try {
-        // Health Check
-        try {
-            await apiCall('/health');
-            console.log('[Init] Backend health check passed');
-        } catch(e) {
-            console.warn("[Init] Backend offline or proxy error");
-        }
-
-        // Fetch global feed
-        console.log('[Init] Fetching feed...');
+        // Fetch feed
         const feed = await apiCall('/feed');
-        console.log(`[Init] Feed received, type: ${typeof feed}, isArray: ${Array.isArray(feed)}, count: ${feed?.length || 0}`);
-
         if (Array.isArray(feed)) {
-            console.log('[Init] Processing feed...');
-            const drafts = cache.exhibits.filter(e => e.isDraft);
-            console.log(`[Init] Found ${drafts.length} drafts`);
-            const serverItems = feed.filter(e => !drafts.find(d => d.id === e.id));
-            console.log(`[Init] Filtered to ${serverItems.length} server items`);
-            cache.exhibits = [...drafts, ...serverItems];
-            console.log(`[SYNC] Loaded ${feed.length} exhibits from server.`);
-        } else {
-            console.warn('[Init] Feed is not an array!', feed);
+            cache.exhibits = feed;
+            console.log(`[Init] Loaded ${feed.length} exhibits`);
         }
-        console.log('[Init] Feed processing complete');
 
-        // Fetch User Data if logged in
+        // Fetch user data if logged in
         if (activeUser) {
-            console.log(`[Init] Syncing user data for: ${activeUser}`);
             const syncData = await apiCall(`/sync?username=${activeUser}`);
-            if (syncData.users && syncData.users.length > 0) {
-                const freshUser = syncData.users[0];
-                const idx = cache.users.findIndex(u => u.username === freshUser.username);
-                if (idx !== -1) cache.users[idx] = freshUser;
-                else cache.users.push(freshUser);
-
+            if (syncData.users?.length > 0) {
+                const user = syncData.users[0];
+                cache.users = [user];
                 cache.collections = syncData.collections || [];
 
                 try {
                     const notifs = await apiCall(`/notifications?username=${activeUser}`);
                     if (Array.isArray(notifs)) cache.notifications = notifs;
-                } catch(e) {
-                    console.warn('[Init] Failed to fetch notifications');
-                }
+                } catch {}
 
-                saveCacheToLocal();
                 notifyListeners();
-                console.log('[Init] Initialization complete with user');
-                return freshUser;
+                console.log('[Init] Complete with user:', user.username);
+                return user;
             }
         }
     } catch (e) {
-        console.warn("[Init] Background sync failed - showing cached data", e);
+        console.warn("[Init] Sync failed:", e);
     }
 
-    saveCacheToLocal();
     notifyListeners();
-    const cachedUser = cache.users.find(u => u.username === activeUser) || null;
-    console.log(`[Init] Initialization complete. User: ${cachedUser?.username || 'guest'}`);
-    return cachedUser;
+    console.log('[Init] Complete as guest');
+    return null;
 };
 
 // AUTH
 export const loginUser = async (identifier: string, password: string): Promise<UserProfile> => {
     const user = await apiCall('/auth/login', 'POST', { identifier, password });
     localStorage.setItem(SESSION_USER_KEY, user.username);
-    
-    const idx = cache.users.findIndex(u => u.username === user.username);
-    if (idx !== -1) cache.users[idx] = user;
-    else cache.users.push(user);
-    
-    saveCacheToLocal();
+    cache.users = [user];
     notifyListeners();
     return user;
 };
@@ -286,112 +144,98 @@ export const loginUser = async (identifier: string, password: string): Promise<U
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
     const user = await apiCall('/auth/register', 'POST', { username, password, tagline, email });
     localStorage.setItem(SESSION_USER_KEY, user.username);
-    cache.users.push(user);
-    saveCacheToLocal();
+    cache.users = [user];
     notifyListeners();
     return user;
 };
 
-export const logoutUser = async () => { 
-    localStorage.removeItem(SESSION_USER_KEY); 
-    notifyListeners(); 
+export const logoutUser = async () => {
+    localStorage.removeItem(SESSION_USER_KEY);
+    cache.users = [];
+    notifyListeners();
     window.location.reload();
 };
 
-export const loginViaTelegram = async (tgUser: any) => { 
+export const loginViaTelegram = async (tgUser: any) => {
     const user = await apiCall('/auth/telegram', 'POST', tgUser);
     localStorage.setItem(SESSION_USER_KEY, user.username);
-    cache.users.push(user);
-    saveCacheToLocal();
+    cache.users = [user];
     notifyListeners();
     return user;
 };
 
-export const recoverPassword = async (email: string) => { 
-    return await apiCall('/auth/recover', 'POST', { email }); 
+export const recoverPassword = async (email: string) => {
+    return await apiCall('/auth/recover', 'POST', { email });
 };
 
 // DATA OPERATIONS
 export const getFullDatabase = () => ({ ...cache });
 
-export const saveExhibit = async (e: Exhibit) => { 
-    cache.exhibits.unshift(e); 
+export const saveExhibit = async (e: Exhibit) => {
+    cache.exhibits.unshift(e);
     notifyListeners();
     await apiCall('/exhibits', 'POST', e);
-    saveCacheToLocal();
 };
 
-export const updateExhibit = async (e: Exhibit) => { 
+export const updateExhibit = async (e: Exhibit) => {
     const idx = cache.exhibits.findIndex(x => x.id === e.id);
-    if (idx !== -1) {
-        cache.exhibits[idx] = e;
-        notifyListeners();
-    }
+    if (idx !== -1) cache.exhibits[idx] = e;
+    notifyListeners();
     await apiCall('/exhibits', 'POST', e);
-    saveCacheToLocal();
 };
 
-export const deleteExhibit = async (id: string) => { 
-    cache.exhibits = cache.exhibits.filter(e => e.id !== id); 
+export const deleteExhibit = async (id: string) => {
+    cache.exhibits = cache.exhibits.filter(e => e.id !== id);
     notifyListeners();
     await apiCall(`/exhibits/${id}`, 'DELETE');
-    saveCacheToLocal();
 };
 
 export const saveCollection = async (c: Collection) => {
     cache.collections.push(c);
     notifyListeners();
     await apiCall('/collections', 'POST', c);
-    saveCacheToLocal();
 };
 
 export const updateCollection = async (c: Collection) => {
     cache.collections = cache.collections.map(col => col.id === c.id ? c : col);
     notifyListeners();
     await apiCall('/collections', 'POST', c);
-    saveCacheToLocal();
 };
 
 export const deleteCollection = async (id: string) => {
     cache.collections = cache.collections.filter(c => c.id !== id);
     notifyListeners();
     await apiCall(`/collections/${id}`, 'DELETE');
-    saveCacheToLocal();
 };
 
 export const saveWishlistItem = async (w: WishlistItem) => {
     cache.wishlist.push(w);
     notifyListeners();
     await apiCall('/wishlist', 'POST', w);
-    saveCacheToLocal();
 };
 
 export const deleteWishlistItem = async (id: string) => {
     cache.wishlist = cache.wishlist.filter(w => w.id !== id);
     notifyListeners();
     await apiCall(`/wishlist/${id}`, 'DELETE');
-    saveCacheToLocal();
 };
 
 export const saveGuestbookEntry = async (e: GuestbookEntry) => {
     cache.guestbook.push(e);
     notifyListeners();
     await apiCall('/guestbook', 'POST', e);
-    saveCacheToLocal();
 };
 
 export const updateGuestbookEntry = async (e: GuestbookEntry) => {
     cache.guestbook = cache.guestbook.map(g => g.id === e.id ? e : g);
     notifyListeners();
     await apiCall('/guestbook', 'POST', e);
-    saveCacheToLocal();
 };
 
 export const deleteGuestbookEntry = async (id: string) => {
     cache.guestbook = cache.guestbook.filter(g => g.id !== id);
     notifyListeners();
     await apiCall(`/guestbook/${id}`, 'DELETE');
-    saveCacheToLocal();
 };
 
 export const updateUserProfile = async (u: UserProfile) => {
@@ -399,7 +243,6 @@ export const updateUserProfile = async (u: UserProfile) => {
     if (idx !== -1) cache.users[idx] = u;
     notifyListeners();
     await apiCall('/users', 'POST', { id: u.username, ...u });
-    saveCacheToLocal();
 };
 
 export const createNotification = async (r:string, t:NotificationType, a:string, id?:string, p?:string) => {
@@ -420,7 +263,6 @@ export const saveMessage = async (m: Message) => {
     cache.messages.push(m);
     notifyListeners();
     await apiCall('/messages', 'POST', m);
-    saveCacheToLocal();
 };
 
 // Utils
@@ -430,8 +272,7 @@ export const calculateFeedScore = (item: Exhibit, user: UserProfile) => {
 
 export const fetchExhibitById = async (id: string) => {
     try {
-        const item = await apiCall(`/exhibits/${id}`);
-        return item;
+        return await apiCall(`/exhibits/${id}`);
     } catch { return null; }
 };
 
@@ -461,13 +302,15 @@ export const getStorageEstimate = async (): Promise<StorageEstimate | undefined>
 };
 
 export const clearLocalCache = async () => {
-    localStorage.removeItem(CACHE_STORAGE_KEY);
+    localStorage.clear();
     window.location.reload();
 };
+
 export const markNotificationsRead = (u:string) => {
     cache.notifications.forEach(n => { if(n.recipient === u) n.isRead = true; });
     notifyListeners();
 };
+
 export const toggleFollow = async (me:string, them:string) => {
     const myUser = cache.users.find(u => u.username === me);
     if(myUser) {
@@ -479,6 +322,7 @@ export const toggleFollow = async (me:string, them:string) => {
         updateUserProfile(myUser);
     }
 };
+
 export const createGuild = async (g:Guild) => {};
 export const joinGuild = async (code:string, u:string) => true;
 export const leaveGuild = async (gid:string, u:string) => true;
