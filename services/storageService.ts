@@ -160,7 +160,15 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
         }
 
         console.log(`[API] ${method} ${endpoint} - parsing JSON...`);
-        const json = await res.json();
+        let json;
+        try {
+            const text = await res.text();
+            console.log(`[API] ${method} ${endpoint} - got text, length: ${text.length}`);
+            json = JSON.parse(text);
+        } catch (parseErr: any) {
+            console.error(`[API] ${method} ${endpoint} - JSON parse error:`, parseErr.message);
+            throw parseErr;
+        }
         console.log(`[API] ${method} ${endpoint} - JSON parsed, items: ${Array.isArray(json) ? json.length : 'object'}`);
         return json;
     } catch (e: any) {
