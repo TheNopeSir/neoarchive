@@ -206,12 +206,20 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
         // Fetch global feed
         console.log('[Init] Fetching feed...');
         const feed = await apiCall('/feed');
+        console.log(`[Init] Feed received, type: ${typeof feed}, isArray: ${Array.isArray(feed)}, count: ${feed?.length || 0}`);
+
         if (Array.isArray(feed)) {
+            console.log('[Init] Processing feed...');
             const drafts = cache.exhibits.filter(e => e.isDraft);
+            console.log(`[Init] Found ${drafts.length} drafts`);
             const serverItems = feed.filter(e => !drafts.find(d => d.id === e.id));
+            console.log(`[Init] Filtered to ${serverItems.length} server items`);
             cache.exhibits = [...drafts, ...serverItems];
             console.log(`[SYNC] Loaded ${feed.length} exhibits from server.`);
+        } else {
+            console.warn('[Init] Feed is not an array!', feed);
         }
+        console.log('[Init] Feed processing complete');
 
         // Fetch User Data if logged in
         if (activeUser) {
