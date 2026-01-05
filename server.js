@@ -161,8 +161,8 @@ app.post('/api/auth/register', async (req, res) => {
     if (!username || !password || !email) return res.status(400).json({ error: "Заполните все поля" });
 
     try {
-        // Проверяем существование
-        const check = await query(`SELECT * FROM users WHERE username = $1 OR email = $2`, [username, email]);
+        // Проверяем существование (email хранится в data JSONB)
+        const check = await query(`SELECT * FROM users WHERE username = $1 OR data->>'email' = $2`, [username, email]);
         if (check.rows.length > 0) return res.status(400).json({ error: "Пользователь или Email уже занят" });
 
         const newUser = {
@@ -179,11 +179,11 @@ app.post('/api/auth/register', async (req, res) => {
             isAdmin: false
         };
 
-        // Вставляем и в JSON колонку 'data', и в обычные колонки, если они есть
-        // Используем ON CONFLICT DO NOTHING для безопасности
+        // Вставляем username и данные в JSONB колонку 'data'
+        // Email хранится внутри data
         await query(
-            `INSERT INTO users (username, email, data) VALUES ($1, $2, $3) RETURNING *`, 
-            [username, email, newUser]
+            `INSERT INTO users (username, data) VALUES ($1, $2) RETURNING *`,
+            [username, newUser]
         );
         
         // Welcome Email
@@ -218,9 +218,9 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         console.log(`[Auth] Login attempt for: ${identifier}`);
 
-        // Ищем по username или email
+        // Ищем по username или email (email в JSONB data)
         const result = await query(
-            `SELECT * FROM users WHERE username = $1 OR email = $1`,
+            `SELECT * FROM users WHERE username = $1 OR data->>'email' = $1`,
             [identifier]
         );
 
@@ -252,7 +252,7 @@ app.post('/api/auth/recover', async (req, res) => {
     if (!email) return res.status(400).json({ error: "Email обязателен" });
 
     try {
-        const result = await query(`SELECT * FROM users WHERE email = $1`, [email]);
+        const result = await query(`SELECT * FROM users WHERE data->>'email' = $1`, [email]);
         
         if (result.rows.length === 0) {
             // Симулируем успех для безопасности
@@ -266,7 +266,7 @@ app.post('/api/auth/recover', async (req, res) => {
         // Обновляем пароль в JSON 'data' и, если надо, в отдельной колонке (если бы она была)
         user.password = newPass;
         
-        await query(`UPDATE users SET data = $1 WHERE email = $2`, [user, email]);
+        await query(`UPDATE users SET data = $1 WHERE username = $2`, [user, user.username]);
 
         try {
             await transporter.sendMail({
