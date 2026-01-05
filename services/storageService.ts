@@ -138,6 +138,9 @@ const API_TIMEOUT = 10000; // 10 секунд таймаут
 const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+    const startTime = Date.now();
+
+    console.log(`[API] ${method} ${endpoint} - starting...`);
 
     try {
         const headers: any = { 'Content-Type': 'application/json' };
@@ -148,6 +151,8 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
         const res = await fetch(fullPath, options);
 
         clearTimeout(timeoutId);
+        const duration = Date.now() - startTime;
+        console.log(`[API] ${method} ${endpoint} - ${res.status} (${duration}ms)`);
 
         if (!res.ok) {
             const errText = await res.text();
@@ -156,12 +161,13 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
         return await res.json();
     } catch (e: any) {
         clearTimeout(timeoutId);
+        const duration = Date.now() - startTime;
         if (e.name === 'AbortError') {
-            console.error(`⏱️ API Timeout [${endpoint}]: Request took longer than ${API_TIMEOUT}ms`);
+            console.error(`⏱️ API Timeout [${endpoint}]: ${duration}ms (limit: ${API_TIMEOUT}ms)`);
             throw new Error(`Request timeout: ${endpoint}`);
         }
         const message = e.message || String(e);
-        console.error(`❌ API Call Failed [${endpoint}]:`, message);
+        console.error(`❌ API Failed [${endpoint}]: ${message} (${duration}ms)`);
         throw e;
     }
 };
