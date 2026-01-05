@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   LayoutGrid, PlusCircle, Search, Bell, FolderPlus, ArrowLeft, Folder, Plus, Globe,
@@ -512,9 +513,6 @@ export default function App() {
                 />
             )}
 
-            {/* Other views remain as they were, contextually correct */}
-            {/* ... CollectionDetail, GuildDetail, WishlistDetail, etc ... */}
-            
             {view === 'COLLECTION_DETAIL' && selectedCollection && (
                 <div className="max-w-4xl mx-auto p-4 pb-24">
                     <CollectionDetailPage 
@@ -663,7 +661,8 @@ export default function App() {
                         theme={theme} 
                         onBack={handleBack} 
                         onSave={async (item) => { 
-                            const newItem = { ...item, id: crypto.randomUUID(), owner: user!.username, timestamp: new Date().toLocaleString(), likes: 0, views: 0 }; 
+                            if (!user) return;
+                            const newItem = { ...item, id: crypto.randomUUID(), owner: user.username, timestamp: new Date().toLocaleString(), likes: 0, views: 0 }; 
                             await db.saveExhibit(newItem); 
                             handleBack(); 
                         }}
@@ -691,10 +690,11 @@ export default function App() {
                 <div className="p-4 pb-24">
                     <CreateCollectionView 
                         theme={theme} 
-                        userArtifacts={exhibits.filter(e => e.owner === user!.username && !e.isDraft)}
+                        userArtifacts={exhibits.filter(e => e.owner === user?.username && !e.isDraft)}
                         onBack={handleBack} 
                         onSave={async (col) => { 
-                            const newCol = { ...col, id: crypto.randomUUID(), owner: user!.username, timestamp: new Date().toLocaleString(), likes: 0 } as Collection;
+                            if (!user) return;
+                            const newCol = { ...col, id: crypto.randomUUID(), owner: user.username, timestamp: new Date().toLocaleString(), likes: 0 } as Collection;
                             await db.saveCollection(newCol); 
                             handleBack(); 
                         }}
@@ -708,7 +708,8 @@ export default function App() {
                         theme={theme}
                         onBack={handleBack}
                         onSave={async (item) => {
-                            const newItem = { ...item, owner: user!.username };
+                            if (!user) return;
+                            const newItem = { ...item, owner: user.username };
                             await db.saveWishlistItem(newItem);
                             handleBack();
                         }}
@@ -747,7 +748,7 @@ export default function App() {
                 </div>
             )}
             
-            {view === 'USER_PROFILE' && (
+            {view === 'USER_PROFILE' && user && (
                 <UserProfileView 
                     user={user}
                     viewedProfileUsername={viewedProfileUsername}
@@ -773,6 +774,7 @@ export default function App() {
                     onShareCollection={() => {}}
                     onViewHallOfFame={() => setView('HALL_OF_FAME')}
                     onGuestbookPost={async (text) => {
+                        if (!user) return;
                         const entry: GuestbookEntry = { id: crypto.randomUUID(), author: user.username, targetUser: viewedProfileUsername, text, timestamp: new Date().toLocaleString(), isRead: false };
                         await db.saveGuestbookEntry(entry);
                         if(viewedProfileUsername !== user.username) db.createNotification(viewedProfileUsername, 'GUESTBOOK', user.username);
@@ -791,6 +793,7 @@ export default function App() {
                     editPassword={editPassword}
                     setEditPassword={setEditPassword}
                     onSaveProfile={async () => {
+                        if (!user) return;
                         const updated = { ...user, tagline: editTagline, bio: editBio, status: editStatus, telegram: editTelegram };
                         if (editPassword) updated.password = editPassword;
                         await db.updateUserProfile(updated);
@@ -798,13 +801,13 @@ export default function App() {
                         setEditPassword('');
                     }}
                     onProfileImageUpload={async (e) => {
-                        if (e.target.files?.[0]) {
+                        if (e.target.files?.[0] && user) {
                             const b64 = await db.fileToBase64(e.target.files[0]);
                             await db.updateUserProfile({ ...user, avatarUrl: b64 });
                         }
                     }}
                     onProfileCoverUpload={async (e) => {
-                        if (e.target.files?.[0]) {
+                        if (e.target.files?.[0] && user) {
                             const b64 = await db.fileToBase64(e.target.files[0]);
                             await db.updateUserProfile({ ...user, coverUrl: b64 });
                         }

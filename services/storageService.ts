@@ -1,3 +1,4 @@
+
 import { Exhibit, Collection, Notification, Message, UserProfile, GuestbookEntry, WishlistItem, Guild, Duel, TradeRequest, TradeRequestStatus, TradeType, NotificationType } from '../types';
 
 // INTERNAL IN-MEMORY CACHE
@@ -78,7 +79,9 @@ const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => 
         }
         return await res.json();
     } catch (e) {
-        console.error(`❌ API Call Failed [${endpoint}]:`, e.message);
+        // Explicitly cast error to any to avoid TS unknown error
+        const message = (e as any).message || String(e);
+        console.error(`❌ API Call Failed [${endpoint}]:`, message);
         throw e;
     }
 };
@@ -328,7 +331,14 @@ export const fileToBase64 = (file: File): Promise<string> => {
 
 export const startLiveUpdates = () => {};
 export const stopLiveUpdates = () => {};
-export const getStorageEstimate = async () => undefined;
+
+export const getStorageEstimate = async (): Promise<StorageEstimate | undefined> => {
+    if (navigator.storage && navigator.storage.estimate) {
+        return await navigator.storage.estimate();
+    }
+    return undefined;
+};
+
 export const clearLocalCache = async () => {
     localStorage.removeItem(CACHE_STORAGE_KEY);
     window.location.reload();
