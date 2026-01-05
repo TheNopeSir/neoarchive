@@ -246,6 +246,62 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// AUTH: TELEGRAM
+app.post('/api/auth/telegram', async (req, res) => {
+    const { id, first_name, last_name, username: tgUsername, photo_url } = req.body;
+
+    if (!id) {
+        return res.status(400).json({ error: "Telegram ID обязателен" });
+    }
+
+    try {
+        const telegramId = `tg_${id}`;
+        console.log(`[Auth] Telegram login attempt for: ${telegramId}`);
+
+        // Ищем по telegram_id в data
+        let result = await query(
+            `SELECT * FROM users WHERE data->>'telegram_id' = $1`,
+            [String(id)]
+        );
+
+        let user;
+        if (result.rows.length === 0) {
+            // Создаём нового пользователя
+            const displayName = tgUsername || `${first_name}${last_name ? ' ' + last_name : ''}`;
+            const newUser = {
+                username: telegramId,
+                telegram_id: String(id),
+                telegram: tgUsername || '',
+                email: '',
+                password: crypto.randomBytes(16).toString('hex'),
+                tagline: `Пользователь Telegram`,
+                avatarUrl: photo_url || `https://ui-avatars.com/api/?name=${displayName}&background=random&color=fff`,
+                joinedDate: new Date().toLocaleDateString(),
+                following: [],
+                followers: [],
+                achievements: [{ id: 'HELLO_WORLD', current: 1, target: 1, unlocked: true }],
+                settings: { theme: 'dark' },
+                isAdmin: false
+            };
+
+            await query(
+                `INSERT INTO users (username, data) VALUES ($1, $2) RETURNING *`,
+                [telegramId, newUser]
+            );
+            user = newUser;
+            console.log(`[Auth] New Telegram user created: ${telegramId}`);
+        } else {
+            user = mapRow(result.rows[0]);
+            console.log(`[Auth] Existing Telegram user logged in: ${user.username}`);
+        }
+
+        res.json(user);
+    } catch (e) {
+        console.error(`[Auth] Telegram login error:`, e.message);
+        res.status(500).json({ error: `Ошибка Telegram авторизации: ${e.message}` });
+    }
+});
+
 // AUTH: RECOVER
 app.post('/api/auth/recover', async (req, res) => {
     const { email } = req.body;
