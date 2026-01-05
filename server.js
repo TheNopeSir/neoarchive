@@ -297,13 +297,14 @@ app.post('/api/auth/recover', async (req, res) => {
 
 // FEED (GET ALL EXHIBITS)
 app.get('/api/feed', async (req, res) => {
+    console.log('[Feed] Fetching exhibits...');
     try {
-        // Запрашиваем ВСЕ колонки, чтобы не терять id, likes, owner и т.д.
         const result = await query(`SELECT * FROM exhibits ORDER BY created_at DESC LIMIT 100`);
+        console.log(`[Feed] Found ${result.rows.length} exhibits`);
         const items = result.rows.map(mapRow);
         res.json(items);
     } catch (e) {
-        console.error("Feed Error:", e);
+        console.error("[Feed] Error:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
