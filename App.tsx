@@ -257,7 +257,32 @@ export default function App() {
     init();
   }, []);
 
+<<<<<<< Updated upstream
   const handleExhibitClick = async (item: Exhibit) => {
+=======
+  const loadMore = useCallback(async () => {
+      if (isLoadingMore || !hasMore || feedMode !== 'ARTIFACTS') return;
+      setIsLoadingMore(true);
+      const nextPage = feedPage + 1;
+      const items = await db.loadFeedBatch(nextPage, 12);
+      if (items.length < 12) setHasMore(false);
+      setFeedPage(nextPage);
+      refreshData();
+      setIsLoadingMore(false);
+  }, [feedPage, hasMore, isLoadingMore, feedMode, refreshData]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 800) loadMore();
+    };
+    if (view === 'FEED') {
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }
+  }, [view, loadMore]);
+
+  const handleExhibitClick = (item: Exhibit) => {
+>>>>>>> Stashed changes
     const sessionKey = `neo_viewed_${item.id}`;
     const hasViewed = sessionStorage.getItem(sessionKey);
     let updatedItem = item;
@@ -265,7 +290,8 @@ export default function App() {
         updatedItem = { ...item, views: (item.views || 0) + 1 };
         setExhibits(prev => prev.map(e => e.id === item.id ? updatedItem : e));
         sessionStorage.setItem(sessionKey, 'true');
-        await db.updateExhibit(updatedItem);
+        // PERFORMANCE: Update in background, don't block navigation
+        db.updateExhibit(updatedItem).catch(err => console.warn('Failed to update view count:', err));
     }
     navigateTo('EXHIBIT', { item: updatedItem });
   };

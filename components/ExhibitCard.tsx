@@ -153,4 +153,5 @@ const ExhibitCard: React.FC<ExhibitCardProps> = ({ item, theme, onClick, isLiked
   );
 };
 
-export default ExhibitCard;
+// PERFORMANCE: Memoize to prevent unnecessary re-renders
+export default React.memo(ExhibitCard);

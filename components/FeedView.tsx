@@ -305,4 +305,5 @@ const FeedView: React.FC<FeedViewProps> = ({
   );
 };
 
-export default FeedView;
+// PERFORMANCE: Memoize to prevent unnecessary re-renders
+export default React.memo(FeedView);

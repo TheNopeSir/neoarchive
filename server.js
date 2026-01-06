@@ -238,6 +238,7 @@ app.get('/api/feed', async (req, res) => {
 // SYNC (User Data + Collections)
 app.get('/api/sync', async (req, res) => {
     const { username } = req.query;
+<<<<<<< Updated upstream
     if (!username) return res.json({});
     try {
         const userRes = await query(`SELECT * FROM users WHERE username = $1`, [username]);
@@ -248,6 +249,93 @@ app.get('/api/sync', async (req, res) => {
             collections: colsRes.rows.map(mapRow) 
         });
     } catch(e) {
+=======
+
+    // PERFORMANCE OPTIMIZATION: Reduced limits and simplified queries
+    // Initial sync now returns less data, with lazy loading for the rest
+    let exhibitQuery, collectionQuery, wishlistQuery;
+
+    if (username) {
+        // User-specific sync: their items + recent public items
+        exhibitQuery = `
+            SELECT data FROM exhibits
+            WHERE data->>'owner' = $1
+            UNION ALL
+            SELECT data FROM exhibits
+            WHERE data->>'owner' != $1
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 50
+        `;
+        collectionQuery = `
+            SELECT data FROM collections
+            WHERE data->>'owner' = $1
+            UNION ALL
+            SELECT data FROM collections
+            WHERE data->>'owner' != $1
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 20
+        `;
+        wishlistQuery = `
+            SELECT data FROM wishlist
+            WHERE data->>'owner' = $1
+            UNION ALL
+            SELECT data FROM wishlist
+            WHERE data->>'owner' != $1
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 30
+        `;
+    } else {
+        // Public sync: just recent items
+        exhibitQuery = `SELECT data FROM exhibits ORDER BY updated_at DESC NULLS LAST LIMIT 50`;
+        collectionQuery = `SELECT data FROM collections ORDER BY updated_at DESC NULLS LAST LIMIT 20`;
+        wishlistQuery = `SELECT data FROM wishlist ORDER BY updated_at DESC NULLS LAST LIMIT 30`;
+    }
+
+    // Helper to prevent entire Sync from failing if one table errors
+    const run = async (q, params = []) => {
+        try {
+            const res = await query(q, params);
+            return res.rows.map(r => r.data);
+        } catch (e) {
+            console.error("Sync Sub-query Error:", e.message);
+            return []; // Return empty array on failure so client still loads something
+        }
+    }
+
+    try {
+        // Run parallel queries with safety
+        const queryParams = username ? [username] : [];
+        const [users, exhibits, collections, notifications, messages, guestbook, wishlist] = await Promise.all([
+            run('SELECT data FROM users'),
+            run(exhibitQuery, queryParams),
+            run(collectionQuery, queryParams),
+            username
+                ? run('SELECT data FROM notifications WHERE data->>\'recipient\' = $1 ORDER BY updated_at DESC NULLS LAST LIMIT 50', [username])
+                : run('SELECT data FROM notifications ORDER BY updated_at DESC NULLS LAST LIMIT 20'),
+            username
+                ? run(`SELECT data FROM messages WHERE data->>\'sender\' = $1 OR data->>\'receiver\' = $1 ORDER BY updated_at DESC NULLS LAST LIMIT 100`, [username])
+                : run('SELECT data FROM messages ORDER BY updated_at DESC NULLS LAST LIMIT 50'),
+            run('SELECT data FROM guestbook ORDER BY updated_at DESC NULLS LAST LIMIT 50'),
+            run(wishlistQuery, queryParams)
+        ]);
+
+        res.json({ users, exhibits, collections, notifications, messages, guestbook, wishlist });
+    } catch (e) {
+        console.error("Sync Fatal Error:", e.message);
+        res.status(500).json({ error: "Sync failed completely" });
+    }
+});
+
+app.get('/api/users/:username', async (req, res) => {
+    try {
+        const result = await query(`SELECT data FROM users WHERE username = $1`, [req.params.username]);
+        if (result.rows.length > 0) {
+            res.json(result.rows[0].data);
+        } else {
+            res.status(404).json({ error: "User not found" });
+        }
+    } catch (e) {
+>>>>>>> Stashed changes
         res.status(500).json({ error: e.message });
     }
 });

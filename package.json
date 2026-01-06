@@ -12,7 +12,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host",
     "start": "node server.js",
-    "deploy": "npm install && npm run build && pm2 start ecosystem.config.cjs --env production"
+    "deploy": "npm install && npm run build && pm2 start ecosystem.config.cjs --env production",
+    "migrate": "node apply-migration.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

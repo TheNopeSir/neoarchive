@@ -95,7 +95,256 @@ export const getUserAvatar = (username: string): string => {
     return `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&bold=true`;
 };
 
+<<<<<<< Updated upstream
 // --- CORE FUNCTIONS ---
+=======
+const slugify = (text: string): string => {
+    if (!text) return 'untitled';
+    return String(text).toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').replace(/-+$/, '');
+};
+
+const saveToLocalCache = async () => {
+    try {
+        await idb.put(CACHE_KEY, { version: CACHE_VERSION, data: cache });
+    } catch (e) { console.error("Cache Save Error", e); }
+};
+
+const loadFromCache = async (): Promise<boolean> => {
+    try {
+        const stored: any = await idb.get(CACHE_KEY);
+        if (stored && (stored.version === CACHE_VERSION || stored.data)) {
+            const data = stored.data || stored;
+            
+            data.exhibits = Array.isArray(data.exhibits) ? data.exhibits : [];
+            data.collections = Array.isArray(data.collections) ? data.collections : [];
+            data.notifications = Array.isArray(data.notifications) ? data.notifications : [];
+            data.messages = Array.isArray(data.messages) ? data.messages : [];
+            data.users = Array.isArray(data.users) ? data.users : [];
+            data.guestbook = Array.isArray(data.guestbook) ? data.guestbook : [];
+            data.wishlist = Array.isArray(data.wishlist) ? data.wishlist : [];
+            data.tradeRequests = Array.isArray(data.tradeRequests) ? data.tradeRequests : [];
+            data.guilds = Array.isArray(data.guilds) ? data.guilds : [{ id: 'g1', name: 'Retro Keepers', description: 'Хранители старого железа', leader: 'SysAdmin', members: ['SysAdmin'], isPrivate: false, inviteCode: 'retro123' }];
+            data.duels = Array.isArray(data.duels) ? data.duels : [];
+            
+            cache = { ...cache, ...data, isLoaded: true };
+            return true;
+        }
+    } catch (e) { return false; }
+    return false;
+};
+
+const apiCall = async (endpoint: string, method: string = 'GET', body?: any) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error("Timeout")), 60000);
+    
+    try {
+        const options: RequestInit = { 
+            method, 
+            headers: { 'Content-Type': 'application/json' }, 
+            signal: controller.signal 
+        };
+        if (body) options.body = JSON.stringify(body);
+        const res = await fetch(`${API_BASE}${endpoint}`, options);
+        clearTimeout(timeoutId);
+        
+        if (!res.ok) {
+            let errorMsg = `API Error ${res.status}`;
+            try {
+                const json = await res.json();
+                if (json.error) errorMsg = json.error;
+            } catch (e) { }
+            throw new Error(errorMsg);
+        }
+        return await res.json();
+    } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError' || error.message === 'Timeout') {
+            throw new Error("Сервер долго не отвечает. Попробуйте позже (Timeout).");
+        }
+        throw error;
+    }
+};
+
+const checkSuperAdmin = (user: UserProfile) => {
+    if (user.email && user.email.toLowerCase().trim() === 'kennyornope@gmail.com') {
+        user.isAdmin = true;
+    }
+};
+
+export const loadFeedBatch = async (page: number, limit: number = 10): Promise<Exhibit[]> => {
+    try {
+        const items: Exhibit[] = await apiCall(`/feed?page=${page}&limit=${limit}`);
+        if (Array.isArray(items) && items.length > 0) {
+            const currentIds = new Set(cache.exhibits.map(e => e.id));
+            const newItems = items.filter(item => !currentIds.has(item.id));
+            cache.exhibits = [...cache.exhibits, ...newItems].sort((a,b) => {
+                return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+            });
+            await saveToLocalCache();
+            notifyListeners(); 
+            return items;
+        }
+        return [];
+    } catch (e) {
+        console.warn("Feed Load Error, using local only", e);
+        const start = (page - 1) * limit;
+        const end = start + limit;
+        if (cache.exhibits.length >= start) {
+            return cache.exhibits.slice(start, end);
+        }
+        return [];
+    }
+};
+
+export const fetchExhibitById = async (id: string): Promise<Exhibit | null> => {
+    const cached = cache.exhibits.find(e => e.id === id);
+    if (cached) return cached;
+    try {
+        const item: Exhibit = await apiCall(`/exhibits/${id}`);
+        if (item) {
+            cache.exhibits.unshift(item); 
+            await saveToLocalCache();
+            return item;
+        }
+    } catch(e) { console.warn("Fetch exhibit failed:", e); }
+    return null;
+};
+
+export const fetchCollectionById = async (id: string): Promise<Collection | null> => {
+    const cached = cache.collections.find(c => c.id === id);
+    if (cached) return cached;
+    try {
+        const item: Collection = await apiCall(`/collections/${id}`);
+        if (item) {
+            cache.collections.unshift(item);
+            await saveToLocalCache();
+            return item;
+        }
+    } catch(e) { console.warn("Fetch collection failed:", e); }
+    return null;
+};
+
+export const startLiveUpdates = () => {
+    if (liveUpdateInterval) return; 
+
+    console.log("📡 [System] Starting live feed updates...");
+    
+    liveUpdateInterval = setInterval(async () => {
+        try {
+            const latestItems: Exhibit[] = await apiCall(`/feed?page=1&limit=10`);
+            let hasUpdates = false;
+            
+            if (latestItems && latestItems.length > 0) {
+                const currentIds = new Set(cache.exhibits.map(e => e.id));
+                const newItems = latestItems.filter(item => !currentIds.has(item.id));
+
+                if (newItems.length > 0) {
+                    console.log(`✨ [LiveSync] Incoming: ${newItems.length} new artifacts`);
+                    cache.exhibits = [...newItems, ...cache.exhibits].sort((a,b) => 
+                        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                    );
+                    hasUpdates = true;
+                }
+            }
+
+            const activeUser = localStorage.getItem(SESSION_USER_KEY);
+            if (activeUser) {
+                try {
+                    const notifs: Notification[] = await apiCall(`/notifications?username=${activeUser}`);
+                    if (notifs && notifs.length > 0) {
+                        const currentNotifIds = new Set(cache.notifications.map(n => n.id));
+                        const newNotifs = notifs.filter(n => !currentNotifIds.has(n.id));
+                        if (newNotifs.length > 0) {
+                            console.log(`🔔 [LiveSync] Incoming: ${newNotifs.length} new notifications`);
+                            cache.notifications = [...newNotifs, ...cache.notifications].sort((a,b) => 
+                                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                            );
+                            hasUpdates = true;
+                        }
+                    }
+                } catch(e) { }
+            }
+
+            if (hasUpdates) {
+                await saveToLocalCache();
+                notifyListeners(); 
+            }
+            isOfflineMode = false;
+
+        } catch (e) {
+            console.warn("[LiveSync] Pulse skipped (Network issue?)");
+        }
+    }, 20000); // PERFORMANCE: Increased from 8s to 20s to reduce server load 
+};
+
+export const stopLiveUpdates = () => {
+    if (liveUpdateInterval) {
+        clearInterval(liveUpdateInterval);
+        liveUpdateInterval = null;
+        console.log("🛑 [System] Live updates paused.");
+    }
+};
+
+const performCloudSync = async () => {
+    const activeUser = localStorage.getItem(SESSION_USER_KEY);
+    try {
+        const initData = await apiCall(activeUser ? `/sync?username=${activeUser}&priority=high` : '/sync?priority=high');
+        
+        let hasUpdates = false;
+
+        if (Array.isArray(initData.users)) {
+            cache.users = initData.users;
+            cache.users.forEach(u => checkSuperAdmin(u));
+            hasUpdates = true;
+        }
+        if (Array.isArray(initData.notifications)) {
+            cache.notifications = initData.notifications;
+            hasUpdates = true;
+        }
+        if (Array.isArray(initData.messages)) {
+            const msgMap = new Map(cache.messages.map(m => [m.id, m]));
+            (initData.messages as Message[]).forEach(m => msgMap.set(m.id, m));
+            cache.messages = Array.from(msgMap.values()).sort((a,b) => a.timestamp.localeCompare(b.timestamp));
+            hasUpdates = true;
+        }
+        
+        if (Array.isArray(initData.exhibits)) {
+            const serverMap = new Map((initData.exhibits as Exhibit[]).map(e => [e.id, e]));
+            cache.exhibits.forEach(e => { if(!serverMap.has(e.id) && !cache.deletedIds.includes(e.id)) serverMap.set(e.id, e); });
+            cache.deletedIds.forEach(id => { if(serverMap.has(id)) serverMap.delete(id); });
+            cache.exhibits = Array.from(serverMap.values()).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            hasUpdates = true;
+        }
+
+        if (Array.isArray(initData.collections)) {
+             const colServerMap = new Map((initData.collections as Collection[]).map(c => [c.id, c]));
+             cache.collections.forEach(c => { if(!colServerMap.has(c.id) && !cache.deletedIds.includes(c.id)) colServerMap.set(c.id, c); });
+             cache.deletedIds.forEach(id => { if(colServerMap.has(id)) colServerMap.delete(id); });
+             cache.collections = Array.from(colServerMap.values());
+             hasUpdates = true;
+        }
+
+        if (Array.isArray(initData.wishlist)) {
+            const wlMap = new Map((initData.wishlist as WishlistItem[]).map(w => [w.id, w]));
+            cache.wishlist.forEach(w => { if (!wlMap.has(w.id) && !cache.deletedIds.includes(w.id)) wlMap.set(w.id, w); });
+            cache.deletedIds.forEach(id => { if(wlMap.has(id)) wlMap.delete(id); });
+            cache.wishlist = Array.from(wlMap.values());
+            hasUpdates = true;
+        }
+
+        if (Array.isArray(initData.guestbook)) { cache.guestbook = initData.guestbook; hasUpdates = true; }
+        if (Array.isArray(initData.tradeRequests)) { cache.tradeRequests = initData.tradeRequests; hasUpdates = true; }
+
+        if (hasUpdates) {
+            await saveToLocalCache();
+            notifyListeners(); 
+        }
+        isOfflineMode = false;
+    } catch (e) {
+        console.warn("Sync slow or failed, trying to stay active for retries.");
+    }
+};
+>>>>>>> Stashed changes
 
 export const initializeDatabase = async (): Promise<UserProfile | null> => {
     // 1. FAST LOAD
@@ -148,6 +397,7 @@ export const initializeDatabase = async (): Promise<UserProfile | null> => {
     return cache.users.find(u => u.username === activeUser) || null;
 };
 
+<<<<<<< Updated upstream
 // AUTH
 export const loginUser = async (identifier: string, password: string): Promise<UserProfile> => {
     const user = await apiCall('/auth/login', 'POST', { identifier, password });
@@ -160,6 +410,56 @@ export const loginUser = async (identifier: string, password: string): Promise<U
     saveCacheToLocal();
     notifyListeners();
     return user;
+=======
+export const forceSync = performCloudSync;
+// PERFORMANCE: Return cache directly instead of shallow copy
+// This is safe because external code only reads, never mutates directly
+export const getFullDatabase = () => cache;
+
+const checkAndAddHelloAchievement = async (user: UserProfile) => {
+    if (!user.achievements) user.achievements = [];
+    const hasHello = user.achievements.some(a => a.id === 'HELLO_WORLD');
+    if (!hasHello) {
+        user.achievements.push({ id: 'HELLO_WORLD', current: 1, target: 1, unlocked: true });
+        await apiCall('/users/update', 'POST', user);
+    }
+};
+
+export const loginUser = async (email: string, password: string): Promise<UserProfile> => {
+    const res = await apiCall('/auth/login', 'POST', { email, password });
+    if (res.success && res.user) {
+        checkSuperAdmin(res.user);
+        await checkAndAddHelloAchievement(res.user);
+        localStorage.setItem(SESSION_USER_KEY, res.user.username);
+        const idx = cache.users.findIndex(u => u.username === res.user.username);
+        if (idx !== -1) cache.users[idx] = res.user; else cache.users.push(res.user);
+        await saveToLocalCache();
+        notifyListeners();
+        return res.user;
+    }
+    throw new Error(res.error || "Login failed");
+};
+
+export const recoverPassword = async (email: string): Promise<any> => {
+    const res = await apiCall('/auth/recover', 'POST', { email });
+    if (res.success) return res;
+    throw new Error(res.error || "Recovery failed");
+};
+
+export const loginViaTelegram = async (user: any): Promise<UserProfile> => {
+    const res = await apiCall('/auth/telegram', 'POST', user);
+    if (res.success && res.user) {
+        checkSuperAdmin(res.user);
+        await checkAndAddHelloAchievement(res.user);
+        localStorage.setItem(SESSION_USER_KEY, res.user.username);
+        const idx = cache.users.findIndex(u => u.username === res.user.username);
+        if (idx !== -1) cache.users[idx] = res.user; else cache.users.push(res.user);
+        await saveToLocalCache();
+        notifyListeners();
+        return res.user;
+    }
+    throw new Error(res.error || "Telegram login failed");
+>>>>>>> Stashed changes
 };
 
 export const registerUser = async (username: string, password: string, tagline: string, email: string): Promise<UserProfile> => {
