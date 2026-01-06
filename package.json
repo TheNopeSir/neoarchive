@@ -13,6 +13,8 @@
     "preview": "vite preview --host",
     "start": "node server.js",
     "deploy": "npm install && npm run build && pm2 start ecosystem.config.cjs --env production",
+    "deploy:docker": "bash deploy.sh",
+    "deploy:clean": "bash deploy-clean.sh",
     "migrate": "node apply-migration.js"
   },
   "dependencies": {

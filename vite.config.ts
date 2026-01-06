@@ -1,3 +1,4 @@
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -62,25 +63,18 @@ export default defineConfig({
     },
   },
   server: {
-    host: '0.0.0.0', 
+    host: '0.0.0.0', // Listen on all network interfaces
     port: 3000,
-    strictPort: false, 
-    cors: true,
+    strictPort: false, // Try next port if 3000 is taken (avoids collision with server.js)
+    cors: true, // Allow CORS
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3000',
+        target: 'http://127.0.0.1:3000', // Assuming server.js runs on 3000 locally
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path, // Don't strip /api
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
-            console.log('🔴 Proxy Error (Backend might be down):', err);
-          });
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            console.log('Sending Request to the Target:', req.method, req.url);
-          });
-          proxy.on('proxyRes', (proxyRes, req, _res) => {
-            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+            console.log('🔴 Proxy Error (Server likely down):', err);
           });
         },
       }
@@ -89,6 +83,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    target: 'esnext'
+    target: 'esnext' // Modern browsers support
   }
 })
