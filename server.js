@@ -239,6 +239,7 @@ app.get('/api/feed', async (req, res) => {
 app.get('/api/sync', async (req, res) => {
     const { username } = req.query;
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     if (!username) return res.json({});
     try {
         const userRes = await query(`SELECT * FROM users WHERE username = $1`, [username]);
@@ -250,6 +251,8 @@ app.get('/api/sync', async (req, res) => {
         });
     } catch(e) {
 =======
+=======
+>>>>>>> Stashed changes
 
     // PERFORMANCE OPTIMIZATION: Reduced limits and simplified queries
     // Initial sync now returns less data, with lazy loading for the rest

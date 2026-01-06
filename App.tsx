@@ -282,6 +282,9 @@ export default function App() {
   }, [view, loadMore]);
 
   const handleExhibitClick = (item: Exhibit) => {
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
     const sessionKey = `neo_viewed_${item.id}`;
     const hasViewed = sessionStorage.getItem(sessionKey);
